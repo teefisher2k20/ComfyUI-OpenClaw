@@ -460,6 +460,8 @@ def _build_pinned_opener(pinned_ips: list[str]) -> urllib.request.OpenerDirector
             last_err = None
             for ip in pinned_ips:
                 try:
+                    # CRITICAL: dial the validated IP directly; falling back to
+                    # self.host would re-open DNS rebinding risk after validation.
                     self.sock = socket.create_connection(
                         (ip, self.port), self.timeout, self.source_address
                     )
@@ -475,6 +477,9 @@ def _build_pinned_opener(pinned_ips: list[str]) -> urllib.request.OpenerDirector
             last_err = None
             for ip in pinned_ips:
                 try:
+                    # CRITICAL: keep direct-IP dial + original-host SNI paired
+                    # together; this preserves certificate validation without
+                    # allowing a second hostname resolution at connect time.
                     sock = socket.create_connection(
                         (ip, self.port), self.timeout, self.source_address
                     )

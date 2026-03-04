@@ -124,6 +124,7 @@ python scripts/check_deployment_profile.py --profile public --strict-warnings
 OpenClaw validates custom LLM `base_url` settings to prevent Server-Side Request Forgery (SSRF).
 
 * **Default**: known providers and localhost-safe paths are allowed.
+* **Pinned connect contract**: on supported CPython versions (current baseline: 3.10+), `safe_io` dials resolved IPs directly for HTTP/HTTPS and keeps TLS `server_hostname` on the original host; the no-skip `tests.test_s70_ssrf_pinning_regression` lane is intended to fail loudly if stdlib connect behavior drifts.
 * **Custom base URL**:
   - requires explicit opt-in:
 

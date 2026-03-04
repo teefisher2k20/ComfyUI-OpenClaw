@@ -71,6 +71,8 @@ Failed preflight checks must be resolved before proceeding with full test suites
   - Real-backend low-mock lane must be no-skip in CI:
     - `tests.test_r122_real_backend_lane`
     - `tests.test_r123_real_backend_model_list_lane` (model-list loopback SSRF regression lane)
+  - SSRF pinning regression parity lane must be no-skip:
+    - `tests.test_s70_ssrf_pinning_regression`
 
 - **R112 (security triple-assert)**:
   - For security reject/degrade paths, tests should assert all three signals:
