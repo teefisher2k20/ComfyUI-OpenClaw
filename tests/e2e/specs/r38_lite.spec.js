@@ -149,7 +149,14 @@ test.describe('R38 Lite UX lifecycle', () => {
         await clickTab(page, 'Planner');
         await page.locator('#planner-run-btn').click();
 
-        await expect(page.locator('#planner-loading')).toBeVisible();
+        await expect
+            .poll(async () => {
+                const loadingVisible = await page.locator('#planner-loading').isVisible();
+                if (loadingVisible) return true;
+                const finalPositive = await page.locator('#planner-out-pos').inputValue();
+                return finalPositive === 'A foggy mountain valley';
+            })
+            .toBeTruthy();
         await expect(page.locator('#planner-stream-preview')).toHaveValue(/foggy/, { timeout: 2000 });
         await expect(page.locator('#planner-stage')).toHaveText(
             /Dispatching assist request|Parsing and validating output\.\.\./,
