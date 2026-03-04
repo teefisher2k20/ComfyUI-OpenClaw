@@ -201,6 +201,20 @@ paths:
       security:
         - OpenClawAdminToken:
             []
+  /assist/planner/profiles:
+    get:
+      operationId: "get_assist_planner_profiles"
+      summary: "List active planner profiles from registry for UI/node alignment."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin/Local"
+      x-openclaw-section: "1.3 Assist, LLM & Chat"
+      x-openclaw-legacy-path: "/moltbot/assist/planner/profiles"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
   /assist/planner:
     post:
       operationId: "post_assist_planner"
@@ -259,6 +273,68 @@ paths:
         - OpenClawAdminToken:
             []
       x-openclaw-streaming: true
+  /connector/installations:
+    get:
+      operationId: "get_connector_installations"
+      summary: "List redacted connector installations with lifecycle diagnostics."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3B Connector Installation Diagnostics"
+      x-openclaw-legacy-path: "/moltbot/connector/installations"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+  /connector/installations/{installation_id}:
+    get:
+      operationId: "get_connector_installations_installation_id"
+      summary: "Get one redacted connector installation record."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3B Connector Installation Diagnostics"
+      x-openclaw-legacy-path: "/moltbot/connector/installations/{installation_id}"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+      parameters:
+        - name: "installation_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+  /connector/installations/resolve:
+    get:
+      operationId: "get_connector_installations_resolve"
+      summary: "Run fail-closed workspace resolution diagnostics (`platform`, `workspace_id`)."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3B Connector Installation Diagnostics"
+      x-openclaw-legacy-path: "/moltbot/connector/installations/resolve"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+  /connector/installations/audit:
+    get:
+      operationId: "get_connector_installations_audit"
+      summary: "List installation lifecycle audit evidence (redacted)."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3B Connector Installation Diagnostics"
+      x-openclaw-legacy-path: "/moltbot/connector/installations/audit"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
   /chat:
     post:
       operationId: "post_chat"
@@ -267,7 +343,7 @@ paths:
         200:
           description: "OK"
       x-openclaw-auth: "Admin/Local"
-      x-openclaw-section: "1.3 Assist, LLM & Chat"
+      x-openclaw-section: "1.3C LLM Management & Chat"
       x-openclaw-legacy-path: "/moltbot/llm/chat"
       x-openclaw-auth-tier: "admin"
       security:
@@ -281,7 +357,7 @@ paths:
         200:
           description: "OK"
       x-openclaw-auth: "Admin"
-      x-openclaw-section: "1.3 Assist, LLM & Chat"
+      x-openclaw-section: "1.3C LLM Management & Chat"
       x-openclaw-legacy-path: "/moltbot/llm/test"
       x-openclaw-auth-tier: "admin"
       security:
@@ -295,7 +371,7 @@ paths:
         200:
           description: "OK"
       x-openclaw-auth: "Admin"
-      x-openclaw-section: "1.3 Assist, LLM & Chat"
+      x-openclaw-section: "1.3C LLM Management & Chat"
       x-openclaw-legacy-path: "/moltbot/llm/models"
       x-openclaw-auth-tier: "admin"
       security:

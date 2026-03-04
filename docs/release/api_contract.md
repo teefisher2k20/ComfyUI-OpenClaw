@@ -1,8 +1,8 @@
 # OpenClaw API Contract (v1)
 
 > **Status**: normative
-> **Version**: 1.0.2
-> **Date**: 2026-02-28
+> **Version**: 1.0.3
+> **Date**: 2026-03-05
 
 This document defines the public API contract for OpenClaw. It serves as the authoritative baseline for client compatibility and breaking change policies.
 
@@ -53,10 +53,25 @@ All new integrations should use the `/openclaw/` prefix. Use of `/moltbot/` is d
 
 | Method | Path | Legacy Path | Auth | Description |
 | :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/assist/planner/profiles` | `/moltbot/assist/planner/profiles` | Admin/Local | List active planner profiles from registry for UI/node alignment. |
 | `POST` | `/assist/planner` | `/moltbot/assist/planner` | Admin/Local | Planner structured prompt generation. |
 | `POST` | `/assist/refiner` | `/moltbot/assist/refiner` | Admin/Local | Prompt refinement with optional image context. |
 | `POST` | `/assist/planner/stream` | `/moltbot/assist/planner/stream` | Admin/Local | Optional SSE-style planner streaming response (`text/event-stream`) with staged progress + final payload. |
 | `POST` | `/assist/refiner/stream` | `/moltbot/assist/refiner/stream` | Admin/Local | Optional SSE-style refiner streaming response (`text/event-stream`) with staged progress + final payload. |
+
+### 1.3B Connector Installation Diagnostics
+
+**Base Path**: `/openclaw/connector/`
+**Auth**: Admin Token Required
+
+| Method | Path | Legacy Path | Auth | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/connector/installations` | `/moltbot/connector/installations` | Admin | List redacted connector installations with lifecycle diagnostics. |
+| `GET` | `/connector/installations/{installation_id}` | `/moltbot/connector/installations/{installation_id}` | Admin | Get one redacted connector installation record. |
+| `GET` | `/connector/installations/resolve` | `/moltbot/connector/installations/resolve` | Admin | Run fail-closed workspace resolution diagnostics (`platform`, `workspace_id`). |
+| `GET` | `/connector/installations/audit` | `/moltbot/connector/installations/audit` | Admin | List installation lifecycle audit evidence (redacted). |
+
+### 1.3C LLM Management & Chat
 
 **LLM Base Path**: `/openclaw/llm/`
 

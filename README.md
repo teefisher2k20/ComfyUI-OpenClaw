@@ -91,6 +91,18 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Today’s implementation roundup across frontend quality, planner contracts, and connector security baselines</strong></summary>
+
+- Completed the frontend quality bundle by stabilizing canonical style ownership, adding baseline frontend unit coverage, and expanding regression coverage for Library/Approvals/admin-console parity.
+- Completed SSRF pinning regression hardening with dedicated no-skip coverage for pinned connect paths, multi-IP failover ordering, and TLS wrap degradation branches.
+- Completed planner profile/system-prompt externalization with validated file-backed registry loading, runtime-safe fallback/reload behavior, and synchronized profile sourcing across API, node, and Planner tab.
+- Completed connector contract baseline with multi-workspace installation lifecycle registry, encrypted token references, fail-closed workspace resolution, and reusable interactive callback security decisions (signature/timestamp/hash/replay/idempotency/policy mapping) plus admin diagnostics APIs.
+- Completed full verification gate pass on `dev` (detect-secrets, pre-commit, backend unit suites, adversarial/retry/real-backend lanes, and frontend Playwright E2E).
+
+</details>
+
+<details>
+
 <summary><strong>Connector multi-workspace installation and interactive callback contract baseline</strong></summary>
 
 - Added a persistent connector installation registry with normalized installation identity (`platform`, `workspace_id`, `installation_id`, `token_refs`, `status`, `updated_at`) and explicit lifecycle transitions (`created`, `active`, `rotating`, `revoked`, `deactivated`, `uninstalled`).

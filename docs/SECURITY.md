@@ -109,6 +109,19 @@ Operational requirement:
 
 - never enable connector platform tokens/enable flags in public or hardened posture without platform allowlist coverage.
 
+### 4.1 Interactive Callback Contract Baseline (Connector)
+
+For interactive connector callbacks (actions/modals/workflow style payloads), the shared callback contract is fail-closed by default:
+
+- signed envelope is required (`signature`, `timestamp`, `request_id`, `workspace_id`, `action_type`, `payload_hash`)
+- stale timestamp, replay/duplicate request ID, payload-hash mismatch, or unknown action type are rejected
+- workspace-to-installation resolution is fail-closed on missing/ambiguous/inactive/stale-token-ref binding
+- policy mapping is explicit (`public`/`run`/`admin`) and untrusted `run` callbacks degrade to approval instead of direct privileged execution
+
+Operational note:
+
+- treat callback decision codes/audit trails as security evidence and investigate repeated reject patterns before enabling higher-risk interactive flows.
+
 ### 5. Startup Gate Behavior (R136 + S56)
 
 Startup security gates are fail-closed. Fatal startup gate/bootstrap failures abort route/worker registration and do not continue in a partial state.
