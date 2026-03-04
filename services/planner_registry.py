@@ -116,14 +116,20 @@ class PlannerRegistryState:
 
 def _profile_from_entry(entry: Dict[str, Any]) -> Profile:
     required = ("id", "version", "label")
-    missing = [key for key in required if not isinstance(entry.get(key), str) or not entry.get(key).strip()]
+    missing = [
+        key
+        for key in required
+        if not isinstance(entry.get(key), str) or not entry.get(key).strip()
+    ]
     if missing:
         raise ValueError(f"planner profile missing required string fields: {missing}")
     defaults = entry.get("defaults", {})
     if defaults is None:
         defaults = {}
     if not isinstance(defaults, dict):
-        raise ValueError(f"planner profile '{entry.get('id')}' defaults must be an object")
+        raise ValueError(
+            f"planner profile '{entry.get('id')}' defaults must be an object"
+        )
     validated_defaults = GenerationParams.from_dict(defaults).dict()
     prompt_guidance = entry.get("prompt_guidance", "")
     if prompt_guidance is None:
@@ -153,10 +159,14 @@ def _parse_profiles_payload(payload: Dict[str, Any]) -> tuple[Dict[str, Profile]
     if not isinstance(payload, dict):
         raise ValueError("planner profiles payload must be an object")
     if payload.get("version") != 1:
-        raise ValueError(f"unsupported planner profiles version: {payload.get('version')}")
+        raise ValueError(
+            f"unsupported planner profiles version: {payload.get('version')}"
+        )
     entries = payload.get("profiles")
     if not isinstance(entries, list) or not entries:
-        raise ValueError("planner profiles payload must contain a non-empty profiles list")
+        raise ValueError(
+            "planner profiles payload must contain a non-empty profiles list"
+        )
     profiles: Dict[str, Profile] = {}
     for entry in entries:
         if not isinstance(entry, dict):
@@ -167,7 +177,9 @@ def _parse_profiles_payload(payload: Dict[str, Any]) -> tuple[Dict[str, Profile]
         profiles[profile.id] = profile
     default_profile = payload.get("default_profile")
     if not isinstance(default_profile, str) or default_profile not in profiles:
-        raise ValueError("default_profile must reference an existing planner profile id")
+        raise ValueError(
+            "default_profile must reference an existing planner profile id"
+        )
     return profiles, default_profile
 
 
@@ -187,7 +199,9 @@ class PlannerRegistry:
         state_root: Optional[str] = None,
     ) -> None:
         self.package_root = package_root
-        self.state_root = state_root or os.path.join(get_state_dir(), STATE_PLANNER_SUBDIR)
+        self.state_root = state_root or os.path.join(
+            get_state_dir(), STATE_PLANNER_SUBDIR
+        )
         self._state: Optional[PlannerRegistryState] = None
         self._watched_mtimes: Dict[str, Optional[float]] = {}
 
@@ -199,10 +213,18 @@ class PlannerRegistry:
 
     def _current_watch_map(self) -> Dict[str, Optional[float]]:
         return {
-            "package_profiles": self._file_mtime(os.path.join(self.package_root, PROFILES_FILE)),
-            "state_profiles": self._file_mtime(os.path.join(self.state_root, PROFILES_FILE)),
-            "package_prompt": self._file_mtime(os.path.join(self.package_root, PROMPT_FILE)),
-            "state_prompt": self._file_mtime(os.path.join(self.state_root, PROMPT_FILE)),
+            "package_profiles": self._file_mtime(
+                os.path.join(self.package_root, PROFILES_FILE)
+            ),
+            "state_profiles": self._file_mtime(
+                os.path.join(self.state_root, PROFILES_FILE)
+            ),
+            "package_prompt": self._file_mtime(
+                os.path.join(self.package_root, PROMPT_FILE)
+            ),
+            "state_prompt": self._file_mtime(
+                os.path.join(self.state_root, PROMPT_FILE)
+            ),
         }
 
     def _load_profile_source(self) -> tuple[Dict[str, Profile], str, Optional[str]]:
@@ -220,7 +242,9 @@ class PlannerRegistry:
                 continue
             except Exception as exc:
                 last_error = f"{source_name}:{type(exc).__name__}:{exc}"
-                logger.warning("Planner profile source %s rejected: %s", source_name, exc)
+                logger.warning(
+                    "Planner profile source %s rejected: %s", source_name, exc
+                )
         profiles, default_profile = _parse_profiles_payload(_EMBEDDED_FALLBACK_RAW)
         return profiles, default_profile, "embedded-fallback", last_error or "no_file"
 
@@ -238,7 +262,9 @@ class PlannerRegistry:
                 continue
             except Exception as exc:
                 last_error = f"{source_name}:{type(exc).__name__}:{exc}"
-                logger.warning("Planner prompt source %s rejected: %s", source_name, exc)
+                logger.warning(
+                    "Planner prompt source %s rejected: %s", source_name, exc
+                )
         return (
             _validate_prompt_template(_EMBEDDED_FALLBACK_PROMPT),
             "embedded-fallback",
@@ -246,7 +272,9 @@ class PlannerRegistry:
         )
 
     def _reload(self) -> None:
-        profiles, default_profile, profile_source, profile_error = self._load_profile_source()
+        profiles, default_profile, profile_source, profile_error = (
+            self._load_profile_source()
+        )
         prompt_template, prompt_source, prompt_error = self._load_prompt_source()
         self._state = PlannerRegistryState(
             profiles=profiles,
@@ -288,12 +316,15 @@ class PlannerRegistry:
             "profile_id": profile.id,
             "profile_label": profile.label,
             "profile_description": profile.description or "No description provided.",
-            "prompt_guidance": metadata.get("prompt_guidance") or "Use stable defaults for this profile.",
+            "prompt_guidance": metadata.get("prompt_guidance")
+            or "Use stable defaults for this profile.",
             "defaults_json": json.dumps(defaults, ensure_ascii=False, sort_keys=True),
         }
         rendered = state.prompt_template
         for key, value in replacements.items():
-            rendered = re.sub(r"{{\s*" + re.escape(key) + r"\s*}}", str(value), rendered)
+            rendered = re.sub(
+                r"{{\s*" + re.escape(key) + r"\s*}}", str(value), rendered
+            )
         return rendered
 
     def get_debug_info(self) -> Dict[str, Any]:

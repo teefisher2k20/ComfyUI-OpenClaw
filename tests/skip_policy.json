@@ -16,6 +16,8 @@
     "tests.test_r117_observability_redaction_endpoints",
     "tests.test_f57_slack_transport_parity",
     "tests.test_f57_slack_socket_mode_startup",
+    "tests.test_connector_installation_registry",
+    "tests.test_connector_callback_contract",
     "tests.test_s70_ssrf_pinning_regression"
   ]
 }

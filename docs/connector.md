@@ -19,6 +19,23 @@ The connector runs alongside ComfyUI on your machine.
 - **Local Secrets**: Bot tokens are stored in your local environment, never sent to ComfyUI.
 - **Admin Boundary**: Control-plane actions call admin endpoints on the local OpenClaw server and require connector-side admin token configuration for admin command paths.
 
+### Installation and callback contract baseline
+
+OpenClaw now includes a platform-agnostic baseline for multi-workspace connector lifecycle and interactive callback security:
+
+- installation registry stores normalized records:
+  - `platform`, `workspace_id`, `installation_id`, `token_refs`, `status`, `updated_at`
+- token material is kept in encrypted server-side secret storage; registry and diagnostics expose token references only
+- workspace resolution is fail-closed on missing/ambiguous/inactive/stale bindings
+- interactive callback contract enforces signed envelope checks, timestamp window, payload-hash validation, replay/idempotency guardrails, and command-policy mapping (`public`/`run`/`admin`) with explicit force-approval outcomes for untrusted `run` callbacks
+
+Admin diagnostics APIs:
+
+- `GET /openclaw/connector/installations`
+- `GET /openclaw/connector/installations/{installation_id}`
+- `GET /openclaw/connector/installations/resolve?platform=<platform>&workspace_id=<workspace_id>`
+- `GET /openclaw/connector/installations/audit`
+
 ## Supported Platforms
 
 - **Telegram**: Long-polling (instant response).

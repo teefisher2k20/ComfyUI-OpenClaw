@@ -42,6 +42,8 @@ webhook_handler = webhook_submit_handler = webhook_validate_handler = capabiliti
 config_get_handler = config_put_handler = llm_test_handler = llm_models_handler = llm_chat_handler = None  # type: ignore
 remote_admin_page_handler = None  # type: ignore  # F61
 security_doctor_handler = None  # type: ignore  # S30
+connector_installations_list_handler = connector_installation_get_handler = None  # type: ignore
+connector_installation_resolve_handler = connector_installation_audit_handler = None  # type: ignore
 templates_list_handler = None  # type: ignore
 secrets_status_handler = secrets_put_handler = secrets_delete_handler = None  # type: ignore
 list_checkpoints_handler = create_checkpoint_handler = get_checkpoint_handler = delete_checkpoint_handler = None  # type: ignore
@@ -57,6 +59,22 @@ if web is not None:
         "..api.capabilities",
         "api.capabilities",
         ("capabilities_handler",),
+    )
+    (
+        connector_installations_list_handler,
+        connector_installation_get_handler,
+        connector_installation_resolve_handler,
+        connector_installation_audit_handler,
+    ) = import_attrs_dual(
+        __package__,
+        "..api.connector_contracts",
+        "api.connector_contracts",
+        (
+            "connector_installations_list_handler",
+            "connector_installation_get_handler",
+            "connector_installation_resolve_handler",
+            "connector_installation_audit_handler",
+        ),
     )
     (
         create_checkpoint_handler,
@@ -879,6 +897,34 @@ def register_routes(server) -> None:
                 "POST",
                 f"{prefix}/assist/automation/compose",
                 assist.compose_handler,
+            )
+
+    # R126: Connector installation diagnostics/read APIs
+    if connector_installations_list_handler:
+        for prefix in prefixes:
+            register_dual_route(
+                server,
+                "GET",
+                f"{prefix}/connector/installations",
+                connector_installations_list_handler,
+            )
+            register_dual_route(
+                server,
+                "GET",
+                f"{prefix}/connector/installations/resolve",
+                connector_installation_resolve_handler,
+            )
+            register_dual_route(
+                server,
+                "GET",
+                f"{prefix}/connector/installations/audit",
+                connector_installation_audit_handler,
+            )
+            register_dual_route(
+                server,
+                "GET",
+                f"{prefix}/connector/installations/{{installation_id}}",
+                connector_installation_get_handler,
             )
 
     # F10 Bridge Routes (Sidecar)

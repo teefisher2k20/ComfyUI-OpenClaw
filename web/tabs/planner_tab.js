@@ -6,7 +6,7 @@ export const PlannerTab = {
     title: "Planner",
     icon: "pi pi-pencil",
 
-    async render(container) {
+    render(container) {
         container.innerHTML = `
             <div class="openclaw-panel openclaw-panel moltbot-panel">
                 <div class="openclaw-scroll-area openclaw-scroll-area moltbot-scroll-area">
@@ -101,16 +101,26 @@ export const PlannerTab = {
                 profileSelect.value = desired;
             }
         };
-        try {
-            const profileRes = await openclawApi.listPlannerProfiles();
-            if (profileRes.ok && Array.isArray(profileRes.data?.profiles) && profileRes.data.profiles.length > 0) {
-                applyProfiles(profileRes.data.profiles, profileRes.data.default_profile || "SDXL-v1");
-            } else {
+        const loadProfiles = async () => {
+            try {
+                const profileRes = await openclawApi.listPlannerProfiles();
+                if (
+                    profileRes.ok &&
+                    Array.isArray(profileRes.data?.profiles) &&
+                    profileRes.data.profiles.length > 0
+                ) {
+                    applyProfiles(
+                        profileRes.data.profiles,
+                        profileRes.data.default_profile || "SDXL-v1"
+                    );
+                } else {
+                    applyProfiles(fallbackProfiles, "SDXL-v1");
+                }
+            } catch {
                 applyProfiles(fallbackProfiles, "SDXL-v1");
             }
-        } catch {
-            applyProfiles(fallbackProfiles, "SDXL-v1");
-        }
+        };
+        loadProfiles();
 
         const lifecycle = createRequestLifecycleController(container, {
             loading: "#planner-loading",

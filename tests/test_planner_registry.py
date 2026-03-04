@@ -59,7 +59,9 @@ class TestPlannerRegistry(unittest.TestCase):
         )
 
         self.assertEqual(registry.get_default_profile_id(), "state")
-        self.assertEqual([profile.id for profile in registry.list_profiles()], ["state"])
+        self.assertEqual(
+            [profile.id for profile in registry.list_profiles()], ["state"]
+        )
         self.assertIn("State", registry.render_system_prompt("state"))
         self.assertEqual(registry.get_debug_info()["profile_source"], "state")
 
@@ -151,4 +153,3 @@ class TestPlannerRegistry(unittest.TestCase):
 
         self.assertEqual(registry.get_default_profile_id(), "hot")
         self.assertEqual([profile.id for profile in registry.list_profiles()], ["hot"])
-

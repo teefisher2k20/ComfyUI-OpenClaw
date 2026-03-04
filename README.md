@@ -91,6 +91,18 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Connector multi-workspace installation and interactive callback contract baseline</strong></summary>
+
+- Added a persistent connector installation registry with normalized installation identity (`platform`, `workspace_id`, `installation_id`, `token_refs`, `status`, `updated_at`) and explicit lifecycle transitions (`created`, `active`, `rotating`, `revoked`, `deactivated`, `uninstalled`).
+- Enforced fail-closed workspace resolution for connector ingress (`missing`, `ambiguous`, `inactive`, and `stale token ref` bindings are rejected deterministically).
+- Added reusable interactive callback security contract primitives (signed envelope, timestamp window, payload hash verification, replay/idempotency enforcement, ack/deferred callback lifecycle, and policy mapping to `public` / `run` / `admin` with explicit force-approval handling).
+- Added admin read/diagnostic APIs for connector installation state, resolution evidence, and lifecycle audit visibility, with redacted outputs only.
+- Completed full verification gate pass on `dev` (detect-secrets, pre-commit, backend unit suites, adversarial/retry/real-backend lanes, and frontend Playwright E2E).
+
+</details>
+
+<details>
+
 <summary><strong>Planner registry externalization with runtime-safe profile alignment</strong></summary>
 
 - Moved planner profiles and the planner system prompt into validated file-backed defaults under `data/planner/`, with state-dir override precedence for operator-managed customization without source edits.
@@ -784,6 +796,10 @@ Access control:
 - `POST /openclaw/llm/test` -test connectivity (admin boundary)
 - `POST /openclaw/llm/chat` -connector chat completion path (admin boundary)
 - `GET /openclaw/llm/models` -fetch model list for selected provider/base URL
+- `GET /openclaw/connector/installations` -connector multi-workspace installation diagnostics (admin boundary)
+- `GET /openclaw/connector/installations/{installation_id}` -connector installation detail (admin boundary)
+- `GET /openclaw/connector/installations/resolve` -workspace installation resolution diagnostics (admin boundary)
+- `GET /openclaw/connector/installations/audit` -installation lifecycle audit evidence (admin boundary)
 - `POST /openclaw/assist/planner` -planner structured prompt generation (admin boundary)
 - `GET /openclaw/assist/planner/profiles` -active planner profile registry metadata for node/UI alignment
 - `POST /openclaw/assist/refiner` -prompt refinement with optional image context (admin boundary)
