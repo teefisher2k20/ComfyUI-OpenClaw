@@ -3,7 +3,6 @@ import time
 import unittest
 
 from connector.config import CommandClass
-
 from services.connector_callback_contract import (
     CallbackActorContext,
     CallbackDecisionCode,
@@ -63,7 +62,9 @@ class TestConnectorCallbackContract(unittest.TestCase):
             actor=CallbackActorContext(is_admin=False, is_trusted=False),
         )
         self.assertTrue(decision.ok)
-        self.assertEqual(decision.decision_code, CallbackDecisionCode.ACCEPT_PUBLIC.value)
+        self.assertEqual(
+            decision.decision_code, CallbackDecisionCode.ACCEPT_PUBLIC.value
+        )
         self.assertTrue(decision.callback_id)
 
     def test_tampered_signature_rejected(self):
@@ -82,7 +83,9 @@ class TestConnectorCallbackContract(unittest.TestCase):
             actor=CallbackActorContext(),
         )
         self.assertFalse(decision.ok)
-        self.assertEqual(decision.decision_code, CallbackDecisionCode.REJECT_SIGNATURE.value)
+        self.assertEqual(
+            decision.decision_code, CallbackDecisionCode.REJECT_SIGNATURE.value
+        )
 
     def test_stale_timestamp_rejected(self):
         payload = self._payload()
@@ -100,7 +103,9 @@ class TestConnectorCallbackContract(unittest.TestCase):
             actor=CallbackActorContext(),
         )
         self.assertFalse(decision.ok)
-        self.assertEqual(decision.decision_code, CallbackDecisionCode.REJECT_TIMESTAMP.value)
+        self.assertEqual(
+            decision.decision_code, CallbackDecisionCode.REJECT_TIMESTAMP.value
+        )
 
     def test_replay_request_id_rejected(self):
         payload = self._payload()
@@ -236,7 +241,9 @@ class TestConnectorCallbackContract(unittest.TestCase):
             actor=CallbackActorContext(is_admin=True),
         )
         self.assertTrue(decision.ok)
-        self.assertEqual(decision.decision_code, CallbackDecisionCode.ACCEPT_ADMIN.value)
+        self.assertEqual(
+            decision.decision_code, CallbackDecisionCode.ACCEPT_ADMIN.value
+        )
 
     def test_missing_installation_rejected(self):
         payload = self._payload()

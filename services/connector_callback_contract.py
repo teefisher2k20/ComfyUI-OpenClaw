@@ -132,7 +132,9 @@ class ConnectorCallbackContract:
         self._installation_registry = (
             installation_registry or get_connector_installation_registry()
         )
-        self._replay_guard = replay_guard or ReplayGuard(window_sec=300, max_entries=5000)
+        self._replay_guard = replay_guard or ReplayGuard(
+            window_sec=300, max_entries=5000
+        )
         self._callback_contract = callback_contract or CallbackContract()
         self._action_policy_map = dict(action_policy_map or {})
         self._timestamp_drift_sec = max(1, int(timestamp_drift_sec))
@@ -256,7 +258,9 @@ class ConnectorCallbackContract:
                 decision_code=CallbackDecisionCode.REJECT_TIMESTAMP.value,
                 message="timestamp_out_of_window",
             )
-            self._audit_decision(platform=platform, envelope=envelope, decision=decision)
+            self._audit_decision(
+                platform=platform, envelope=envelope, decision=decision
+            )
             return decision
 
         expected_hash = self.compute_payload_hash(payload)
@@ -266,7 +270,9 @@ class ConnectorCallbackContract:
                 decision_code=CallbackDecisionCode.REJECT_PAYLOAD_HASH.value,
                 message="payload_hash_mismatch",
             )
-            self._audit_decision(platform=platform, envelope=envelope, decision=decision)
+            self._audit_decision(
+                platform=platform, envelope=envelope, decision=decision
+            )
             return decision
 
         # CRITICAL: interactive callback signatures must remain canonical and constant-time.
@@ -279,7 +285,9 @@ class ConnectorCallbackContract:
                 decision_code=CallbackDecisionCode.REJECT_SIGNATURE.value,
                 message="signature_mismatch",
             )
-            self._audit_decision(platform=platform, envelope=envelope, decision=decision)
+            self._audit_decision(
+                platform=platform, envelope=envelope, decision=decision
+            )
             return decision
 
         if self._replay_guard.is_duplicate(envelope.request_id):
@@ -288,7 +296,9 @@ class ConnectorCallbackContract:
                 decision_code=CallbackDecisionCode.REJECT_REPLAY.value,
                 message="request_id_replay",
             )
-            self._audit_decision(platform=platform, envelope=envelope, decision=decision)
+            self._audit_decision(
+                platform=platform, envelope=envelope, decision=decision
+            )
             return decision
 
         resolution = self._installation_registry.resolve_installation(
@@ -296,7 +306,9 @@ class ConnectorCallbackContract:
         )
         if not resolution.ok or resolution.installation is None:
             decision = self._map_installation_reject(resolution)
-            self._audit_decision(platform=platform, envelope=envelope, decision=decision)
+            self._audit_decision(
+                platform=platform, envelope=envelope, decision=decision
+            )
             return decision
 
         command_class = self._resolve_action_policy(envelope.action_type)
@@ -307,7 +319,9 @@ class ConnectorCallbackContract:
                 installation_id=resolution.installation.installation_id,
                 message="unknown_action_type",
             )
-            self._audit_decision(platform=platform, envelope=envelope, decision=decision)
+            self._audit_decision(
+                platform=platform, envelope=envelope, decision=decision
+            )
             return decision
 
         record = self._callback_contract.create(

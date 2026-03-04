@@ -29,8 +29,13 @@ class TestAPIConnectorContracts(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("api.connector_contracts.check_rate_limit", return_value=True),
-            patch("api.connector_contracts.require_admin_token", return_value=(True, None)),
-            patch("api.connector_contracts.get_connector_installation_registry", return_value=registry),
+            patch(
+                "api.connector_contracts.require_admin_token", return_value=(True, None)
+            ),
+            patch(
+                "api.connector_contracts.get_connector_installation_registry",
+                return_value=registry,
+            ),
         ):
             resp = await mod.connector_installations_list_handler(request)
 
@@ -50,8 +55,13 @@ class TestAPIConnectorContracts(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("api.connector_contracts.check_rate_limit", return_value=True),
-            patch("api.connector_contracts.require_admin_token", return_value=(True, None)),
-            patch("api.connector_contracts.get_connector_installation_registry", return_value=registry),
+            patch(
+                "api.connector_contracts.require_admin_token", return_value=(True, None)
+            ),
+            patch(
+                "api.connector_contracts.get_connector_installation_registry",
+                return_value=registry,
+            ),
         ):
             resp = await mod.connector_installation_get_handler(request)
 
@@ -74,8 +84,13 @@ class TestAPIConnectorContracts(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("api.connector_contracts.check_rate_limit", return_value=True),
-            patch("api.connector_contracts.require_admin_token", return_value=(True, None)),
-            patch("api.connector_contracts.get_connector_installation_registry", return_value=registry),
+            patch(
+                "api.connector_contracts.require_admin_token", return_value=(True, None)
+            ),
+            patch(
+                "api.connector_contracts.get_connector_installation_registry",
+                return_value=registry,
+            ),
         ):
             resp = await mod.connector_installation_resolve_handler(request)
 
@@ -89,7 +104,10 @@ class TestAPIConnectorContracts(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("api.connector_contracts.check_rate_limit", return_value=True),
-            patch("api.connector_contracts.require_admin_token", return_value=(False, "Unauthorized")),
+            patch(
+                "api.connector_contracts.require_admin_token",
+                return_value=(False, "Unauthorized"),
+            ),
         ):
             resp = await mod.connector_installation_audit_handler(request)
 

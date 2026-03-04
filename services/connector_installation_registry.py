@@ -19,9 +19,7 @@ except ImportError:
     from services.secret_store import SecretStore, get_secret_store  # type: ignore
     from services.state_dir import get_state_dir  # type: ignore
 
-logger = logging.getLogger(
-    "ComfyUI-OpenClaw.services.connector_installation_registry"
-)
+logger = logging.getLogger("ComfyUI-OpenClaw.services.connector_installation_registry")
 
 INSTALLATION_STORE_FILE = "connector_installations.json"
 MAX_INSTALLATION_AUDIT = 500
@@ -249,7 +247,9 @@ class ConnectorInstallationRegistry:
             now = time.time()
             refs = dict(token_refs or {})
             if token_values:
-                refs.update(self._store_token_refs(normalized_installation, token_values))
+                refs.update(
+                    self._store_token_refs(normalized_installation, token_values)
+                )
             existing = self._installations.get(normalized_installation)
             if existing is None:
                 created_at = now
@@ -288,12 +288,22 @@ class ConnectorInstallationRegistry:
         with self._lock:
             items = list(self._installations.values())
             if platform:
-                items = [i for i in items if i.platform == self._normalize_platform(platform)]
+                items = [
+                    i for i in items if i.platform == self._normalize_platform(platform)
+                ]
             if workspace_id:
-                items = [i for i in items if i.workspace_id == str(workspace_id).strip()]
+                items = [
+                    i for i in items if i.workspace_id == str(workspace_id).strip()
+                ]
             if status:
                 items = [i for i in items if i.status == str(status).strip()]
-            items.sort(key=lambda inst: (inst.platform, inst.workspace_id, inst.installation_id))
+            items.sort(
+                key=lambda inst: (
+                    inst.platform,
+                    inst.workspace_id,
+                    inst.installation_id,
+                )
+            )
             return [ConnectorInstallation(**asdict(inst)) for inst in items]
 
     def _transition(
@@ -317,7 +327,9 @@ class ConnectorInstallationRegistry:
             self._save()
             return ConnectorInstallation(**asdict(inst))
 
-    def activate_installation(self, installation_id: str, reason: str = "") -> ConnectorInstallation:
+    def activate_installation(
+        self, installation_id: str, reason: str = ""
+    ) -> ConnectorInstallation:
         return self._transition(
             installation_id,
             InstallationStatus.ACTIVE.value,
@@ -352,7 +364,9 @@ class ConnectorInstallationRegistry:
             self._save()
             return ConnectorInstallation(**asdict(inst))
 
-    def revoke_installation(self, installation_id: str, reason: str = "") -> ConnectorInstallation:
+    def revoke_installation(
+        self, installation_id: str, reason: str = ""
+    ) -> ConnectorInstallation:
         return self._transition(
             installation_id,
             InstallationStatus.REVOKED.value,
@@ -360,7 +374,9 @@ class ConnectorInstallationRegistry:
             action="revoke",
         )
 
-    def deactivate_installation(self, installation_id: str, reason: str = "") -> ConnectorInstallation:
+    def deactivate_installation(
+        self, installation_id: str, reason: str = ""
+    ) -> ConnectorInstallation:
         return self._transition(
             installation_id,
             InstallationStatus.DEACTIVATED.value,
@@ -368,7 +384,9 @@ class ConnectorInstallationRegistry:
             action="deactivate",
         )
 
-    def uninstall_installation(self, installation_id: str, reason: str = "") -> ConnectorInstallation:
+    def uninstall_installation(
+        self, installation_id: str, reason: str = ""
+    ) -> ConnectorInstallation:
         with self._lock:
             inst = self._installations.get(str(installation_id).strip())
             if inst is None:
@@ -383,7 +401,9 @@ class ConnectorInstallationRegistry:
             self._save()
             return ConnectorInstallation(**asdict(inst))
 
-    def resolve_installation(self, platform: str, workspace_id: str) -> InstallationResolution:
+    def resolve_installation(
+        self, platform: str, workspace_id: str
+    ) -> InstallationResolution:
         with self._lock:
             normalized_platform = self._normalize_platform(platform)
             normalized_workspace = self._normalize_identifier(
@@ -395,9 +415,7 @@ class ConnectorInstallationRegistry:
                 if inst.platform == normalized_platform
                 and inst.workspace_id == normalized_workspace
             ]
-            eligible = [
-                inst for inst in matches if inst.status in _RESOLVABLE_STATUSES
-            ]
+            eligible = [inst for inst in matches if inst.status in _RESOLVABLE_STATUSES]
             if len(eligible) > 1:
                 return InstallationResolution(
                     ok=False,

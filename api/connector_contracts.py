@@ -56,10 +56,14 @@ logger = logging.getLogger("ComfyUI-OpenClaw.api.connector_contracts")
 
 def _require_admin(request) -> Optional[web.Response]:
     if not check_rate_limit(request, "admin"):
-        return web.json_response({"ok": False, "error": "Rate limit exceeded"}, status=429)
+        return web.json_response(
+            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        )
     allowed, err = require_admin_token(request)
     if not allowed:
-        return web.json_response({"ok": False, "error": err or "Unauthorized"}, status=403)
+        return web.json_response(
+            {"ok": False, "error": err or "Unauthorized"}, status=403
+        )
     return None
 
 
@@ -106,7 +110,9 @@ async def connector_installation_get_handler(request):
     installation = registry.get_installation(installation_id)
     if installation is None:
         return web.json_response({"ok": False, "error": "not_found"}, status=404)
-    return web.json_response({"ok": True, "installation": installation.to_public_dict()})
+    return web.json_response(
+        {"ok": True, "installation": installation.to_public_dict()}
+    )
 
 
 @endpoint_metadata(
@@ -130,7 +136,10 @@ async def connector_installation_resolve_handler(request):
     registry = get_connector_installation_registry()
     resolution = registry.resolve_installation(platform, workspace_id)
     status_code = 200 if resolution.ok else 409
-    return web.json_response({"ok": resolution.ok, "resolution": resolution.to_public_dict()}, status=status_code)
+    return web.json_response(
+        {"ok": resolution.ok, "resolution": resolution.to_public_dict()},
+        status=status_code,
+    )
 
 
 @endpoint_metadata(
