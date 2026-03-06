@@ -154,4 +154,3 @@ def resolve_layered_config(
         sources[key] = source
 
     return effective, sources
-

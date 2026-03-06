@@ -15,6 +15,7 @@ from .security_doctor_impl import (
     check_ssrf_posture,
     check_state_dir_permissions,
     check_token_boundaries,
+    check_vulnerability_advisories,
 )
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "check_comfyui_runtime",
     "check_feature_flags",
     "check_api_key_posture",
+    "check_vulnerability_advisories",
     "check_connector_security_posture",
     "check_hardening_wave2",
     "check_s45_exposure_posture",

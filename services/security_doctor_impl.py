@@ -46,6 +46,19 @@ except Exception:
         is_strict_connector_allowlist_profile,
     )
 
+try:
+    from ..config import PACK_VERSION
+except Exception:
+    try:
+        from config import PACK_VERSION  # type: ignore
+    except Exception:
+        PACK_VERSION = "0.0.0"
+
+try:
+    from .security_advisories import build_advisory_status
+except Exception:
+    from services.security_advisories import build_advisory_status  # type: ignore
+
 # ---------------------------------------------------------------------------
 # WP1: S30 Violation Code Mapping Table (bounded vocabulary)
 # ---------------------------------------------------------------------------
@@ -89,10 +102,12 @@ VIOLATION_CODE_MAP: Dict[str, str] = {
     "s66_runtime_guardrails": "SEC-S66-001",
     # S68 CSRF no-origin override posture
     "csrf_no_origin_override": "SEC-CSRF-001",
+    # S48 vulnerability advisory surfacing
+    "vulnerability_advisories": "SEC-VA-001",
 }
 
 # Reason codes that trigger high_risk_mode
-_HIGH_RISK_CODES = {"SEC-S45-001", "SEC-S45-002", "SEC-FF-001"}
+_HIGH_RISK_CODES = {"SEC-S45-001", "SEC-S45-002", "SEC-FF-001", "SEC-VA-001"}
 
 # ---------------------------------------------------------------------------
 # Severity + Result types (reuse operator_doctor patterns)
@@ -140,6 +155,7 @@ class SecurityReport:
     environment: Dict[str, str] = field(default_factory=dict)
     summary: Dict[str, int] = field(default_factory=dict)
     remediation_applied: List[str] = field(default_factory=list)
+    advisory_status: Dict[str, Any] = field(default_factory=dict)
 
     def add(self, result: SecurityCheckResult) -> None:
         self.checks.append(result)
@@ -225,6 +241,8 @@ class SecurityReport:
             "high_risk_mode": high_risk,
             "high_risk_reasons": hr_reasons,
             "violations": violations,
+            # S48 advisory surfacing
+            "advisory_status": dict(self.advisory_status),
         }
 
     def to_human(self) -> str:
@@ -874,6 +892,73 @@ def check_api_key_posture(report: SecurityReport) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Security checks — S48 vulnerability advisory posture
+# ---------------------------------------------------------------------------
+
+
+def check_vulnerability_advisories(report: SecurityReport) -> None:
+    """S48: Surface affected advisory posture + mitigation hints."""
+    status = build_advisory_status(current_version=PACK_VERSION)
+    report.advisory_status = status
+    report.environment["advisory_current_version"] = str(
+        status.get("current_version", "")
+    )
+    report.environment["advisory_affected"] = (
+        "true" if bool(status.get("affected")) else "false"
+    )
+    report.environment["advisory_high_severity_affected"] = str(
+        int(status.get("high_severity_affected") or 0)
+    )
+
+    if not status.get("affected"):
+        report.add(
+            SecurityCheckResult(
+                name="vulnerability_advisories",
+                severity=SecuritySeverity.PASS.value,
+                message="No applicable security advisories for current version",
+                category="advisory",
+            )
+        )
+        return
+
+    high_count = int(status.get("high_severity_affected") or 0)
+    total_affected = len(
+        [entry for entry in status.get("advisories", []) if entry.get("affected")]
+    )
+    mitigation = str(status.get("mitigation") or "").strip()
+    remediation = (
+        mitigation or "Upgrade to a non-affected version listed in advisory guidance."
+    )
+
+    if high_count > 0:
+        report.add(
+            SecurityCheckResult(
+                name="vulnerability_advisories",
+                severity=SecuritySeverity.WARN.value,
+                message=(
+                    f"Current version is affected by {total_affected} advisory(s), "
+                    f"including {high_count} high-severity advisory(s)"
+                ),
+                category="advisory",
+                remediation=remediation,
+            )
+        )
+        return
+
+    report.add(
+        SecurityCheckResult(
+            name="vulnerability_advisories",
+            severity=SecuritySeverity.WARN.value,
+            message=(
+                f"Current version is affected by {total_affected} non-high-severity advisory(s)"
+            ),
+            category="advisory",
+            remediation=remediation,
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
 # Security checks — S32 Connector security posture
 # ---------------------------------------------------------------------------
 
@@ -1467,6 +1552,7 @@ def run_security_doctor(
     check_runtime_guardrails(report)  # S66
     check_csrf_no_origin_override(report)  # S68
     check_feature_flags(report)
+    check_vulnerability_advisories(report)  # S48
     check_api_key_posture(report)
     check_connector_security_posture(report)  # S32
     check_hardening_wave2(report)  # Wave 2

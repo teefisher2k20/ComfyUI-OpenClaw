@@ -79,6 +79,19 @@ class TestR102SecurityTelemetry(unittest.TestCase):
             self.assertIn(security_telemetry.ANOMALY_DANGEROUS_OVERRIDE, codes)
             self.assertIn(security_telemetry.ANOMALY_QUEUE_SATURATION, codes)
 
+    def test_telemetry_opt_out_disables_emission(self):
+        with (
+            patch.dict("os.environ", {"OPENCLAW_TELEMETRY_OPT_OUT": "1"}),
+            patch(
+                "services.security_telemetry.build_audit_event",
+                side_effect=self._event_factory,
+            ),
+            patch("services.security_telemetry.emit_audit_event") as emit,
+        ):
+            self.telemetry.record_dangerous_override("OVERRIDE_X", "tester")
+            self.telemetry.record_queue_saturation(1500)
+            self.assertEqual(emit.call_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

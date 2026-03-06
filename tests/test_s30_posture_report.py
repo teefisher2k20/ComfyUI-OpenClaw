@@ -34,6 +34,7 @@ _REQUIRED_REPORT_KEYS = {
     "high_risk_mode",
     "high_risk_reasons",
     "violations",
+    "advisory_status",
 }
 
 
@@ -56,6 +57,7 @@ class TestReportEnvelopeContract(unittest.TestCase):
             f"Missing keys: {_REQUIRED_REPORT_KEYS - d.keys()}",
         )
         self.assertEqual(d["schema_version"], "1.0")
+        self.assertIsInstance(d["advisory_status"], dict)
 
     def test_legacy_fields_preserved(self):
         report = SecurityReport()
@@ -250,6 +252,19 @@ class TestViolationsStableCodes(unittest.TestCase):
         v = d["violations"][0]
         for key in ("code", "severity", "check", "message"):
             self.assertIn(key, v)
+
+    def test_advisory_warn_is_mapped(self):
+        report = SecurityReport()
+        report.add(
+            SecurityCheckResult(
+                name="vulnerability_advisories",
+                severity="warn",
+                message="affected by high severity advisory",
+                category="advisory",
+            )
+        )
+        d = report.to_dict()
+        self.assertIn("SEC-VA-001", [v["code"] for v in d["violations"]])
 
 
 class TestHighRiskMode(unittest.TestCase):

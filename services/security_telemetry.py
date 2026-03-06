@@ -4,6 +4,7 @@ Defines bounded anomaly event schema and deterministic anomaly producers.
 """
 
 import logging
+import os
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -28,6 +29,24 @@ THRESHOLDS = {
         "window": 300,
     },  # 100 queued items sustained? No, simple count check
 }
+
+TELEMETRY_OPT_OUT_ENV_KEYS = (
+    "OPENCLAW_TELEMETRY_OPT_OUT",
+    "MOLTBOT_TELEMETRY_OPT_OUT",
+)
+
+
+def _is_truthy(raw: str) -> bool:
+    return str(raw or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_security_telemetry_enabled(env: Optional[Dict[str, str]] = None) -> bool:
+    """S9: Explicit opt-out gate for security anomaly telemetry emission."""
+    env_map = env or os.environ
+    for key in TELEMETRY_OPT_OUT_ENV_KEYS:
+        if key in env_map:
+            return not _is_truthy(env_map.get(key, ""))
+    return True
 
 
 @dataclass
@@ -147,6 +166,10 @@ class SecurityTelemetry:
         window: float,
         action: str,
     ):
+        if not is_security_telemetry_enabled():
+            # IMPORTANT: S9 opt-out disables anomaly telemetry emission by contract.
+            return
+
         # Debounce alerts: don't fire same alert code for same source too often (e.g., every 10s)
         alert_key = f"{code}:{source}"
         now = time.time()

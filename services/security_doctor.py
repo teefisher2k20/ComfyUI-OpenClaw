@@ -21,6 +21,7 @@ from .security_doctor_checks import (
     check_ssrf_posture,
     check_state_dir_permissions,
     check_token_boundaries,
+    check_vulnerability_advisories,
 )
 from .security_doctor_remediation import apply_guarded_remediation
 from .security_doctor_report import (
@@ -46,6 +47,7 @@ __all__ = [
     "check_comfyui_runtime",
     "check_feature_flags",
     "check_api_key_posture",
+    "check_vulnerability_advisories",
     "check_connector_security_posture",
     "check_hardening_wave2",
     "check_s45_exposure_posture",

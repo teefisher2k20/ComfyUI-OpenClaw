@@ -5,6 +5,7 @@
 import { tabManager } from "./openclaw_tabs.js";
 import { ErrorBoundary } from "./ErrorBoundary.js";
 import { openclawApi } from "./openclaw_api.js";
+import { buildDoctorAdvisoryBanner } from "./openclaw_security_advisory.js";
 import { normalizeLegacyClassNames } from "./openclaw_utils.js";
 
 export class OpenClawUI {
@@ -655,8 +656,17 @@ export class OpenClawActions {
         try {
             const res = await openclawApi.fetch(openclawApi._path("/security/doctor"));
             if (res.ok && res.data) {
-                const issueCount = Array.isArray(res.data.issues)
-                    ? res.data.issues.length
+                const report = res.data.report || res.data;
+                const advisoryBanner = buildDoctorAdvisoryBanner(report);
+                if (advisoryBanner) {
+                    this.ui.showBanner(advisoryBanner);
+                    return;
+                }
+
+                const issueCount = Array.isArray(report?.checks)
+                    ? report.checks.filter(
+                        (check) => check?.severity === "warn" || check?.severity === "fail"
+                    ).length
                     : 0;
                 this.ui.showBanner(
                     issueCount > 0 ? "warning" : "success",

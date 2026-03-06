@@ -21,6 +21,39 @@ Only the latest version of ComfyUI-OpenClaw is supported for security updates.
 
 Please report security vulnerabilities by creating a **private** issue on GitHub if possible, or contact the maintainers directly. Do not open public issues for sensitive security flaws.
 
+### Disclosure Workflow and SLA (S48)
+
+Private reporting workflow:
+1. Submit a private report with repro steps, affected version, and impact.
+2. Maintainers triage and confirm impact.
+3. Fix and mitigation guidance are prepared.
+4. Advisory is published with affected-range + fixed-version metadata.
+
+Target SLA:
+- initial acknowledgement: within 72 hours
+- triage status update: within 7 calendar days
+- coordinated disclosure target: within 30 days after confirmed impact
+  - timeline may be extended for high-complexity fixes; status updates are still required
+
+Advisory publication policy:
+- advisories are tracked in `docs/release/security_advisories.json`
+- Security Doctor surfaces advisory applicability (`affected`, `mitigation`) for the running version
+- high-severity affected posture should be treated as priority upgrade work
+
+### Telemetry Opt-out Contract (S9)
+
+Security anomaly telemetry is minimal and audit-focused by default. If operators must disable this emission path, use:
+
+```bash
+export OPENCLAW_TELEMETRY_OPT_OUT=1
+# Legacy compatibility:
+# export MOLTBOT_TELEMETRY_OPT_OUT=1
+```
+
+Trade-off:
+- with opt-out enabled, security anomaly audit events are not emitted
+- use only when required by policy/privacy constraints and keep compensating controls in place
+
 ---
 
 # Safe Deployment Guide
