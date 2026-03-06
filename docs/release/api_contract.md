@@ -1,10 +1,21 @@
 # OpenClaw API Contract (v1)
 
 > **Status**: normative
-> **Version**: 1.0.3
-> **Date**: 2026-03-05
+> **Version**: 1.0.4
+> **Date**: 2026-03-07
 
 This document defines the public API contract for OpenClaw. It serves as the authoritative baseline for client compatibility and breaking change policies.
+
+## 0. Tenant Boundary Context (S49)
+
+Default behavior remains single-tenant compatible (`tenant_id=default`).
+
+When `OPENCLAW_MULTI_TENANT_ENABLED=1`:
+
+- tenant context may be supplied by token context and/or request header (`X-OpenClaw-Tenant-Id`, configurable)
+- token/header mismatch is rejected with `403` (`tenant_mismatch`)
+- connector installation resolution is tenant-scoped and rejects cross-tenant matches fail-closed (diagnostic conflict path)
+- current admin/API handlers keep compatibility behavior by defaulting missing tenant context to `default` tenant
 
 ## 1. Route Inventory
 
@@ -164,6 +175,9 @@ All JSON responses (success or error) share a common structure:
 | `500` | Internal Error | Unhandled server exception. |
 | `503` | Unavailable | Feature disabled or service not wired. |
 
+Tenant-boundary error notes:
+- tenant boundary violations use `403` with explicit codes such as `tenant_mismatch` and `tenant_invalid`.
+
 ### 2.3 SSE Endpoint Notes (Contractual Behavior)
 
 - SSE endpoints return `Content-Type: text/event-stream`.
@@ -200,6 +214,7 @@ These limits are contractual and strictly enforced. Clients MUST handle `413` an
 | **Concurrency (Global)** | In-flight jobs | 2 | `OPENCLAW_MAX_INFLIGHT_SUBMITS_TOTAL` |
 | **Concurrency (Webhook)** | In-flight jobs | 1 | `OPENCLAW_MAX_INFLIGHT_SUBMITS_WEBHOOK` |
 | **Concurrency (Bridge)** | In-flight jobs | 1 | `OPENCLAW_MAX_INFLIGHT_SUBMITS_BRIDGE` |
+| **Concurrency (Per-Tenant)** | In-flight jobs per tenant | 1 | `OPENCLAW_MAX_INFLIGHT_SUBMITS_PER_TENANT` |
 | **Payload Size** | Rendered workflow | 512KB | `OPENCLAW_MAX_RENDERED_WORKFLOW_BYTES` |
 | **Webhook Body** | Raw JSON body | 10MB | `MAX_BODY_SIZE` (internal constant) |
 | **Trigger Inputs** | Input variables | 32KB | Hardcoded in `api/triggers.py` |

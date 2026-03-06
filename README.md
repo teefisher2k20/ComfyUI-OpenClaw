@@ -50,18 +50,20 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 
 ## Security stance (how this project differs from convenience-first automation packs):
 
+- Multi-tenant boundary model rejects cross-tenant mismatches fail-closed and keeps tenant-scoped isolation across config, secret sources, connector installations, approvals, presets/templates visibility, and execution concurrency budgets, with explicit compatibility fallback controls
 - Public profile requires explicit shared-surface boundary acknowledgement to reduce accidental exposure of ComfyUI-native high-risk routes behind reverse proxies
 - Public MAE route-plane posture is guaranteed by startup enforcement plus no-skip CI route-drift checks
 - Public deployments enforce Control Plane Split so high-risk controls are externalized and embedded UI stays on safer read/UX surfaces
 - Runtime profile startup hardening is fail-closed in hardened mode
 - Connector ingress is fail-closed in public/hardened posture when platform allowlists are missing, with synchronized startup gate, deployment-profile check, Security Doctor posture, and startup audit visibility
 - Admin write actions are protected by an explicit **Admin Token** boundary
-- Optional local secret-manager integration supports 1Password CLI with explicit enable + command allowlist fail-closed controls while keeping frontend surfaces secret-blind
 - Webhook ingress is **deny-by-default** until authentication is configured
 - Encrypted webhook ingress is **fail-closed** on signature/decrypt/app-id validation failures
 - Bridge worker ingress enforces device token auth, scope checks, and idempotency handling
-- External tool sandboxing is fail-closed with filesystem path guards
 - Outbound SSRF policy is strict for callbacks and custom LLM base URLs
+- External tool sandboxing is fail-closed with filesystem path guards
+- Optional local secret-manager integration supports 1Password CLI with explicit enable + command allowlist fail-closed controls while keeping frontend surfaces secret-blind
+- Layered config resolution is deterministic (`env > runtime override > persisted > default`) with compatibility aliases preserved, reducing config drift/misrouting risk across API/node/runtime paths
 - Module capability gates prevent disabled modules from registering routes/workers
 - Endpoint inventory metadata plus route-drift tests catch unclassified API exposure regressions
 - Pack lifecycle file paths and pack API file inputs are root-bounded and traversal-validated
@@ -89,6 +91,17 @@ Deployment profiles and hardening checklists:
 
 
 <details><summary><h2>Latest Updates - Click to expand</h2></summary>
+
+<details>
+
+<summary><strong>Multi-tenant isolation baseline, optional local secret sourcing, and layered config unification completed</strong></summary>
+
+- Added a fail-closed tenant boundary model with tenant-scoped config/secret resolution, connector installation isolation, approvals/presets/templates visibility boundaries, and per-tenant execution concurrency caps.
+- Added optional local 1Password CLI key sourcing with explicit enablement, command allowlist, template validation, and bounded fail-closed lookup behavior.
+- Unified config precedence across runtime/config/provider call paths around a shared layered resolver (`env > runtime override > persisted > default`) with compatibility aliases preserved.
+- Completed full verification gate pass on `dev` (detect-secrets, pre-commit, backend unit suites, and frontend Playwright E2E).
+
+</details>
 
 <details>
 
@@ -549,6 +562,9 @@ Deployment profiles and hardening checklists:
 - [LLM Failover](#llm-failover)
 - [Advanced Security and Runtime Setup](#advanced-security-and-runtime-setup)
   - [Runtime hardening and startup gates](#runtime-hardening-and-startup-gates)
+  - [Multi-tenant boundary mode](#multi-tenant-boundary-mode)
+  - [Optional local secret-manager (1Password CLI)](#optional-local-secret-manager-1password-cli)
+  - [Config-layer precedence contract](#config-layer-precedence-contract)
   - [Remote registry sync and constrained transforms](#remote-registry-sync-and-constrained-transforms)
   - [Connector command authorization policy](#connector-command-authorization-policy)
 - [State Directory & Logs](#state-directory--logs)
@@ -1002,6 +1018,38 @@ Standalone worker runtime:
   - `OPENCLAW_BRIDGE_ENABLED`
   - `OPENCLAW_BRIDGE_DEVICE_TOKEN`, `OPENCLAW_BRIDGE_ALLOWED_DEVICE_IDS`
 
+### Multi-tenant boundary mode
+
+- Optional multi-tenant mode is controlled by:
+  - `OPENCLAW_MULTI_TENANT_ENABLED=1`
+  - `OPENCLAW_TENANT_HEADER` (default: `X-OpenClaw-Tenant-Id`)
+- Fail-closed boundary behavior in multi-tenant mode:
+  - token/header mismatch is rejected (`tenant_mismatch`)
+  - connector installation resolution rejects cross-tenant matches (`tenant_mismatch`)
+- Current API/admin compatibility behavior:
+  - request handlers default missing tenant context to `default` tenant unless a stricter caller path is used
+- Compatibility fallbacks are explicit opt-in only:
+  - `OPENCLAW_MULTI_TENANT_ALLOW_DEFAULT_FALLBACK=1`
+  - `OPENCLAW_MULTI_TENANT_ALLOW_CONFIG_FALLBACK=1`
+  - `OPENCLAW_MULTI_TENANT_ALLOW_LEGACY_SECRET_FALLBACK=1`
+
+### Optional local secret-manager (1Password CLI)
+
+- Optional backend secret chain:
+  - `env -> optional 1Password CLI -> encrypted server store -> none`
+- 1Password path is disabled by default and requires explicit guardrails:
+  - `OPENCLAW_1PASSWORD_ENABLED=1`
+  - `OPENCLAW_1PASSWORD_ALLOWED_COMMANDS=op`
+  - `OPENCLAW_1PASSWORD_VAULT=<vault>`
+- In multi-tenant mode, `OPENCLAW_1PASSWORD_ITEM_TEMPLATE` must include both `{tenant}` and `{provider}` or resolution fails closed.
+
+### Config-layer precedence contract
+
+- Effective configuration now resolves through one shared layered contract:
+  - `env > runtime override > persisted config > default`
+- Runtime aliases remain compatible (`OPENCLAW_*` preferred, `MOLTBOT_*` fallback), and precedence behavior is aligned across config API, provider key resolution, and runtime LLM client calls.
+- Full details: `docs/adr/ADR-0001-config-surface-unification.md` and `docs/release/config_secrets_contract.md`
+
 ### Remote registry sync and constrained transforms
 
 - Optional remote registry sync and constrained transform execution are documented in:
@@ -1067,6 +1115,7 @@ Environment variables:
 - `OPENCLAW_MAX_INFLIGHT_SUBMITS_TRIGGER` (default: 1)
 - `OPENCLAW_MAX_INFLIGHT_SUBMITS_SCHEDULER` (default: 1)
 - `OPENCLAW_MAX_INFLIGHT_SUBMITS_BRIDGE` (default: 1)
+- `OPENCLAW_MAX_INFLIGHT_SUBMITS_PER_TENANT` (default: 1, only when multi-tenant mode is enabled)
 - `OPENCLAW_MAX_RENDERED_WORKFLOW_BYTES` (default: 524288)
 
 If budgets are exceeded, callers should expect `429` (concurrency) or `413` (oversized render).

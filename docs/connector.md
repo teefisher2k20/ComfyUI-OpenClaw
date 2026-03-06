@@ -36,6 +36,15 @@ Admin diagnostics APIs:
 - `GET /openclaw/connector/installations/resolve?platform=<platform>&workspace_id=<workspace_id>`
 - `GET /openclaw/connector/installations/audit`
 
+### Multi-tenant boundary behavior
+
+When backend multi-tenant mode is enabled (`OPENCLAW_MULTI_TENANT_ENABLED=1`):
+
+- installation records are tenant-owned (`tenant_id`) and diagnostics are tenant-scoped
+- resolution rejects cross-tenant matches fail-closed (`tenant_mismatch` path)
+- admin diagnostics calls can pass tenant context via token context and/or `X-OpenClaw-Tenant-Id` (or your configured `OPENCLAW_TENANT_HEADER`)
+- missing tenant context currently falls back to `default` tenant for compatibility unless stricter caller paths are used
+
 ## Supported Platforms
 
 - **Telegram**: Long-polling (instant response).
@@ -64,6 +73,8 @@ Set the following environment variables (or put them in a `.env` file if you use
 - `OPENCLAW_CONNECTOR_ADMIN_USERS`: Comma-separated list of user IDs allowed to run admin commands (for example `/stop`, approvals, schedules). Admin users are also treated as trusted senders for `/run`.
 - `OPENCLAW_CONNECTOR_ADMIN_TOKEN`: Admin token sent to OpenClaw (`X-OpenClaw-Admin-Token`).
 - `OPENCLAW_LOG_TRUNCATE_ON_START`: Optional backend runtime flag. Set `1` to clear `openclaw.log` once at backend startup to avoid stale-history noise in UI log panels.
+- `OPENCLAW_MULTI_TENANT_ENABLED`: Optional backend mode toggle. If `1`, connector diagnostics and installation resolution become tenant-scoped.
+- `OPENCLAW_TENANT_HEADER`: Optional tenant header key (default `X-OpenClaw-Tenant-Id`) used when calling tenant-scoped backend APIs.
 
 **Admin token behavior:**
 

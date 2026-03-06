@@ -122,6 +122,46 @@ Operational note:
 
 - treat callback decision codes/audit trails as security evidence and investigate repeated reject patterns before enabling higher-risk interactive flows.
 
+### 4.2 Multi-tenant Boundary Model (Fail-Closed)
+
+When `OPENCLAW_MULTI_TENANT_ENABLED=1`, OpenClaw enforces explicit tenant boundaries across API and service paths.
+
+Boundary rules:
+
+- tenant context is resolved from token context and/or tenant header (`X-OpenClaw-Tenant-Id` by default)
+- token/header mismatch is rejected (`tenant_mismatch`)
+- connector installation diagnostics/resolution, config read/write, approvals, presets, template visibility, and secret lookup are tenant-scoped
+- execution budgets add per-tenant concurrency enforcement (`OPENCLAW_MAX_INFLIGHT_SUBMITS_PER_TENANT`)
+
+Compatibility note:
+
+- current admin/API handlers default missing tenant context to `default` for backward compatibility; stricter caller paths can enforce explicit tenant presence.
+
+Compatibility toggles (use only during migration windows):
+
+- `OPENCLAW_MULTI_TENANT_ALLOW_DEFAULT_FALLBACK=1`
+- `OPENCLAW_MULTI_TENANT_ALLOW_CONFIG_FALLBACK=1`
+- `OPENCLAW_MULTI_TENANT_ALLOW_LEGACY_SECRET_FALLBACK=1`
+
+Security recommendation:
+
+- keep all fallback toggles disabled for steady-state multi-tenant production.
+
+### 4.3 Optional Local Secret-manager Path (1Password CLI)
+
+If `OPENCLAW_1PASSWORD_ENABLED=1`, provider key lookup can use local 1Password CLI as an optional backend source.
+
+Fail-closed requirements:
+
+- `OPENCLAW_1PASSWORD_ALLOWED_COMMANDS` must include the command basename in use
+- `OPENCLAW_1PASSWORD_VAULT` and `OPENCLAW_1PASSWORD_FIELD` must be valid
+- `OPENCLAW_1PASSWORD_ITEM_TEMPLATE` must include `{provider}`
+- when multi-tenant mode is enabled, the template must also include `{tenant}`
+
+Operational note:
+
+- this path remains backend-only; frontend surfaces stay secret-blind.
+
 ### 5. Startup Gate Behavior (R136 + S56)
 
 Startup security gates are fail-closed. Fatal startup gate/bootstrap failures abort route/worker registration and do not continue in a partial state.
@@ -179,6 +219,8 @@ OpenClaw supports a "Sidecar Bridge" (F10) for safe interaction with external bo
 * [ ] **Public shared-surface ack**: for `OPENCLAW_DEPLOYMENT_PROFILE=public`, set `OPENCLAW_PUBLIC_SHARED_SURFACE_BOUNDARY_ACK=1` only after proxy path allowlist + ACL are verified.
 * [ ] **Public path deny rules**: block ComfyUI-native high-risk routes and `/api/*` equivalents unless explicitly required.
 * [ ] **Connector strict-posture allowlists**: if connector ingress is active in `public` or `hardened`, ensure platform allowlists are set before startup (`DP-PUBLIC-009` for public profile).
+* [ ] **Multi-tenant boundary (if enabled)**: enforce one canonical tenant header path through proxy/app, keep fallback toggles disabled unless a migration window is actively in progress.
+* [ ] **1Password guardrails (if enabled)**: require command allowlist + vault/template validation; in multi-tenant mode, include `{tenant}` in item template.
 * [ ] **Startup gate preflight**: run `python scripts/check_deployment_profile.py --profile public --strict-warnings`.
 * [ ] **Runtime diagnostics**: review `GET /openclaw/security/doctor` before exposure.
 * [ ] **Least privilege host posture**: do not run as root/Administrator.
