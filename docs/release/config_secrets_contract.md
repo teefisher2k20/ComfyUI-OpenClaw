@@ -1,8 +1,8 @@
 # OpenClaw Config & Secrets Contract (v1)
 
 > **Status**: normative
-> **Version**: 1.0.3
-> **Date**: 2026-03-01
+> **Version**: 1.0.4
+> **Date**: 2026-03-07
 
 This document defines the authoritative configuration contract for OpenClaw. It enumerates all supported environment variables, their precedence rules, and security classifications.
 
@@ -30,6 +30,24 @@ Controls the core LLM client used by nodes (Planner, Refiner, etc.).
 | `OPENCLAW_LLM_API_KEY` | **Yes*** | - | API Key for the configured provider. <br>*(Required unless using local provider or provider-specific key)* |
 | `OPENCLAW_LLM_BASE_URL` | No | Provider default | Override base URL (crucial for local/compatible providers). |
 | `OPENCLAW_LLM_TIMEOUT`| No | `120` | Request timeout in seconds. |
+
+Optional local secret-manager path (S11, disabled by default):
+
+| Variable | Required | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `OPENCLAW_1PASSWORD_ENABLED` | No | `0` | Enables optional 1Password CLI provider for API key resolution. |
+| `OPENCLAW_1PASSWORD_ALLOWED_COMMANDS` | **Yes (when enabled)** | - | Comma-separated executable allowlist. Empty allowlist with enabled provider is fail-closed. |
+| `OPENCLAW_1PASSWORD_CMD` | No | `op` | 1Password CLI executable name/path. Must match allowlist entry. |
+| `OPENCLAW_1PASSWORD_VAULT` | **Yes (when enabled)** | - | Vault name used to resolve secret references. |
+| `OPENCLAW_1PASSWORD_ITEM_TEMPLATE` | No | `openclaw/{provider}` | Item path template. Must contain `{provider}` placeholder. |
+| `OPENCLAW_1PASSWORD_FIELD` | No | `api_key` | Item field name containing the key value. |
+| `OPENCLAW_1PASSWORD_TIMEOUT_SEC` | No | `5` | CLI lookup timeout (bounded, fail-closed on timeout). |
+
+Lookup precedence for provider keys:
+1. Provider-specific env key (`OPENCLAW_*`, legacy `MOLTBOT_*`)
+2. Generic env key (`OPENCLAW_LLM_API_KEY`, legacy aliases)
+3. Optional 1Password provider (if enabled and allowlist-valid)
+4. Encrypted server-side secret store (`secrets.enc.json`)
 
 **SSRF Protection:**
 

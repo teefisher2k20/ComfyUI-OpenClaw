@@ -8,6 +8,9 @@ This SOP defines operational procedures for three security-critical materials:
 
 Use this runbook for routine rotation, emergency revocation, and disaster recovery.
 
+Scope note:
+- If `S11` optional 1Password provider is enabled, provider API keys can be sourced from local 1Password instead of `secrets.enc.json`. In that mode, this SOP still governs the local encryption key lifecycle for any secrets that remain in server-side store.
+
 ## 1. State Artifacts
 
 All paths are relative to `OPENCLAW_STATE_DIR` (legacy fallback: `MOLTBOT_STATE_DIR`):
@@ -21,6 +24,12 @@ All paths are relative to `OPENCLAW_STATE_DIR` (legacy fallback: `MOLTBOT_STATE_
 
 Optional startup log hygiene for incident drills:
 - Set `OPENCLAW_LOG_TRUNCATE_ON_START=1` before restart when you need a clean `openclaw.log` timeline.
+
+Optional `S11` local secret-manager settings (if used):
+- `OPENCLAW_1PASSWORD_ENABLED=1`
+- `OPENCLAW_1PASSWORD_ALLOWED_COMMANDS=<allowlisted executables>`
+- `OPENCLAW_1PASSWORD_CMD=op`
+- `OPENCLAW_1PASSWORD_VAULT=<vault>`
 
 ## 2. Global Rules
 

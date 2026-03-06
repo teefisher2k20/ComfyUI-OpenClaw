@@ -55,4 +55,3 @@ Phase 2+ (future follow-ups):
    - Rejected due to blast radius and rollback difficulty.
 2. Keep dual systems and patch ad hoc:
    - Rejected due to ongoing precedence drift and maintenance cost.
-

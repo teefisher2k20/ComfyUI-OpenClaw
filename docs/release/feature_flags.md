@@ -23,6 +23,7 @@ Users should audit these flags before deploying to a public or untrusted network
 | `OPENCLAW_BRIDGE_ENABLED` | `0` | **High** | Enables the sidecar bridge for remote orchestration. Requires `OPENCLAW_BRIDGE_DEVICE_TOKEN` (and in public posture also mTLS + device allowlist controls). |
 | `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST` | `0` | **High** | Bypasses the known-host allowlist for LLM `base_url`. Allows SSRF to public IPs. |
 | `OPENCLAW_ALLOW_INSECURE_BASE_URL` | `0` | **Critical** | Allows HTTP (non-HTTPS) or private IP `base_url` for LLM. Risk of internal network scanning (SSRF). |
+| `OPENCLAW_1PASSWORD_ENABLED` | `0` | **Medium** | Enables optional local 1Password CLI key lookup. Requires explicit command allowlist (`OPENCLAW_1PASSWORD_ALLOWED_COMMANDS`) and vault config; fail-closed when misconfigured. |
 | `OPENCLAW_LOG_TRUNCATE_ON_START` | `0` | **Low** | Operational log hygiene toggle. If `1`, truncates active `openclaw.log` at startup (once per process). |
 | `OPENCLAW_CONNECTOR_DISCORD_TOKEN` | *None* | **Medium** | Presence enables Discord Bot gateway. |
 | `OPENCLAW_CONNECTOR_LINE_CHANNEL_SECRET` | *None* | **Medium** | Presence enables LINE webhook listener. Requires a public HTTPS endpoint. |

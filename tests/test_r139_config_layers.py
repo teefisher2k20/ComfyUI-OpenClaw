@@ -24,7 +24,10 @@ class TestR139ConfigLayers(unittest.TestCase):
         value, used_legacy = get_preferred_env_value(
             "OPENCLAW_LLM_PROVIDER",
             "MOLTBOT_LLM_PROVIDER",
-            env={"OPENCLAW_LLM_PROVIDER": "openai", "MOLTBOT_LLM_PROVIDER": "anthropic"},
+            env={
+                "OPENCLAW_LLM_PROVIDER": "openai",
+                "MOLTBOT_LLM_PROVIDER": "anthropic",
+            },
         )
         self.assertEqual(value, "openai")
         self.assertFalse(used_legacy)
@@ -106,4 +109,3 @@ class TestR139ConfigLayers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -56,6 +56,7 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 - Runtime profile startup hardening is fail-closed in hardened mode
 - Connector ingress is fail-closed in public/hardened posture when platform allowlists are missing, with synchronized startup gate, deployment-profile check, Security Doctor posture, and startup audit visibility
 - Admin write actions are protected by an explicit **Admin Token** boundary
+- Optional local secret-manager integration supports 1Password CLI with explicit enable + command allowlist fail-closed controls while keeping frontend surfaces secret-blind
 - Webhook ingress is **deny-by-default** until authentication is configured
 - Encrypted webhook ingress is **fail-closed** on signature/decrypt/app-id validation failures
 - Bridge worker ingress enforces device token auth, scope checks, and idempotency handling
@@ -88,6 +89,17 @@ Deployment profiles and hardening checklists:
 
 
 <details><summary><h2>Latest Updates - Click to expand</h2></summary>
+
+<details>
+
+<summary><strong>Optional local secret-manager baseline for safer key sourcing</strong></summary>
+
+- Added a pluggable backend secret-provider chain for API keys (`env -> optional 1Password CLI -> encrypted server store -> none`) so operators can keep runtime keys out of plaintext deployment config where needed.
+- Added fail-closed 1Password guardrails requiring explicit enablement, executable allowlist, command path validation, and bounded lookup timeout behavior.
+- Added regression coverage for precedence resolution, allowlist/failure fallback behavior, and no-secret-leak logging expectations.
+- Completed full verification gate pass on `dev` (detect-secrets, pre-commit, backend unit suites, adversarial/retry/real-backend lanes, and frontend Playwright E2E).
+
+</details>
 
 <details>
 
