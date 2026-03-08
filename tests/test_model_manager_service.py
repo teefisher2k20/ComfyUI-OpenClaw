@@ -18,7 +18,9 @@ class TestModelManagerService(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="openclaw_model_manager_service_")
         self.state_root = Path(self.tmp.name) / "state"
         self.install_root = Path(self.tmp.name) / "install"
-        self.manager = ModelManager(state_root=self.state_root, install_root=self.install_root)
+        self.manager = ModelManager(
+            state_root=self.state_root, install_root=self.install_root
+        )
         self.manager.allow_any_public = True
 
     def tearDown(self):
@@ -89,7 +91,10 @@ class TestModelManagerService(unittest.TestCase):
         self.assertEqual(lora_only["pagination"]["total"], 1)
         self.assertEqual(lora_only["items"][0]["id"], "installed-b")
 
-    @patch("services.model_manager.validate_outbound_url", return_value=("https", "example.com", 443, ["1.1.1.1"]))
+    @patch(
+        "services.model_manager.validate_outbound_url",
+        return_value=("https", "example.com", 443, ["1.1.1.1"]),
+    )
     def test_create_download_and_import_success(self, _mock_validate):
         payload = b"model-bytes"
         digest = __import__("hashlib").sha256(payload).hexdigest()
@@ -110,7 +115,11 @@ class TestModelManagerService(unittest.TestCase):
             source_label="Catalog",
             download_url="https://example.com/model-a.safetensors",
             expected_sha256=digest,
-            provenance={"publisher": "OpenClaw", "license": "OpenRAIL", "source_url": "https://example.com/model-a"},
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model-a",
+            },
         )
         done = self._wait_terminal(task["task_id"])
         self.assertEqual(done["state"], "completed")
@@ -120,7 +129,10 @@ class TestModelManagerService(unittest.TestCase):
         self.assertTrue(installed.exists())
         self.assertEqual(installed.read_bytes(), payload)
 
-    @patch("services.model_manager.validate_outbound_url", return_value=("https", "example.com", 443, ["1.1.1.1"]))
+    @patch(
+        "services.model_manager.validate_outbound_url",
+        return_value=("https", "example.com", 443, ["1.1.1.1"]),
+    )
     def test_cancel_running_task(self, _mock_validate):
         digest = "d" * 64
 
@@ -140,7 +152,11 @@ class TestModelManagerService(unittest.TestCase):
             source_label="Catalog",
             download_url="https://example.com/model-cancel.safetensors",
             expected_sha256=digest,
-            provenance={"publisher": "OpenClaw", "license": "OpenRAIL", "source_url": "https://example.com/model-cancel"},
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model-cancel",
+            },
         )
         self.manager.cancel_download_task(task["task_id"])
         done = self._wait_terminal(task["task_id"])
@@ -162,7 +178,11 @@ class TestModelManagerService(unittest.TestCase):
             destination_subdir="checkpoints",
             filename="model.safetensors",
             expected_sha256="a" * 64,
-            provenance={"publisher": "OpenClaw", "license": "OpenRAIL", "source_url": "https://example.com/model"},
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model",
+            },
             tenant_id="default",
             state="completed",
             staged_path=str(staged_file),

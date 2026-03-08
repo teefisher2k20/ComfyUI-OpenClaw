@@ -548,6 +548,7 @@ Deployment profiles and hardening checklists:
 - [Nodes](#nodes)
 - [Extension UI](#extension-ui)
   - [Sidebar Modules](#sidebar-modules)
+  - [Model Manager tab (F64)](#model-manager-tab-f64)
 - [Operator UX Features](#operator-ux-features)
 - [API Overview](#api-overview)
   - [Observability](#observability-read-only)
@@ -752,7 +753,19 @@ The OpenClaw sidebar includes these built-in tabs. Some tabs are capability-gate
 | `Approvals` | Lists approval gates and supports approve/reject operations. | [Triggers + approvals](#triggers--approvals-admin), [Remote Control (Connector)](#remote-control-connector) |
 | `Explorer` | Inventory/preflight diagnostics and snapshot/checkpoint troubleshooting workflows. | [Operator UX Features](#operator-ux-features), [Troubleshooting](#troubleshooting) |
 | `Packs` | Dedicated pack lifecycle tab for import/export/delete under admin boundary. | [Packs](#packs-admin) |
+| `Model Manager` | Searches model catalog/install records, queues managed downloads, and imports completed tasks into the managed install root. | [Model manager](#model-manager-admin-f54), [Model Manager tab (F64)](#model-manager-tab-f64) |
 | `Parameter Lab` | Runs bounded sweep/compare experiments, stores history, and replays parameters back into the graph. | [Operator UX Features](#operator-ux-features) |
+
+### Model Manager tab (F64)
+
+The `Model Manager` tab is the frontend surface for the F54 managed model pipeline:
+
+- Search models by query/source/type/installed state.
+- Queue download tasks from rows that provide the full trusted contract (`download_url`, `sha256`, `provenance`).
+- Monitor task lifecycle (`queued`, `running`, `completed`, `failed`, `cancelled`) with cancel support.
+- Import completed tasks into managed install paths, with optional destination/filename/tags overrides.
+
+This tab stays admin-bound through existing backend policy checks; it does not bypass F54 safety gates.
 
 ## Operator UX Features
 

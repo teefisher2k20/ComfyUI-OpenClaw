@@ -11,14 +11,30 @@ from aiohttp import web
 
 try:
     from ..services.access_control import require_admin_token, resolve_token_info
-    from ..services.endpoint_manifest import AuthTier, RiskTier, RoutePlane, endpoint_metadata
+    from ..services.endpoint_manifest import (
+        AuthTier,
+        RiskTier,
+        RoutePlane,
+        endpoint_metadata,
+    )
     from ..services.model_manager import ModelManagerError, model_manager
     from ..services.tenant_context import TenantBoundaryError, request_tenant_scope
 except ImportError:  # pragma: no cover
-    from services.access_control import require_admin_token, resolve_token_info  # type: ignore
-    from services.endpoint_manifest import AuthTier, RiskTier, RoutePlane, endpoint_metadata  # type: ignore
+    from services.access_control import (  # type: ignore
+        require_admin_token,
+        resolve_token_info,
+    )
+    from services.endpoint_manifest import (  # type: ignore
+        AuthTier,
+        RiskTier,
+        RoutePlane,
+        endpoint_metadata,
+    )
     from services.model_manager import ModelManagerError, model_manager  # type: ignore
-    from services.tenant_context import TenantBoundaryError, request_tenant_scope  # type: ignore
+    from services.tenant_context import (  # type: ignore
+        TenantBoundaryError,
+        request_tenant_scope,
+    )
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.model_manager")
 
@@ -67,7 +83,9 @@ async def model_search_handler(request: web.Request) -> web.Response:
         return deny
     token_info = resolve_token_info(request)
     try:
-        with request_tenant_scope(request=request, token_info=token_info, allow_default_when_missing=True) as tenant:
+        with request_tenant_scope(
+            request=request, token_info=token_info, allow_default_when_missing=True
+        ) as tenant:
             result = model_manager.search_models(
                 query=request.query.get("q", ""),
                 source=request.query.get("source", ""),
@@ -102,7 +120,9 @@ async def model_download_create_handler(request: web.Request) -> web.Response:
         return _json({"ok": False, "error": "invalid_payload"}, 400)
     token_info = resolve_token_info(request)
     try:
-        with request_tenant_scope(request=request, token_info=token_info, allow_default_when_missing=True) as tenant:
+        with request_tenant_scope(
+            request=request, token_info=token_info, allow_default_when_missing=True
+        ) as tenant:
             task = model_manager.create_download_task(
                 model_id=payload.get("model_id") or payload.get("id") or "",
                 name=payload.get("name") or "",
@@ -140,7 +160,9 @@ async def model_download_list_handler(request: web.Request) -> web.Response:
         return deny
     token_info = resolve_token_info(request)
     try:
-        with request_tenant_scope(request=request, token_info=token_info, allow_default_when_missing=True) as tenant:
+        with request_tenant_scope(
+            request=request, token_info=token_info, allow_default_when_missing=True
+        ) as tenant:
             result = model_manager.list_download_tasks(
                 tenant_id=tenant.tenant_id,
                 state=request.query.get("state", ""),
@@ -169,7 +191,9 @@ async def model_download_get_handler(request: web.Request) -> web.Response:
         return _json({"ok": False, "error": "missing_task_id"}, 400)
     token_info = resolve_token_info(request)
     try:
-        with request_tenant_scope(request=request, token_info=token_info, allow_default_when_missing=True) as tenant:
+        with request_tenant_scope(
+            request=request, token_info=token_info, allow_default_when_missing=True
+        ) as tenant:
             task = model_manager.get_download_task(task_id, tenant_id=tenant.tenant_id)
             return _json({"ok": True, "task": task})
     except TenantBoundaryError as exc:
@@ -195,8 +219,12 @@ async def model_download_cancel_handler(request: web.Request) -> web.Response:
         return _json({"ok": False, "error": "missing_task_id"}, 400)
     token_info = resolve_token_info(request)
     try:
-        with request_tenant_scope(request=request, token_info=token_info, allow_default_when_missing=True) as tenant:
-            task = model_manager.cancel_download_task(task_id, tenant_id=tenant.tenant_id)
+        with request_tenant_scope(
+            request=request, token_info=token_info, allow_default_when_missing=True
+        ) as tenant:
+            task = model_manager.cancel_download_task(
+                task_id, tenant_id=tenant.tenant_id
+            )
             return _json({"ok": True, "task": task})
     except TenantBoundaryError as exc:
         return _json({"ok": False, "error": exc.code, "detail": str(exc)}, 403)
@@ -227,13 +255,19 @@ async def model_import_handler(request: web.Request) -> web.Response:
         return _json({"ok": False, "error": "missing_task_id"}, 400)
     token_info = resolve_token_info(request)
     try:
-        with request_tenant_scope(request=request, token_info=token_info, allow_default_when_missing=True) as tenant:
+        with request_tenant_scope(
+            request=request, token_info=token_info, allow_default_when_missing=True
+        ) as tenant:
             rec = model_manager.import_downloaded_model(
                 task_id=task_id,
                 tenant_id=tenant.tenant_id,
                 destination_subdir=payload.get("destination_subdir"),
                 filename=payload.get("filename"),
-                tags=payload.get("tags") if isinstance(payload.get("tags"), list) else None,
+                tags=(
+                    payload.get("tags")
+                    if isinstance(payload.get("tags"), list)
+                    else None
+                ),
             )
             return _json({"ok": True, "installation": rec})
     except TenantBoundaryError as exc:
@@ -259,7 +293,9 @@ async def model_installations_list_handler(request: web.Request) -> web.Response
         return deny
     token_info = resolve_token_info(request)
     try:
-        with request_tenant_scope(request=request, token_info=token_info, allow_default_when_missing=True) as tenant:
+        with request_tenant_scope(
+            request=request, token_info=token_info, allow_default_when_missing=True
+        ) as tenant:
             result = model_manager.list_installations(
                 tenant_id=tenant.tenant_id,
                 model_type=request.query.get("model_type", ""),

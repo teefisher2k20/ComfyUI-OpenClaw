@@ -15,6 +15,7 @@ except Exception:  # pragma: no cover
     def unittest_run_loop(fn):  # type: ignore
         return fn
 
+
 from api import model_manager as mm_api
 from services.model_manager import ModelManager
 
@@ -40,12 +41,23 @@ class TestModelManagerAPI(AioHTTPTestCase):
     async def get_application(self):
         app = web.Application()
         app.router.add_get("/openclaw/models/search", mm_api.model_search_handler)
-        app.router.add_post("/openclaw/models/downloads", mm_api.model_download_create_handler)
-        app.router.add_get("/openclaw/models/downloads", mm_api.model_download_list_handler)
-        app.router.add_get("/openclaw/models/downloads/{task_id}", mm_api.model_download_get_handler)
-        app.router.add_post("/openclaw/models/downloads/{task_id}/cancel", mm_api.model_download_cancel_handler)
+        app.router.add_post(
+            "/openclaw/models/downloads", mm_api.model_download_create_handler
+        )
+        app.router.add_get(
+            "/openclaw/models/downloads", mm_api.model_download_list_handler
+        )
+        app.router.add_get(
+            "/openclaw/models/downloads/{task_id}", mm_api.model_download_get_handler
+        )
+        app.router.add_post(
+            "/openclaw/models/downloads/{task_id}/cancel",
+            mm_api.model_download_cancel_handler,
+        )
         app.router.add_post("/openclaw/models/import", mm_api.model_import_handler)
-        app.router.add_get("/openclaw/models/installations", mm_api.model_installations_list_handler)
+        app.router.add_get(
+            "/openclaw/models/installations", mm_api.model_installations_list_handler
+        )
         return app
 
     async def _wait_task_terminal(self, task_id: str, timeout: float = 3.0):
@@ -59,7 +71,10 @@ class TestModelManagerAPI(AioHTTPTestCase):
         self.fail(f"Task {task_id} did not finish")
 
     @patch("api.model_manager.require_admin_token", return_value=(True, None))
-    @patch("services.model_manager.validate_outbound_url", return_value=("https", "example.com", 443, ["1.1.1.1"]))
+    @patch(
+        "services.model_manager.validate_outbound_url",
+        return_value=("https", "example.com", 443, ["1.1.1.1"]),
+    )
     @unittest_run_loop
     async def test_download_and_import_contract(self, _mock_validate, _mock_admin):
         payload = b"api-model-bytes"
@@ -98,7 +113,9 @@ class TestModelManagerAPI(AioHTTPTestCase):
         done = await self._wait_task_terminal(task_id)
         self.assertEqual(done["state"], "completed")
 
-        import_resp = await self.client.post("/openclaw/models/import", json={"task_id": task_id})
+        import_resp = await self.client.post(
+            "/openclaw/models/import", json={"task_id": task_id}
+        )
         self.assertEqual(import_resp.status, 200)
         imported = await import_resp.json()
         self.assertTrue(imported["ok"])
@@ -116,7 +133,10 @@ class TestModelManagerAPI(AioHTTPTestCase):
         self.assertEqual(installs_resp.status, 200)
         self.assertEqual(installs_body["pagination"]["total"], 1)
 
-    @patch("api.model_manager.require_admin_token", return_value=(False, "invalid_admin_token"))
+    @patch(
+        "api.model_manager.require_admin_token",
+        return_value=(False, "invalid_admin_token"),
+    )
     @unittest_run_loop
     async def test_admin_gating(self, _mock_admin):
         resp = await self.client.get("/openclaw/models/search")

@@ -29,7 +29,11 @@ from .safe_io import (
     validate_outbound_url,
 )
 from .state_dir import get_state_dir
-from .tenant_context import DEFAULT_TENANT_ID, is_multi_tenant_enabled, normalize_tenant_id
+from .tenant_context import (
+    DEFAULT_TENANT_ID,
+    is_multi_tenant_enabled,
+    normalize_tenant_id,
+)
 
 logger = logging.getLogger("ComfyUI-OpenClaw.services.model_manager")
 
@@ -138,7 +142,9 @@ def _norm_model_type(model_type: str) -> str:
 
 def _norm_source(source: str) -> str:
     out = "".join(
-        ch for ch in str(source or "unknown").strip().lower() if ch.isalnum() or ch in {"_", "-", "."}
+        ch
+        for ch in str(source or "unknown").strip().lower()
+        if ch.isalnum() or ch in {"_", "-", "."}
     )
     return out[:48] or "unknown"
 
@@ -158,28 +164,39 @@ def _is_sha256(value: str) -> bool:
 
 
 def _sanitize_subdir(text: str) -> str:
-    parts = [p for p in str(text or "").replace("\\", "/").split("/") if p not in {"", ".", ".."}]
+    parts = [
+        p
+        for p in str(text or "").replace("\\", "/").split("/")
+        if p not in {"", ".", ".."}
+    ]
     if not parts:
         raise ModelManagerError("invalid_destination", "destination_subdir is required")
     cleaned = []
     for part in parts:
         token = "".join(ch for ch in part if ch.isalnum() or ch in {"_", "-", "."})
         if not token:
-            raise ModelManagerError("invalid_destination", f"invalid destination segment: {part!r}")
+            raise ModelManagerError(
+                "invalid_destination", f"invalid destination segment: {part!r}"
+            )
         cleaned.append(token)
     return "/".join(cleaned)
 
 
 def _sanitize_filename(text: str) -> str:
-    clean = str(text or "").strip().replace("\\", "_").replace("/", "_").replace(" ", "_")
-    clean = "".join(ch for ch in clean if ch.isalnum() or ch in {"_", "-", ".", "(", ")", "[", "]"})
+    clean = (
+        str(text or "").strip().replace("\\", "_").replace("/", "_").replace(" ", "_")
+    )
+    clean = "".join(
+        ch for ch in clean if ch.isalnum() or ch in {"_", "-", ".", "(", ")", "[", "]"}
+    )
     if not clean or clean in {".", ".."}:
         raise ModelManagerError("invalid_filename", "filename is invalid")
     ext = Path(clean).suffix.lower()
     if ext not in ALLOWED_MODEL_EXTENSIONS:
         raise ModelManagerError(
             "invalid_filename",
-            "filename extension must be one of " + ", ".join(sorted(ALLOWED_MODEL_EXTENSIONS)),
+            "filename extension must be one of "
+            + ", ".join(sorted(ALLOWED_MODEL_EXTENSIONS)),
         )
     return clean[:180]
 
@@ -193,7 +210,9 @@ def _filename_from_url(url: str) -> str:
 
 def _atomic_json_write(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temp = tempfile.mkstemp(prefix=f"{path.name}.tmp.", dir=str(path.parent), text=True)
+    fd, temp = tempfile.mkstemp(
+        prefix=f"{path.name}.tmp.", dir=str(path.parent), text=True
+    )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False, indent=2)
@@ -218,7 +237,9 @@ def _file_sha256(path: Path) -> str:
 
 
 class ModelManager:
-    def __init__(self, *, state_root: Optional[Path] = None, install_root: Optional[Path] = None):
+    def __init__(
+        self, *, state_root: Optional[Path] = None, install_root: Optional[Path] = None
+    ):
         self.state_root = Path(state_root or (Path(get_state_dir()) / STATE_SUBDIR))
         self.catalog_dir = self.state_root / CATALOG_SUBDIR
         self.staging_dir = self.state_root / STAGING_SUBDIR
@@ -226,7 +247,11 @@ class ModelManager:
         self.state_root.mkdir(parents=True, exist_ok=True)
         self.catalog_dir.mkdir(parents=True, exist_ok=True)
         self.staging_dir.mkdir(parents=True, exist_ok=True)
-        root_env = (os.environ.get("OPENCLAW_MODEL_INSTALL_ROOT") or os.environ.get("MOLTBOT_MODEL_INSTALL_ROOT") or "").strip()
+        root_env = (
+            os.environ.get("OPENCLAW_MODEL_INSTALL_ROOT")
+            or os.environ.get("MOLTBOT_MODEL_INSTALL_ROOT")
+            or ""
+        ).strip()
         # CRITICAL: keep explicit branch order. A compact inline ternary here can
         # accidentally ignore injected test/runtime install_root overrides.
         if install_root is not None:
@@ -252,17 +277,42 @@ class ModelManager:
             or os.environ.get("MOLTBOT_MODEL_DOWNLOAD_ALLOW_LOOPBACK_HOSTS")
             or ""
         )
-        self.max_workers = self._read_int(("OPENCLAW_MODEL_DOWNLOAD_MAX_CONCURRENCY", "MOLTBOT_MODEL_DOWNLOAD_MAX_CONCURRENCY"), 2, 1, 4)
-        self.max_active = self._read_int(("OPENCLAW_MODEL_DOWNLOAD_MAX_ACTIVE", "MOLTBOT_MODEL_DOWNLOAD_MAX_ACTIVE"), 16, 1, 128)
-        self.timeout_sec = self._read_int(("OPENCLAW_MODEL_DOWNLOAD_TIMEOUT_SEC", "MOLTBOT_MODEL_DOWNLOAD_TIMEOUT_SEC"), 120, 5, 3600)
+        self.max_workers = self._read_int(
+            (
+                "OPENCLAW_MODEL_DOWNLOAD_MAX_CONCURRENCY",
+                "MOLTBOT_MODEL_DOWNLOAD_MAX_CONCURRENCY",
+            ),
+            2,
+            1,
+            4,
+        )
+        self.max_active = self._read_int(
+            ("OPENCLAW_MODEL_DOWNLOAD_MAX_ACTIVE", "MOLTBOT_MODEL_DOWNLOAD_MAX_ACTIVE"),
+            16,
+            1,
+            128,
+        )
+        self.timeout_sec = self._read_int(
+            (
+                "OPENCLAW_MODEL_DOWNLOAD_TIMEOUT_SEC",
+                "MOLTBOT_MODEL_DOWNLOAD_TIMEOUT_SEC",
+            ),
+            120,
+            5,
+            3600,
+        )
         self._lock = threading.Lock()
         self._tasks: Dict[str, DownloadTask] = {}
         self._futures: Dict[str, Future] = {}
         self._cancel_events: Dict[str, threading.Event] = {}
-        self._executor = ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="openclaw-model-download")
+        self._executor = ThreadPoolExecutor(
+            max_workers=self.max_workers, thread_name_prefix="openclaw-model-download"
+        )
 
     @staticmethod
-    def _read_int(keys: tuple[str, ...], default: int, minimum: int, maximum: int) -> int:
+    def _read_int(
+        keys: tuple[str, ...], default: int, minimum: int, maximum: int
+    ) -> int:
         for key in keys:
             raw = os.environ.get(key)
             if raw is None or str(raw).strip() == "":
@@ -331,10 +381,14 @@ class ModelManager:
     def _save_installations(self, rows: List[Dict[str, Any]]) -> None:
         _atomic_json_write(self.installations_path, rows)
 
-    def _collect_install_entries(self, tenant_id: Optional[str]) -> List[Dict[str, Any]]:
+    def _collect_install_entries(
+        self, tenant_id: Optional[str]
+    ) -> List[Dict[str, Any]]:
         rows = []
         for rec in self._load_installations():
-            if not self._tenant_ok(str(rec.get("tenant_id") or DEFAULT_TENANT_ID), tenant_id):
+            if not self._tenant_ok(
+                str(rec.get("tenant_id") or DEFAULT_TENANT_ID), tenant_id
+            ):
                 continue
             rows.append(
                 {
@@ -351,12 +405,16 @@ class ModelManager:
                     "provenance": dict(rec.get("provenance") or {}),
                     "installation_path": str(rec.get("installation_path") or ""),
                     "tenant_id": str(rec.get("tenant_id") or DEFAULT_TENANT_ID),
-                    "updated_at": float(rec.get("installed_at") or rec.get("updated_at") or 0.0),
+                    "updated_at": float(
+                        rec.get("installed_at") or rec.get("updated_at") or 0.0
+                    ),
                 }
             )
         return [row for row in rows if row["id"] and row["name"]]
 
-    def _collect_catalog_entries(self, tenant_id: Optional[str]) -> List[Dict[str, Any]]:
+    def _collect_catalog_entries(
+        self, tenant_id: Optional[str]
+    ) -> List[Dict[str, Any]]:
         rows = []
         for path in sorted(self.catalog_dir.glob("*.json")):
             try:
@@ -384,7 +442,9 @@ class ModelManager:
                     {
                         "id": model_id,
                         "name": name,
-                        "model_type": _norm_model_type(str(item.get("model_type") or "")),
+                        "model_type": _norm_model_type(
+                            str(item.get("model_type") or "")
+                        ),
                         "source": src,
                         "source_label": src_label,
                         "installed": False,
@@ -415,8 +475,12 @@ class ModelManager:
         offset = max(0, int(offset))
         q = str(query or "").strip().lower()
         src_filter = _norm_source(source) if str(source or "").strip() else ""
-        type_filter = _norm_model_type(model_type) if str(model_type or "").strip() else ""
-        rows = self._collect_install_entries(tenant_id) + self._collect_catalog_entries(tenant_id)
+        type_filter = (
+            _norm_model_type(model_type) if str(model_type or "").strip() else ""
+        )
+        rows = self._collect_install_entries(tenant_id) + self._collect_catalog_entries(
+            tenant_id
+        )
         out = []
         for row in rows:
             if src_filter and row["source"] != src_filter:
@@ -437,13 +501,25 @@ class ModelManager:
                     continue
             out.append(row)
         # IMPORTANT: deterministic order is part of the search contract.
-        out.sort(key=lambda row: (0 if row["installed"] else 1, str(row["name"]).lower(), str(row["id"]).lower(), str(row["source"]).lower()))
+        out.sort(
+            key=lambda row: (
+                0 if row["installed"] else 1,
+                str(row["name"]).lower(),
+                str(row["id"]).lower(),
+                str(row["source"]).lower(),
+            )
+        )
         total = len(out)
         page = out[offset : offset + limit]
         return {
             "items": page,
             "pagination": {"limit": limit, "offset": offset, "total": total},
-            "filters": {"query": q, "source": src_filter or None, "model_type": type_filter or None, "installed": installed},
+            "filters": {
+                "query": q,
+                "source": src_filter or None,
+                "model_type": type_filter or None,
+                "installed": installed,
+            },
         }
 
     def _validate_url_policy(self, url: str) -> None:
@@ -468,7 +544,9 @@ class ModelManager:
     @staticmethod
     def _validate_provenance(provenance: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(provenance, dict):
-            raise ModelManagerError("invalid_provenance", "provenance must be an object")
+            raise ModelManagerError(
+                "invalid_provenance", "provenance must be an object"
+            )
         out = {
             "publisher": str(provenance.get("publisher") or "").strip(),
             "license": str(provenance.get("license") or "").strip(),
@@ -494,7 +572,11 @@ class ModelManager:
                 if task.state in {"queued", "running"}:
                     active += 1
         if active >= self.max_active:
-            raise ModelManagerError("download_queue_full", f"download queue full (limit={self.max_active})", 429)
+            raise ModelManagerError(
+                "download_queue_full",
+                f"download queue full (limit={self.max_active})",
+                429,
+            )
 
     def create_download_task(
         self,
@@ -520,12 +602,20 @@ class ModelManager:
             raise ModelManagerError("validation_error", "name is required")
         digest = str(expected_sha256 or "").strip().lower()
         if not _is_sha256(digest):
-            raise ModelManagerError("validation_error", "expected_sha256 must be a 64-char hex string")
+            raise ModelManagerError(
+                "validation_error", "expected_sha256 must be a 64-char hex string"
+            )
         self._validate_url_policy(download_url)
         provenance = self._validate_provenance(provenance)
         mtype = _norm_model_type(model_type)
-        dest_subdir = _sanitize_subdir(destination_subdir or MODEL_TYPE_TO_SUBDIR.get(mtype, "misc"))
-        fname = _sanitize_filename(filename) if filename else _filename_from_url(download_url)
+        dest_subdir = _sanitize_subdir(
+            destination_subdir or MODEL_TYPE_TO_SUBDIR.get(mtype, "misc")
+        )
+        fname = (
+            _sanitize_filename(filename)
+            if filename
+            else _filename_from_url(download_url)
+        )
         task = DownloadTask(
             task_id=str(uuid.uuid4()),
             model_id=model_id,
@@ -543,7 +633,9 @@ class ModelManager:
         with self._lock:
             self._tasks[task.task_id] = task
             self._cancel_events[task.task_id] = threading.Event()
-            self._futures[task.task_id] = self._executor.submit(self._run_task, task.task_id)
+            self._futures[task.task_id] = self._executor.submit(
+                self._run_task, task.task_id
+            )
         self._emit(task)
         return task.to_dict()
 
@@ -591,7 +683,9 @@ class ModelManager:
                 current.finished_at = current.updated_at
                 self._emit(current)
 
-    def _download(self, task: DownloadTask, cancel_event: threading.Event) -> tuple[str, str]:
+    def _download(
+        self, task: DownloadTask, cancel_event: threading.Event
+    ) -> tuple[str, str]:
         _scheme, _host, _port, pinned_ips = validate_outbound_url(
             task.download_url,
             allow_hosts=self.allow_hosts or None,
@@ -616,7 +710,10 @@ class ModelManager:
         with opener.open(req, timeout=self.timeout_sec) as resp:
             code = int(resp.getcode() or 0)
             if code in (301, 302, 303, 307, 308):
-                raise ModelManagerError("download_redirect_blocked", "redirect blocked for managed downloads")
+                raise ModelManagerError(
+                    "download_redirect_blocked",
+                    "redirect blocked for managed downloads",
+                )
             if code >= 400:
                 raise ModelManagerError("download_http_error", f"HTTP {code}")
             try:
@@ -643,7 +740,9 @@ class ModelManager:
                 part.unlink(missing_ok=True)  # type: ignore[attr-defined]
             except Exception:
                 pass
-            raise ModelManagerError("sha256_mismatch", f"expected {task.expected_sha256}, got {got}")
+            raise ModelManagerError(
+                "sha256_mismatch", f"expected {task.expected_sha256}, got {got}"
+            )
         os.replace(part, final)
         self._progress(task.task_id, downloaded, total or downloaded)
         return str(final), got
@@ -655,7 +754,11 @@ class ModelManager:
                 return
             task.bytes_downloaded = max(0, int(downloaded))
             task.total_bytes = max(0, int(total))
-            task.progress = min(1.0, (task.bytes_downloaded / task.total_bytes)) if task.total_bytes else 0.0
+            task.progress = (
+                min(1.0, (task.bytes_downloaded / task.total_bytes))
+                if task.total_bytes
+                else 0.0
+            )
             task.updated_at = time.time()
             self._emit(task)
 
@@ -688,19 +791,27 @@ class ModelManager:
             "filters": {"state": state_filter or None},
         }
 
-    def get_download_task(self, task_id: str, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_download_task(
+        self, task_id: str, *, tenant_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None or not self._tenant_ok(task.tenant_id, tenant_id):
                 raise ModelManagerError("not_found", "download task not found", 404)
             return task.to_dict()
 
-    def cancel_download_task(self, task_id: str, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+    def cancel_download_task(
+        self, task_id: str, *, tenant_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         with self._lock:
             task = self._tasks.get(task_id)
             future = self._futures.get(task_id)
             event = self._cancel_events.get(task_id)
-            if task is None or event is None or not self._tenant_ok(task.tenant_id, tenant_id):
+            if (
+                task is None
+                or event is None
+                or not self._tenant_ok(task.tenant_id, tenant_id)
+            ):
                 raise ModelManagerError("not_found", "download task not found", 404)
             if task.is_terminal():
                 return task.to_dict()
@@ -729,7 +840,9 @@ class ModelManager:
             if task is None or not self._tenant_ok(task.tenant_id, tenant_id):
                 raise ModelManagerError("not_found", "download task not found", 404)
             if task.state != "completed":
-                raise ModelManagerError("task_not_ready", "task must be completed before import")
+                raise ModelManagerError(
+                    "task_not_ready", "task must be completed before import"
+                )
             if task.imported:
                 raise ModelManagerError("already_imported", "task already imported")
             staged_path = Path(task.staged_path)
@@ -741,7 +854,9 @@ class ModelManager:
         # tamper window between download completion and activation/import.
         actual = _file_sha256(staged_path)
         if actual != expected or computed != expected:
-            raise ModelManagerError("sha256_mismatch", f"expected {expected}, got {actual}")
+            raise ModelManagerError(
+                "sha256_mismatch", f"expected {expected}, got {actual}"
+            )
         self._validate_provenance(task.provenance)
         subdir = _sanitize_subdir(destination_subdir or task.destination_subdir)
         fname = _sanitize_filename(filename or task.filename)
@@ -749,7 +864,9 @@ class ModelManager:
         # IMPORTANT: keep root-bounded resolution; plain joins re-enable traversal risks.
         abs_target = Path(resolve_under_root(str(self.install_root), rel_target))
         abs_target.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(prefix=f".{abs_target.name}.tmp.", dir=str(abs_target.parent), text=False)
+        fd, tmp = tempfile.mkstemp(
+            prefix=f".{abs_target.name}.tmp.", dir=str(abs_target.parent), text=False
+        )
         os.close(fd)
         try:
             shutil.copy2(staged_path, tmp)
@@ -811,12 +928,19 @@ class ModelManager:
     ) -> Dict[str, Any]:
         limit = max(1, min(200, int(limit)))
         offset = max(0, int(offset))
-        type_filter = _norm_model_type(model_type) if str(model_type or "").strip() else ""
+        type_filter = (
+            _norm_model_type(model_type) if str(model_type or "").strip() else ""
+        )
         rows = []
         for rec in self._load_installations():
-            if not self._tenant_ok(str(rec.get("tenant_id") or DEFAULT_TENANT_ID), tenant_id):
+            if not self._tenant_ok(
+                str(rec.get("tenant_id") or DEFAULT_TENANT_ID), tenant_id
+            ):
                 continue
-            if type_filter and _norm_model_type(str(rec.get("model_type") or "")) != type_filter:
+            if (
+                type_filter
+                and _norm_model_type(str(rec.get("model_type") or "")) != type_filter
+            ):
                 continue
             rows.append(rec)
         rows.sort(key=lambda x: float(x.get("installed_at") or 0.0), reverse=True)

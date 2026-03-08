@@ -15,7 +15,7 @@ test.describe('OpenClaw Sidebar', () => {
 
   test('switching tabs does not lose content', async ({ page }) => {
     // Click a few tabs and verify active pane is non-empty
-    for (const t of ['Settings', 'Jobs', 'Planner', 'Variants', 'Refiner', 'Library', 'Approvals']) {
+    for (const t of ['Settings', 'Jobs', 'Planner', 'Variants', 'Refiner', 'Library', 'Approvals', 'Explorer', 'Packs', 'Model Manager']) {
       await clickTab(page, t);
       const active = page.locator('.openclaw-tab-pane.active');
       await expect(active).toBeVisible();
