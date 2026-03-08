@@ -789,6 +789,79 @@ export class OpenClawAPI {
         });
     }
 
+    // --- F54: Model Search / Download / Import ---
+
+    async searchModels(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.q) qs.set("q", String(params.q));
+        if (params.source) qs.set("source", String(params.source));
+        if (params.model_type) qs.set("model_type", String(params.model_type));
+        if (typeof params.installed === "boolean") qs.set("installed", params.installed ? "true" : "false");
+        if (params.limit != null) qs.set("limit", String(params.limit));
+        if (params.offset != null) qs.set("offset", String(params.offset));
+        const suffix = qs.toString() ? `?${qs.toString()}` : "";
+        return this.fetch(`${this._path("/models/search")}${suffix}`, {
+            headers: { ...this._adminTokenHeaders() }
+        });
+    }
+
+    async createModelDownloadTask(payload) {
+        return this.fetch(this._path("/models/downloads"), {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...this._adminTokenHeaders()
+            },
+            body: JSON.stringify(payload || {})
+        });
+    }
+
+    async listModelDownloadTasks(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.state) qs.set("state", String(params.state));
+        if (params.limit != null) qs.set("limit", String(params.limit));
+        if (params.offset != null) qs.set("offset", String(params.offset));
+        const suffix = qs.toString() ? `?${qs.toString()}` : "";
+        return this.fetch(`${this._path("/models/downloads")}${suffix}`, {
+            headers: { ...this._adminTokenHeaders() }
+        });
+    }
+
+    async getModelDownloadTask(taskId) {
+        return this.fetch(`${this._path("/models/downloads")}/${encodeURIComponent(taskId)}`, {
+            headers: { ...this._adminTokenHeaders() }
+        });
+    }
+
+    async cancelModelDownloadTask(taskId) {
+        return this.fetch(`${this._path("/models/downloads")}/${encodeURIComponent(taskId)}/cancel`, {
+            method: "POST",
+            headers: { ...this._adminTokenHeaders() }
+        });
+    }
+
+    async importDownloadedModel(payload) {
+        return this.fetch(this._path("/models/import"), {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...this._adminTokenHeaders()
+            },
+            body: JSON.stringify(payload || {})
+        });
+    }
+
+    async listModelInstallations(params = {}) {
+        const qs = new URLSearchParams();
+        if (params.model_type) qs.set("model_type", String(params.model_type));
+        if (params.limit != null) qs.set("limit", String(params.limit));
+        if (params.offset != null) qs.set("offset", String(params.offset));
+        const suffix = qs.toString() ? `?${qs.toString()}` : "";
+        return this.fetch(`${this._path("/models/installations")}${suffix}`, {
+            headers: { ...this._adminTokenHeaders() }
+        });
+    }
+
     // --- R71: Job Events ---
 
     /**

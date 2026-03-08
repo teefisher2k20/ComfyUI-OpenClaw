@@ -49,6 +49,10 @@ rewrite_recipes_list_handler = rewrite_recipe_get_handler = None  # type: ignore
 rewrite_recipe_create_handler = rewrite_recipe_update_handler = None  # type: ignore
 rewrite_recipe_delete_handler = rewrite_recipe_dry_run_handler = None  # type: ignore
 rewrite_recipe_apply_handler = None  # type: ignore
+model_search_handler = model_download_create_handler = None  # type: ignore
+model_download_list_handler = model_download_get_handler = None  # type: ignore
+model_download_cancel_handler = model_import_handler = None  # type: ignore
+model_installations_list_handler = None  # type: ignore
 secrets_status_handler = secrets_put_handler = secrets_delete_handler = None  # type: ignore
 list_checkpoints_handler = create_checkpoint_handler = get_checkpoint_handler = delete_checkpoint_handler = None  # type: ignore
 events_stream_handler = events_poll_handler = None  # type: ignore  # R71
@@ -172,6 +176,28 @@ if web is not None:
             "rewrite_recipe_get_handler",
             "rewrite_recipe_update_handler",
             "rewrite_recipes_list_handler",
+        ),
+    )
+    (
+        model_download_cancel_handler,
+        model_download_create_handler,
+        model_download_get_handler,
+        model_download_list_handler,
+        model_import_handler,
+        model_installations_list_handler,
+        model_search_handler,
+    ) = import_attrs_dual(
+        __package__,
+        "..api.model_manager",
+        "api.model_manager",
+        (
+            "model_download_cancel_handler",
+            "model_download_create_handler",
+            "model_download_get_handler",
+            "model_download_list_handler",
+            "model_import_handler",
+            "model_installations_list_handler",
+            "model_search_handler",
         ),
     )
     (tools_list_handler, tools_run_handler) = import_attrs_dual(  # S12
@@ -860,6 +886,25 @@ def register_routes(server) -> None:
                 "POST",
                 f"{prefix}/rewrite/recipes/{{recipe_id}}/apply",
                 rewrite_recipe_apply_handler,
+            ),
+            ("GET", f"{prefix}/models/search", model_search_handler),
+            ("POST", f"{prefix}/models/downloads", model_download_create_handler),
+            ("GET", f"{prefix}/models/downloads", model_download_list_handler),
+            (
+                "GET",
+                f"{prefix}/models/downloads/{{task_id}}",
+                model_download_get_handler,
+            ),
+            (
+                "POST",
+                f"{prefix}/models/downloads/{{task_id}}/cancel",
+                model_download_cancel_handler,
+            ),
+            ("POST", f"{prefix}/models/import", model_import_handler),
+            (
+                "GET",
+                f"{prefix}/models/installations",
+                model_installations_list_handler,
             ),
             (
                 "GET",

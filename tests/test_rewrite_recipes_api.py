@@ -13,6 +13,7 @@ except Exception:  # pragma: no cover
     def unittest_run_loop(fn):  # type: ignore
         return fn
 
+
 from api.rewrite_recipes import (
     rewrite_recipe_apply_handler,
     rewrite_recipe_create_handler,
@@ -155,4 +156,3 @@ class TestRewriteRecipesAPI(AioHTTPTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

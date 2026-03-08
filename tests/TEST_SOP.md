@@ -525,6 +525,58 @@ curl -X POST http://127.0.0.1:8188/openclaw/rewrite/recipes/<recipe_id>/apply `
   -d "{\"workflow\":{\"1\":{\"inputs\":{\"text\":\"old\"}}},\"inputs\":{\"topic\":\"new\"},\"confirm\":true}"
 ```
 
+## F54 Model Manager - Validation SOP
+
+Use this flow to validate the `F54` model search/download/import contract (`/openclaw/models*`).
+
+Preconditions:
+
+- Configure one of:
+  - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_HOSTS=your-approved-host`
+  - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_ANY_PUBLIC=1`
+- Admin token is available in request headers.
+
+1) Search baseline (normalized contract + deterministic filters)
+
+```powershell
+curl "http://127.0.0.1:8188/openclaw/models/search?limit=20&offset=0" `
+  -H "X-OpenClaw-Admin-Token: $env:OPENCLAW_ADMIN_TOKEN"
+```
+
+1) Create download task
+
+```powershell
+curl -X POST http://127.0.0.1:8188/openclaw/models/downloads `
+  -H "Content-Type: application/json" `
+  -H "X-OpenClaw-Admin-Token: $env:OPENCLAW_ADMIN_TOKEN" `
+  -d "{\"model_id\":\"example-model\",\"name\":\"Example Model\",\"model_type\":\"checkpoint\",\"source\":\"catalog\",\"source_label\":\"Catalog\",\"download_url\":\"https://your-approved-host/path/model.safetensors\",\"expected_sha256\":\"<sha256>\",\"provenance\":{\"publisher\":\"Example\",\"license\":\"OpenRAIL\",\"source_url\":\"https://your-approved-host/model\"}}"
+```
+
+1) Observe lifecycle + cancellation contracts
+
+- List tasks: `GET /openclaw/models/downloads`
+- Single task: `GET /openclaw/models/downloads/{task_id}`
+- Cancel (queued/running): `POST /openclaw/models/downloads/{task_id}/cancel`
+- Verify state transitions are bounded to:
+  - `queued -> running -> completed`
+  - or terminal `failed` / `cancelled`
+
+1) Import completed task (policy-gated activation)
+
+```powershell
+curl -X POST http://127.0.0.1:8188/openclaw/models/import `
+  -H "Content-Type: application/json" `
+  -H "X-OpenClaw-Admin-Token: $env:OPENCLAW_ADMIN_TOKEN" `
+  -d "{\"task_id\":\"<task_id>\",\"destination_subdir\":\"checkpoints\"}"
+```
+
+Expected:
+
+- Import fails closed on missing/invalid provenance or SHA256 mismatch.
+- Successful import returns installation record and appears in:
+  - `GET /openclaw/models/installations`
+  - `GET /openclaw/models/search?installed=true`
+
 ## Admin Token & UI Usage (SOP)
 
 **Key rule:** `OPENCLAW_ADMIN_TOKEN` is a **server-side environment variable**.

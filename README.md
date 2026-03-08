@@ -7,7 +7,7 @@ ComfyUI-OpenClaw is a **security-first orchestration layer** for ComfyUI that co
 - **LLM-assisted nodes** (planner/refiner/vision/batch variants)
 - **A built-in extension UI** (`OpenClaw` panel)
 - **A standalone Remote Admin Console** (`/openclaw/admin`) for mobile/remote browser operations
-- **A secure-by-default HTTP API** for automation (webhooks, triggers, schedules, approvals, presets, rewrite recipes)
+- **A secure-by-default HTTP API** for automation (webhooks, triggers, schedules, approvals, presets, rewrite recipes, model manager)
 - **Public-ready control-plane split architecture** (embedded UX + externalized high-risk control surfaces)
 - **Verification-first hardening lanes** (route drift, real-backend E2E, adversarial fuzz/mutation gates)
 - **Now supports 7 major messaging platforms, including Discord, Telegram, WhatsApp, LINE, WeChat, KakaoTalk, and Slack.**
@@ -557,6 +557,7 @@ Deployment profiles and hardening checklists:
   - [Schedules](#schedules-admin)
   - [Presets](#presets-admin)
   - [Rewrite recipes](#rewrite-recipes-admin-f53)
+  - [Model manager](#model-manager-admin-f54)
   - [Packs](#packs-admin)
   - [Bridge](#bridge-sidecar-optional)
 - [Templates](#templates)
@@ -1053,6 +1054,32 @@ Error contract highlights:
   - includes `rollback_snapshot`
 - Render budget failure:
   - `error: "budget_exceeded"` (dry-run/apply validation path)
+
+### Model manager (admin, F54)
+
+- Search:
+  - `GET /openclaw/models/search`
+  - deterministic filters: `q`, `source`, `model_type`, `installed`, `limit`, `offset`
+  - returns normalized metadata (`id`, `name`, `model_type`, `source`, `source_label`, install status, provenance/hash fields)
+- Download task lifecycle:
+  - `POST /openclaw/models/downloads`
+  - `GET /openclaw/models/downloads`
+  - `GET /openclaw/models/downloads/{task_id}`
+  - `POST /openclaw/models/downloads/{task_id}/cancel`
+  - states: `queued`, `running`, `completed`, `failed`, `cancelled`
+  - progress/cancel/result states are also emitted through existing events endpoints (`/openclaw/events`, `/openclaw/events/stream`)
+- Activation/import:
+  - `POST /openclaw/models/import`
+  - `GET /openclaw/models/installations`
+
+Security gates:
+
+- Download URL must pass S4 outbound policy (`validate_outbound_url`) and configured host policy.
+- Managed downloads are disabled until one of the following is configured:
+  - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_HOSTS=host1,host2`
+  - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_ANY_PUBLIC=1`
+- Import/activation fails closed unless provenance (`publisher`, `license`, `source_url`) and expected SHA256 verification pass.
+- Destination path is root-bounded before file placement; set install root with `OPENCLAW_MODEL_INSTALL_ROOT` when needed.
 
 ### Packs (admin)
 

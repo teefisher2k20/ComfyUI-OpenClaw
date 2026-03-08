@@ -35,7 +35,10 @@ try:
     )
     from ..services.tenant_context import TenantBoundaryError, request_tenant_scope
 except ImportError:
-    from services.access_control import require_admin_token, resolve_token_info  # type: ignore
+    from services.access_control import (  # type: ignore
+        require_admin_token,
+        resolve_token_info,
+    )
     from services.endpoint_manifest import (  # type: ignore
         AuthTier,
         RiskTier,
@@ -52,7 +55,10 @@ except ImportError:
         guarded_apply_recipe,
         rewrite_recipe_store,
     )
-    from services.tenant_context import TenantBoundaryError, request_tenant_scope  # type: ignore
+    from services.tenant_context import (  # type: ignore
+        TenantBoundaryError,
+        request_tenant_scope,
+    )
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.rewrite_recipes")
 
@@ -92,7 +98,8 @@ def _build_recipe_from_payload(
         existing.tags = payload.get("tags") or []
     if "operations" in payload:
         existing.operations = [
-            RewriteOperation.from_dict(item) for item in (payload.get("operations") or [])
+            RewriteOperation.from_dict(item)
+            for item in (payload.get("operations") or [])
         ]
     if "constraints" in payload:
         existing.constraints = RewriteConstraints.from_dict(
@@ -154,7 +161,9 @@ async def rewrite_recipe_get_handler(request: web.Request) -> web.Response:
             token_info=token_info,
             allow_default_when_missing=True,
         ) as tenant:
-            recipe = rewrite_recipe_store.get_recipe(recipe_id, tenant_id=tenant.tenant_id)
+            recipe = rewrite_recipe_store.get_recipe(
+                recipe_id, tenant_id=tenant.tenant_id
+            )
             if recipe is None:
                 return _json({"ok": False, "error": "not_found"}, 404)
             return _json({"ok": True, "recipe": recipe.to_dict()})
@@ -230,7 +239,9 @@ async def rewrite_recipe_update_handler(request: web.Request) -> web.Response:
             token_info=token_info,
             allow_default_when_missing=True,
         ) as tenant:
-            recipe = rewrite_recipe_store.get_recipe(recipe_id, tenant_id=tenant.tenant_id)
+            recipe = rewrite_recipe_store.get_recipe(
+                recipe_id, tenant_id=tenant.tenant_id
+            )
             if recipe is None:
                 return _json({"ok": False, "error": "not_found"}, 404)
             updated = _build_recipe_from_payload(payload, existing=recipe)
@@ -309,7 +320,9 @@ async def rewrite_recipe_dry_run_handler(request: web.Request) -> web.Response:
             token_info=token_info,
             allow_default_when_missing=True,
         ) as tenant:
-            recipe = rewrite_recipe_store.get_recipe(recipe_id, tenant_id=tenant.tenant_id)
+            recipe = rewrite_recipe_store.get_recipe(
+                recipe_id, tenant_id=tenant.tenant_id
+            )
             if recipe is None:
                 return _json({"ok": False, "error": "not_found"}, 404)
             result = dry_run_recipe(recipe, workflow=workflow, inputs=inputs)
@@ -357,7 +370,9 @@ async def rewrite_recipe_apply_handler(request: web.Request) -> web.Response:
             token_info=token_info,
             allow_default_when_missing=True,
         ) as tenant:
-            recipe = rewrite_recipe_store.get_recipe(recipe_id, tenant_id=tenant.tenant_id)
+            recipe = rewrite_recipe_store.get_recipe(
+                recipe_id, tenant_id=tenant.tenant_id
+            )
             if recipe is None:
                 return _json({"ok": False, "error": "not_found"}, 404)
             result = guarded_apply_recipe(

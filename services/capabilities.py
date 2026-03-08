@@ -78,6 +78,7 @@ def get_capabilities() -> dict:
             "preflight": True,
             "checkpoints": True,
             "rewrite_recipes": True,  # F53
+            "model_manager": True,  # F54
             # R70/F39/R73: Settings contract + UX degradation + Provider governance
             "settings_contract": True,
             "provider_governance": True,

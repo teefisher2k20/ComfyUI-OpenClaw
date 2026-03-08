@@ -78,11 +78,12 @@ class TestRewriteRecipesService(unittest.TestCase):
             operations=[{"path": "/missing/path", "value": "x"}],
         )
         with self.assertRaises(RecipeApplyError) as ctx:
-            guarded_apply_recipe(recipe, workflow=self.workflow, inputs={}, confirm=True)
+            guarded_apply_recipe(
+                recipe, workflow=self.workflow, inputs={}, confirm=True
+            )
         self.assertEqual(ctx.exception.code, "validation_error")
         self.assertEqual(ctx.exception.rollback_snapshot, self.workflow)
 
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -30,9 +30,9 @@ from .tenant_context import (
 )
 
 try:
-    from ..models.schemas import GenerationParams, MAX_INPUT_STRING_LENGTH
+    from ..models.schemas import MAX_INPUT_STRING_LENGTH, GenerationParams
 except Exception:  # pragma: no cover
-    from models.schemas import GenerationParams, MAX_INPUT_STRING_LENGTH  # type: ignore
+    from models.schemas import MAX_INPUT_STRING_LENGTH, GenerationParams  # type: ignore
 
 logger = logging.getLogger("ComfyUI-OpenClaw.services.rewrite_recipes")
 
@@ -72,7 +72,9 @@ class RewriteOperation:
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "RewriteOperation":
         if not isinstance(data, dict):
-            raise RecipeValidationError("validation_error", "Operation must be an object")
+            raise RecipeValidationError(
+                "validation_error", "Operation must be an object"
+            )
         path = data.get("path")
         if not isinstance(path, str) or not path.strip():
             raise RecipeValidationError(
@@ -95,7 +97,9 @@ class RewriteConstraints:
         if data is None:
             return RewriteConstraints()
         if not isinstance(data, dict):
-            raise RecipeValidationError("validation_error", "constraints must be an object")
+            raise RecipeValidationError(
+                "validation_error", "constraints must be an object"
+            )
         required = data.get("required_inputs", [])
         allowed = data.get("allowed_inputs", [])
         max_len = data.get("max_string_length", MAX_INPUT_STRING_LENGTH)
@@ -181,7 +185,9 @@ class RewriteRecipe:
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "RewriteRecipe":
         if not isinstance(data, dict):
-            raise RecipeValidationError("validation_error", "Recipe file must be an object")
+            raise RecipeValidationError(
+                "validation_error", "Recipe file must be an object"
+            )
         operations = [
             RewriteOperation.from_dict(item) for item in data.get("operations", [])
         ]
@@ -204,7 +210,9 @@ class RewriteRecipe:
 
     def validate(self) -> None:
         if not self.id or not isinstance(self.id, str):
-            raise RecipeValidationError("validation_error", "Recipe id must be a string")
+            raise RecipeValidationError(
+                "validation_error", "Recipe id must be a string"
+            )
         if not isinstance(self.name, str) or not self.name.strip():
             raise RecipeValidationError("validation_error", "Recipe name is required")
         if len(self.name.strip()) > MAX_NAME_LENGTH:
@@ -213,7 +221,9 @@ class RewriteRecipe:
                 f"Recipe name exceeds {MAX_NAME_LENGTH} characters",
             )
         if not isinstance(self.description, str):
-            raise RecipeValidationError("validation_error", "description must be a string")
+            raise RecipeValidationError(
+                "validation_error", "description must be a string"
+            )
         if len(self.description) > MAX_DESCRIPTION_LENGTH:
             raise RecipeValidationError(
                 "validation_error",
@@ -298,7 +308,9 @@ def _assert_json_serializable(value: Any) -> None:
     try:
         json.dumps(value, ensure_ascii=False)
     except Exception:
-        raise RecipeValidationError("validation_error", "operation value is not JSON-serializable")
+        raise RecipeValidationError(
+            "validation_error", "operation value is not JSON-serializable"
+        )
 
 
 class RewriteRecipeStore:
@@ -362,11 +374,15 @@ class RewriteRecipeStore:
     def save_recipe(self, recipe: RewriteRecipe) -> bool:
         recipe.validate()
         try:
-            recipe.tenant_id = normalize_tenant_id(recipe.tenant_id, field_name="tenant_id")
+            recipe.tenant_id = normalize_tenant_id(
+                recipe.tenant_id, field_name="tenant_id"
+            )
         except Exception:
             recipe.tenant_id = DEFAULT_TENANT_ID
         path = self._path_for(recipe.id)
-        payload = json.dumps(recipe.to_dict(), ensure_ascii=False, indent=2).encode("utf-8")
+        payload = json.dumps(recipe.to_dict(), ensure_ascii=False, indent=2).encode(
+            "utf-8"
+        )
         _atomic_write(path, payload)
         return True
 
@@ -504,7 +520,9 @@ def _render_template_value(value: Any, context: Dict[str, Any]) -> Any:
     if isinstance(value, list):
         return [_render_template_value(item, context) for item in value]
     if isinstance(value, dict):
-        return {key: _render_template_value(item, context) for key, item in value.items()}
+        return {
+            key: _render_template_value(item, context) for key, item in value.items()
+        }
     return value
 
 
@@ -521,7 +539,9 @@ def _validate_apply_inputs(
             )
 
     if constraints.allowed_inputs:
-        unknown = sorted(key for key in inputs.keys() if key not in constraints.allowed_inputs)
+        unknown = sorted(
+            key for key in inputs.keys() if key not in constraints.allowed_inputs
+        )
         if unknown:
             raise RecipeValidationError(
                 "validation_error",
