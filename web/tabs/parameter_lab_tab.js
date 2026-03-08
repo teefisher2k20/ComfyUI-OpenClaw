@@ -11,7 +11,8 @@ import { openclawUI } from "../openclaw_ui.js";
  */
 export const ParameterLabTab = {
     id: "parameter-lab",
-    icon: "\uD83E\uDDEA", // Test Tube
+    // IMPORTANT: TabManager expects a CSS icon class; using emoji text here hides the tab icon.
+    icon: "pi pi-sliders-h",
     title: "Parameter Lab",
     tooltip: "Run experiments with parameter sweeps",
 
