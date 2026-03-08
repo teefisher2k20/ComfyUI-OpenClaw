@@ -78,7 +78,7 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 - Management queries enforce deterministic pagination normalization and bounded scans against malformed or unbounded admin/list requests
 - Retry partition hardening separates rate-limit and transport budgets with deterministic degrade decisions and lane-level diagnostics/audit evidence
 - Compatibility matrix freshness/drift governance is surfaced in Doctor with repeatable refresh evidence
-- Adversarial verification gates (bounded fuzz + mutation smoke) are enforced in CI and local full-test/pre-push workflows
+- Adversarial verification gates (bounded fuzz + mutation, adaptive smoke=>extended escalation on high-risk diffs) are enforced in CI and local full-test/pre-push workflows
 - Wave E hardening closeout includes deployment-profile gates, critical-flow parity, signed policy posture controls, bounded anomaly telemetry, adversarial fuzz validation, and mutation sensitivity checks
 - Wave A/B/C hardening closeout includes runtime/config/session stability contracts, strict outbound and supply-chain controls, and capability-aware operator guidance with bounded Parameter Lab/compare workflows
 

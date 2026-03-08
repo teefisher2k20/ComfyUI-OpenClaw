@@ -186,9 +186,9 @@ echo "[tests] 6/8 Slack integration gates (R124/R125/R117/F57)"
 "$VENV_PY" scripts/run_unittests.py --module tests.test_f57_slack_transport_parity --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 "$VENV_PY" scripts/run_unittests.py --module tests.test_f57_slack_socket_mode_startup --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 
-echo "[tests] 7/8 R118 adversarial gate (smoke)"
+echo "[tests] 7/8 R118 adversarial gate (adaptive: smoke/extended)"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_local_adversarial" \
-  "$VENV_PY" scripts/run_adversarial_gate.py --profile smoke --seed 42 --artifact-dir .tmp/adversarial
+  "$VENV_PY" scripts/run_adversarial_gate.py --profile auto --seed 42 --artifact-dir .tmp/adversarial
 
 echo "[tests] 8/8 frontend E2E"
 npm test

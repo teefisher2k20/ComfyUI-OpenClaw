@@ -189,10 +189,12 @@ jobs:
         run: pip-audit
 
   adversarial-smoke:
-    name: Adversarial Gate (smoke)
+    name: Adversarial Gate (adaptive)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -204,16 +206,18 @@ jobs:
       - name: R120 preflight
         run: |
           python scripts/preflight_check.py --strict
-      - name: R118 adversarial smoke
+      - name: R118 adversarial adaptive (auto profile)
         env:
           MOLTBOT_STATE_DIR: ${{ github.workspace }}/moltbot_state/_ci_adversarial
+          OPENCLAW_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          OPENCLAW_DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          python scripts/run_adversarial_gate.py --profile smoke --seed 42 --artifact-dir .tmp/adversarial
+          python scripts/run_adversarial_gate.py --profile auto --seed 42 --artifact-dir .tmp/adversarial
       - name: Upload adversarial artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: adversarial-smoke-manifest
+          name: adversarial-adaptive-manifest
           path: .tmp/adversarial/
           retention-days: 30
 

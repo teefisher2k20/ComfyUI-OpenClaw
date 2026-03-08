@@ -358,9 +358,9 @@ echo "[pre-push] 5/7 R121 retry partition contract"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_retry_partition" \
   "$VENV_PY" scripts/run_unittests.py --module tests.test_r121_retry_partition_contract --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 
-echo "[pre-push] 6/7 R118 adversarial gate (smoke)"
+echo "[pre-push] 6/7 R118 adversarial gate (adaptive: smoke/extended)"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_adversarial" \
-  "$VENV_PY" scripts/run_adversarial_gate.py --profile smoke --seed 42 --artifact-dir .tmp/adversarial
+  "$VENV_PY" scripts/run_adversarial_gate.py --profile auto --seed 42 --artifact-dir .tmp/adversarial
 
 echo "[pre-push] 7/7 npm test (Playwright)"
 npm test

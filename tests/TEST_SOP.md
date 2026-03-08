@@ -170,6 +170,7 @@ Use these checks before assuming the hook runner is broken:
 
 Use these if you want a single command that runs **all required steps** (detect-secrets, pre-commit, unit tests, E2E). These scripts also handle the most common environment issues (Windows cache locks, Black cache, Node 18).
 Scripts enforce a project-local venv and will bootstrap missing test tooling (`pre-commit`, and `aiohttp` where needed for imports).
+R118 adversarial stage uses adaptive profile selection (`--profile auto`) and escalates to `extended` on high-risk diffs.
 On WSL, scripts prefer `.venv-wsl`; on Windows they use `.venv`.
 If the selected venv exists but is invalid for the current OS/interpreter, rerun via the script so it can recreate that venv.
 Linux script includes an explicit offline fail-fast guard: if dependency bootstrap fails (for example `aiohttp` / `pre-commit` install), it stops with remediation hints instead of continuing with partial state.
@@ -200,7 +201,7 @@ bash scripts/pre_push_checks.sh
 3) backend unit tests (`scripts/run_unittests.py --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json`)
 4) backend real E2E lanes (`tests.test_r122_real_backend_lane` + `tests.test_r123_real_backend_model_list_lane`)
 5) R121 retry partition contract (`tests.test_r121_retry_partition_contract`)
-6) R118 adversarial smoke gate (`scripts/run_adversarial_gate.py --profile smoke --seed 42`)
+6) R118 adversarial adaptive gate (`scripts/run_adversarial_gate.py --profile auto --seed 42`)
 7) frontend E2E (`npm test`)
 
 IMPORTANT:
@@ -208,7 +209,21 @@ IMPORTANT:
 - Do not remove stage (3). If pre-push skips backend unit tests, local pushes can pass while GitHub CI fails later.
 - Do not remove stage (4). If pre-push skips real-backend lanes, model-list/webhook wiring regressions can bypass local checks and fail later in CI.
 - Do not remove stage (5) or stage (6). If pre-push skips retry partition or adversarial gates, verification hardening regressions can bypass local checks and fail later in CI.
+- Do not downgrade stage (6) back to fixed smoke profile. Adaptive mode is required so high-risk diffs auto-escalate to `extended`.
 - Keep dependency bootstrap in this script aligned with `.github/workflows/ci.yml` unit-test dependencies.
+
+## R118 Adaptive Profile + Mutation Strictness (Required)
+
+- Default gate command: `python scripts/run_adversarial_gate.py --profile auto --seed 42`.
+- `auto` selection behavior:
+  - `smoke` by default for non-hotspot diffs.
+  - `extended` when changed files match high-risk patterns (security/authz/route-boundary paths).
+- CI/local diff hints:
+  - set `OPENCLAW_DIFF_BASE` and `OPENCLAW_DIFF_HEAD` for deterministic selection in automation.
+- In `extended` runs triggered by high-risk changes, mutation gate enforces both:
+  - global score threshold (`>= 80%` unless explicitly overridden), and
+  - strict zero-survivor on changed high-risk files.
+- Known equivalent survivors must be explicitly listed in `tests/mutation_survivor_allowlist.json`; non-allowlisted survivors fail the gate even if score threshold passes.
 
 1) Detect Secrets (baseline-based)
 

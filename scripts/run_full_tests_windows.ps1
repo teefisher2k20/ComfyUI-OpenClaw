@@ -254,10 +254,10 @@ Invoke-Checked "Slack integration gates" {
   & $venvPython scripts\run_unittests.py --module tests.test_f57_slack_socket_mode_startup --enforce-skip-policy tests\skip_policy.json --max-skipped 0
 }
 
-Write-Host "[tests] 7/8 R118 adversarial gate (smoke)"
+Write-Host "[tests] 7/8 R118 adversarial gate (adaptive: smoke/extended)"
 $env:MOLTBOT_STATE_DIR = "$root\moltbot_state\_local_adversarial"
-Invoke-Checked "R118 adversarial smoke" {
-  & $venvPython scripts\run_adversarial_gate.py --profile smoke --seed 42 --artifact-dir .tmp\adversarial
+Invoke-Checked "R118 adversarial adaptive" {
+  & $venvPython scripts\run_adversarial_gate.py --profile auto --seed 42 --artifact-dir .tmp\adversarial
 }
 
 Write-Host "[tests] 8/8 frontend E2E"
