@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from services.access_control import (
     get_current_auth_tier,
+    is_any_token_configured,
     is_auth_configured,
     resolve_token_info,
     verify_scope_access,
@@ -153,6 +154,44 @@ class TestRBAC(unittest.TestCase):
                 self.assertTrue(
                     passed, "Loopback in Convenience Mode should have Admin scopes"
                 )
+
+    def test_is_auth_configured_accepts_legacy_admin_alias(self):
+        # CRITICAL: mutation/adversarial gate relies on this legacy alias invariant.
+        with patch.dict(
+            os.environ,
+            {"MOLTBOT_ADMIN_TOKEN": "legacy-admin-secret"},
+            clear=True,
+        ):
+            self.assertTrue(is_auth_configured())
+
+    def test_is_any_token_configured_accepts_legacy_obs_alias(self):
+        # CRITICAL: keep coverage for OPENCLAW/MOLTBOT observability fallback parity.
+        with patch.dict(
+            os.environ,
+            {"MOLTBOT_OBSERVABILITY_TOKEN": "legacy-obs-secret"},
+            clear=True,
+        ):
+            self.assertTrue(is_any_token_configured())
+
+    def test_resolve_token_info_preserves_header_tenant_for_env_token(self):
+        # IMPORTANT: multi-tenant env-token auth must keep header tenant, not default.
+        req = MagicMock()
+        req.headers = {
+            "X-OpenClaw-Admin-Token": "admin-secret",
+            "X-OpenClaw-Tenant-Id": "Team-A",
+        }
+        with patch.dict(
+            os.environ,
+            {
+                "OPENCLAW_ADMIN_TOKEN": "admin-secret",
+                "OPENCLAW_MULTI_TENANT_ENABLED": "1",
+            },
+            clear=True,
+        ):
+            token_info = resolve_token_info(req)
+
+        self.assertIsNotNone(token_info)
+        self.assertEqual(token_info.tenant_id, "team-a")
 
 
 if __name__ == "__main__":

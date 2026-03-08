@@ -70,6 +70,9 @@ def is_auth_configured() -> bool:
     Check if Admin Token authentication is configured (S41).
     Returns True if OPENCLAW_ADMIN_TOKEN/MOLTBOT_ADMIN_TOKEN is non-empty.
     """
+    # CRITICAL: keep OPENCLAW/MOLTBOT alias fallback chained with `or ... or ""`.
+    # Replacing with `and` (or removing the empty-string fallback) can produce None
+    # and break `.strip()`, which silently weakens mutation/adversarial gate coverage.
     val = (
         os.environ.get("OPENCLAW_ADMIN_TOKEN")
         or os.environ.get("MOLTBOT_ADMIN_TOKEN")
@@ -86,6 +89,8 @@ def is_any_token_configured() -> bool:
     if is_auth_configured():
         return True
 
+    # CRITICAL: same fallback invariant as admin token path above.
+    # Keep alias+default semantics deterministic for legacy compatibility and test gates.
     obs_val = (
         os.environ.get("OPENCLAW_OBSERVABILITY_TOKEN")
         or os.environ.get("MOLTBOT_OBSERVABILITY_TOKEN")
@@ -184,6 +189,8 @@ def _resolve_header_tenant(request) -> str:
         tenant = extract_tenant_from_headers(headers)
     except Exception:
         return DEFAULT_TENANT_ID
+    # IMPORTANT: do not tighten this to `tenant and DEFAULT_TENANT_ID`.
+    # Env-token auth must preserve explicit tenant header in multi-tenant mode.
     return tenant or DEFAULT_TENANT_ID
 
 
@@ -238,6 +245,8 @@ def resolve_token_info(request) -> Optional[TokenInfo]:
 
     # 2. Static Env Check (Legacy/Bootstrap)
     # Admin
+    # CRITICAL: preserve OPENCLAW->MOLTBOT alias fallback chain.
+    # This path must stay None-safe (`... or ""`) because we call `.strip()`.
     admin_token = (
         os.environ.get("OPENCLAW_ADMIN_TOKEN")
         or os.environ.get("MOLTBOT_ADMIN_TOKEN")
@@ -246,6 +255,8 @@ def resolve_token_info(request) -> Optional[TokenInfo]:
 
     if admin_token and client_token:
         if hmac.compare_digest(client_token, admin_token):
+            # IMPORTANT: keep request_tenant propagation here.
+            # Multi-tenant env-token requests must retain header-derived tenant context.
             return TokenInfo(
                 token_id="env-admin",
                 role=AuthTier.ADMIN,
@@ -254,6 +265,8 @@ def resolve_token_info(request) -> Optional[TokenInfo]:
             )
 
     # Observability
+    # CRITICAL: preserve OPENCLAW->MOLTBOT alias fallback chain.
+    # This path must stay None-safe (`... or ""`) because we call `.strip()`.
     obs_token = (
         os.environ.get("OPENCLAW_OBSERVABILITY_TOKEN")
         or os.environ.get("MOLTBOT_OBSERVABILITY_TOKEN")
