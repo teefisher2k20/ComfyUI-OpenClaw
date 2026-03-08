@@ -7,7 +7,7 @@ ComfyUI-OpenClaw is a **security-first orchestration layer** for ComfyUI that co
 - **LLM-assisted nodes** (planner/refiner/vision/batch variants)
 - **A built-in extension UI** (`OpenClaw` panel)
 - **A standalone Remote Admin Console** (`/openclaw/admin`) for mobile/remote browser operations
-- **A secure-by-default HTTP API** for automation (webhooks, triggers, schedules, approvals, presets)
+- **A secure-by-default HTTP API** for automation (webhooks, triggers, schedules, approvals, presets, rewrite recipes)
 - **Public-ready control-plane split architecture** (embedded UX + externalized high-risk control surfaces)
 - **Verification-first hardening lanes** (route drift, real-backend E2E, adversarial fuzz/mutation gates)
 - **Now supports 7 major messaging platforms, including Discord, Telegram, WhatsApp, LINE, WeChat, KakaoTalk, and Slack.**
@@ -556,6 +556,7 @@ Deployment profiles and hardening checklists:
   - [Triggers + approvals](#triggers--approvals-admin)
   - [Schedules](#schedules-admin)
   - [Presets](#presets-admin)
+  - [Rewrite recipes](#rewrite-recipes-admin-f53)
   - [Packs](#packs-admin)
   - [Bridge](#bridge-sidecar-optional)
 - [Templates](#templates)
@@ -952,6 +953,106 @@ Admin boundary:
   - public-read is allowed only when `OPENCLAW_PRESETS_PUBLIC_READ=1` **and** `OPENCLAW_STRICT_LOCALHOST_AUTH=0`
   - otherwise requires admin token
 - `POST/PUT/DELETE /openclaw/presets*` always require admin token
+
+### Rewrite recipes (admin, F53)
+
+- `GET /openclaw/rewrite/recipes`
+- `POST /openclaw/rewrite/recipes`
+- `GET/PUT/DELETE /openclaw/rewrite/recipes/{recipe_id}`
+- `POST /openclaw/rewrite/recipes/{recipe_id}/dry-run`:
+  - returns structured `diff` + preview render metadata
+  - does not mutate upstream workflow state
+- `POST /openclaw/rewrite/recipes/{recipe_id}/apply`:
+  - requires `confirm=true` (guarded apply)
+  - returns `rollback_snapshot` on validation failure
+
+Recipe object (minimal example):
+
+```json
+{
+  "name": "rewrite prompt + params",
+  "prompt_template": "cinematic {{topic}}",
+  "tags": ["prompt", "safe-defaults"],
+  "constraints": {
+    "required_inputs": ["topic"],
+    "allowed_inputs": ["topic", "steps", "width", "height", "cfg"],
+    "max_string_length": 2048
+  },
+  "operations": [
+    { "path": "/1/inputs/text", "value": "{{rewrite_prompt}}" },
+    { "path": "/1/inputs/steps", "value": "{{steps}}" }
+  ]
+}
+```
+
+Notes:
+
+- `operations[].path` uses RFC6901 JSON pointer format and only rewrites existing paths.
+- Templating placeholders use `{{key}}` from `inputs` (or `rewrite_prompt` when `prompt_template` is set).
+- Safety inheritance: common generation fields (`width`, `height`, `steps`, `cfg`) are clamped through existing `S3` bounds before apply.
+
+Dry-run request example:
+
+```bash
+curl -X POST "http://127.0.0.1:8188/openclaw/rewrite/recipes/<recipe_id>/dry-run" \
+  -H "Content-Type: application/json" \
+  -H "X-OpenClaw-Admin-Token: <admin_token>" \
+  -d '{
+    "workflow": {
+      "1": { "inputs": { "text": "old prompt", "steps": 20 } }
+    },
+    "inputs": { "topic": "portrait photo", "steps": 30 }
+  }'
+```
+
+Dry-run response shape:
+
+```json
+{
+  "ok": true,
+  "recipe_id": "<recipe_id>",
+  "workflow": { "...": "rendered workflow preview" },
+  "diff": [
+    {
+      "path": "/1/inputs/text",
+      "change": "modified",
+      "before": "old prompt",
+      "after": "cinematic portrait photo"
+    }
+  ],
+  "render": {
+    "workflow_bytes": 1234,
+    "node_count_estimate": 1,
+    "diff_entries": 2
+  }
+}
+```
+
+Guarded apply example:
+
+```bash
+curl -X POST "http://127.0.0.1:8188/openclaw/rewrite/recipes/<recipe_id>/apply" \
+  -H "Content-Type: application/json" \
+  -H "X-OpenClaw-Admin-Token: <admin_token>" \
+  -d '{
+    "workflow": {
+      "1": { "inputs": { "text": "old prompt", "steps": 20 } }
+    },
+    "inputs": { "topic": "portrait photo", "steps": 30 },
+    "confirm": true
+  }'
+```
+
+Error contract highlights:
+
+- Missing confirmation:
+  - `error: "apply_requires_confirm"`
+  - includes `rollback_snapshot` with original workflow
+- Validation failure:
+  - `error: "validation_error"` (deterministic detail message)
+  - includes `rollback_snapshot`
+- Render budget failure:
+  - `error: "budget_exceeded"` (dry-run/apply validation path)
 
 ### Packs (admin)
 

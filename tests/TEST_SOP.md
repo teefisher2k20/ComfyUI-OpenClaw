@@ -491,6 +491,40 @@ Once the template appears in `/openclaw/templates`, you can run it via chat:
 
 Unused keys have no effect unless the workflow contains a matching `{{key}}` placeholder.
 
+## F53 Rewrite Recipe Library - Validation SOP
+
+Use this flow to validate the `F53` guarded rewrite contract (`/openclaw/rewrite/recipes*`).
+
+1) Create a recipe (admin token required)
+
+```powershell
+curl -X POST http://127.0.0.1:8188/openclaw/rewrite/recipes `
+  -H "Content-Type: application/json" `
+  -H "X-OpenClaw-Admin-Token: $env:OPENCLAW_ADMIN_TOKEN" `
+  -d "{\"name\":\"rewrite-text\",\"operations\":[{\"path\":\"/1/inputs/text\",\"value\":\"{{topic}}\"}],\"constraints\":{\"required_inputs\":[\"topic\"]}}"
+```
+
+1) Dry-run preview (must return structured `diff`, no side-effects)
+
+```powershell
+curl -X POST http://127.0.0.1:8188/openclaw/rewrite/recipes/<recipe_id>/dry-run `
+  -H "Content-Type: application/json" `
+  -H "X-OpenClaw-Admin-Token: $env:OPENCLAW_ADMIN_TOKEN" `
+  -d "{\"workflow\":{\"1\":{\"inputs\":{\"text\":\"old\"}}},\"inputs\":{\"topic\":\"new\"}}"
+```
+
+1) Guarded apply check
+
+- Without `confirm=true` must fail with `apply_requires_confirm` + `rollback_snapshot`.
+- With `confirm=true` must return `applied_workflow` and `diff`.
+
+```powershell
+curl -X POST http://127.0.0.1:8188/openclaw/rewrite/recipes/<recipe_id>/apply `
+  -H "Content-Type: application/json" `
+  -H "X-OpenClaw-Admin-Token: $env:OPENCLAW_ADMIN_TOKEN" `
+  -d "{\"workflow\":{\"1\":{\"inputs\":{\"text\":\"old\"}}},\"inputs\":{\"topic\":\"new\"},\"confirm\":true}"
+```
+
 ## Admin Token & UI Usage (SOP)
 
 **Key rule:** `OPENCLAW_ADMIN_TOKEN` is a **server-side environment variable**.

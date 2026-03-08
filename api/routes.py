@@ -45,6 +45,10 @@ security_doctor_handler = None  # type: ignore  # S30
 connector_installations_list_handler = connector_installation_get_handler = None  # type: ignore
 connector_installation_resolve_handler = connector_installation_audit_handler = None  # type: ignore
 templates_list_handler = None  # type: ignore
+rewrite_recipes_list_handler = rewrite_recipe_get_handler = None  # type: ignore
+rewrite_recipe_create_handler = rewrite_recipe_update_handler = None  # type: ignore
+rewrite_recipe_delete_handler = rewrite_recipe_dry_run_handler = None  # type: ignore
+rewrite_recipe_apply_handler = None  # type: ignore
 secrets_status_handler = secrets_put_handler = secrets_delete_handler = None  # type: ignore
 list_checkpoints_handler = create_checkpoint_handler = get_checkpoint_handler = delete_checkpoint_handler = None  # type: ignore
 events_stream_handler = events_poll_handler = None  # type: ignore  # R71
@@ -147,6 +151,28 @@ if web is not None:
         "..api.templates",
         "api.templates",
         ("templates_list_handler",),
+    )
+    (
+        rewrite_recipe_apply_handler,
+        rewrite_recipe_create_handler,
+        rewrite_recipe_delete_handler,
+        rewrite_recipe_dry_run_handler,
+        rewrite_recipe_get_handler,
+        rewrite_recipe_update_handler,
+        rewrite_recipes_list_handler,
+    ) = import_attrs_dual(
+        __package__,
+        "..api.rewrite_recipes",
+        "api.rewrite_recipes",
+        (
+            "rewrite_recipe_apply_handler",
+            "rewrite_recipe_create_handler",
+            "rewrite_recipe_delete_handler",
+            "rewrite_recipe_dry_run_handler",
+            "rewrite_recipe_get_handler",
+            "rewrite_recipe_update_handler",
+            "rewrite_recipes_list_handler",
+        ),
     )
     (tools_list_handler, tools_run_handler) = import_attrs_dual(  # S12
         __package__,
@@ -807,6 +833,33 @@ def register_routes(server) -> None:
                 "DELETE",
                 f"{prefix}/checkpoints/{{id}}",
                 delete_checkpoint_handler,
+            ),
+            ("GET", f"{prefix}/rewrite/recipes", rewrite_recipes_list_handler),
+            ("POST", f"{prefix}/rewrite/recipes", rewrite_recipe_create_handler),
+            (
+                "GET",
+                f"{prefix}/rewrite/recipes/{{recipe_id}}",
+                rewrite_recipe_get_handler,
+            ),
+            (
+                "PUT",
+                f"{prefix}/rewrite/recipes/{{recipe_id}}",
+                rewrite_recipe_update_handler,
+            ),
+            (
+                "DELETE",
+                f"{prefix}/rewrite/recipes/{{recipe_id}}",
+                rewrite_recipe_delete_handler,
+            ),
+            (
+                "POST",
+                f"{prefix}/rewrite/recipes/{{recipe_id}}/dry-run",
+                rewrite_recipe_dry_run_handler,
+            ),
+            (
+                "POST",
+                f"{prefix}/rewrite/recipes/{{recipe_id}}/apply",
+                rewrite_recipe_apply_handler,
             ),
             (
                 "GET",
