@@ -87,6 +87,7 @@ Deployment profiles and hardening checklists:
 - [Security Key/Token Lifecycle SOP](docs/security_key_lifecycle_sop.md) (trust-root, secrets key, and bridge token rotation/revocation/disaster recovery)
 - [Security Checklist](docs/security_checklist.md) (pre-exposure operational checklist for connector and ingress boundaries)
 - [Runtime Hardening and Startup](docs/runtime_hardening_and_startup.md) (runtime profile, startup gate, and hardened baseline behaviors)
+- [R69 Frontend Migration Decision](docs/r69_ui_framework_migration_decision.md) (framework migration feasibility matrix and no-migration decision record)
 
 
 
