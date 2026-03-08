@@ -95,6 +95,16 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Embedded model operations UX update: new Model Manager tab and Parameter Lab icon fix</strong></summary>
+
+- Added a dedicated `Model Manager` sidebar tab for model search, managed download task queueing, task lifecycle monitoring, and completed-task import into managed install paths.
+- Added frontend regression coverage for the new tab flow (sidebar visibility/switching plus queue/import interaction path in Playwright E2E).
+- Fixed the `Parameter Lab` tab icon contract by using a PrimeIcon class so the tab icon renders correctly in the sidebar.
+
+</details>
+
+<details>
+
 <summary><strong>Multi-tenant isolation baseline, optional local secret sourcing, and layered config unification completed</strong></summary>
 
 - Added a fail-closed tenant boundary model with tenant-scoped config/secret resolution, connector installation isolation, approvals/presets/templates visibility boundaries, and per-tenant execution concurrency caps.
