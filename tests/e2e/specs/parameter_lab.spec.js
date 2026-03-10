@@ -88,15 +88,28 @@ test.describe('Parameter Lab - Dynamic Dimensions', () => {
     });
 
     test('generates correct plan payload', async ({ page }) => {
-        // Mock network request
-        let payload = null;
-        await page.route('**/openclaw/lab/sweep', async route => {
-            payload = JSON.parse(route.request().postData());
-            await route.fulfill({
-                status: 200,
-                contentType: 'application/json',
-                body: JSON.stringify({ ok: true, data: { plan: { runs: [], experiment_id: "exp123" } } })
-            });
+        await page.evaluate(async () => {
+            const mod = await import('/web/openclaw_api.js');
+            window.__labSweepPayload = null;
+
+            const originalFetch = mod.openclawApi.fetch.bind(mod.openclawApi);
+            mod.openclawApi.fetch = async (url, options = {}) => {
+                const normalizedPath = String(url || '').replace(/^\/moltbot/, '/openclaw');
+                if (normalizedPath.endsWith('/lab/sweep')) {
+                    window.__labSweepPayload = JSON.parse(options?.body || '{}');
+                    return {
+                        ok: true,
+                        status: 200,
+                        data: {
+                            plan: {
+                                runs: [],
+                                experiment_id: 'exp123'
+                            }
+                        }
+                    };
+                }
+                return originalFetch(url, options);
+            };
         });
 
         // Configure dimension
@@ -112,15 +125,19 @@ test.describe('Parameter Lab - Dynamic Dimensions', () => {
 
         // Click Generate
         await page.click('#lab-generate');
+        await expect
+            .poll(() => page.evaluate(() => (window.__labSweepPayload ? 'ready' : 'pending')))
+            .toBe('ready');
 
         // Verify payload
+        const payload = await page.evaluate(() => window.__labSweepPayload);
         expect(payload).toBeTruthy();
         expect(payload.params).toHaveLength(1);
         expect(payload.params[0]).toEqual({
             node_id: 20,
-            widget_name: "ckpt_name",
-            values: ["v2.ckpt", "xl.ckpt"],
-            strategy: "grid"
+            widget_name: 'ckpt_name',
+            values: ['v2.ckpt', 'xl.ckpt'],
+            strategy: 'grid'
         });
     });
 });

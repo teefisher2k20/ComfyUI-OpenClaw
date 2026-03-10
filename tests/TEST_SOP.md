@@ -577,6 +577,35 @@ Expected:
   - `GET /openclaw/models/installations`
   - `GET /openclaw/models/search?installed=true`
 
+
+## F65 Resume + Restart Recovery - Validation SOP
+
+Use this flow to validate resumable managed downloads and restart recovery behavior.
+
+Preconditions:
+
+- F54 preconditions still apply (`OPENCLAW_MODEL_DOWNLOAD_ALLOW_HOSTS` or `OPENCLAW_MODEL_DOWNLOAD_ALLOW_ANY_PUBLIC=1`).
+- Keep `OPENCLAW_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT` set to a bounded value (recommended default: `32`).
+
+1) Resume contract checks
+
+- Start a download task and interrupt while in `running` (cancel/process stop) so a `.part` + checkpoint remain.
+- Re-run the same task context and verify:
+  - when upstream supports `Range` + matching validators, task finishes with `resume_status=resumed_partial`.
+  - when upstream does not honor range or validators drift, task still completes via deterministic full restart with fallback `resume_status`.
+
+1) Restart recovery checks
+
+- Leave one or more tasks in non-terminal state (`queued`/`running`) and restart backend process.
+- Verify replay transition behavior:
+  - non-terminal tasks are recovered into active queue (`recovering -> queued/running`).
+  - replay overflow (beyond configured limit) is fail-closed with `error=recovery_replay_limit_exceeded`.
+
+1) Non-regression checks
+
+- Ensure import path still enforces SHA256 verification and provenance checks.
+- Validate endpoint/auth matrix remains unchanged for `/openclaw/models/downloads*` and `/openclaw/models/import`.
+
 ## Admin Token & UI Usage (SOP)
 
 **Key rule:** `OPENCLAW_ADMIN_TOKEN` is a **server-side environment variable**.

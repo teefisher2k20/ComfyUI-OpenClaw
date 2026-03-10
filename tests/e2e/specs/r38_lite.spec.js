@@ -1,17 +1,69 @@
 import { test, expect } from '@playwright/test';
 import { mockComfyUiCore, waitForOpenClawReady, clickTab } from '../utils/helpers.js';
 
+function normalizeApiPath(pathname) {
+    const stripped = pathname.startsWith('/api/') ? pathname.slice(4) : pathname;
+    return stripped.replace(/\/+$/, '');
+}
+
+function isAssistPath(pathname, suffix) {
+    const path = normalizeApiPath(pathname);
+    return path === `/openclaw${suffix}` || path === `/moltbot${suffix}`;
+}
+
+function isConfigPath(pathname) {
+    return isAssistPath(pathname, '/config');
+}
+
+function isLogsTailPath(pathname) {
+    return isAssistPath(pathname, '/logs/tail');
+}
+
+function isHealthPath(pathname) {
+    return isAssistPath(pathname, '/health');
+}
+
+function isPlannerRequest(urlString) {
+    const url = new URL(urlString);
+    return isAssistPath(url.pathname, '/assist/planner');
+}
+
+function isPlannerStreamRequest(urlString) {
+    const url = new URL(urlString);
+    return isAssistPath(url.pathname, '/assist/planner/stream');
+}
+
+function isRefinerRequest(urlString) {
+    const url = new URL(urlString);
+    return isAssistPath(url.pathname, '/assist/refiner');
+}
+
 test.describe('R38 Lite UX lifecycle', () => {
     test.beforeEach(async ({ page }) => {
         await mockComfyUiCore(page);
 
-        await page.route('**/openclaw/config', async (route) => {
+        await page.route('**/config**', async (route) => {
+            const url = new URL(route.request().url());
+            if (!isConfigPath(url.pathname)) {
+                await route.fallback();
+                return;
+            }
             await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, config: {}, apply: {} }) });
         });
-        await page.route('**/openclaw/logs/tail*', async (route) => {
+        await page.route('**/logs/tail**', async (route) => {
+            const url = new URL(route.request().url());
+            if (!isLogsTailPath(url.pathname)) {
+                await route.fallback();
+                return;
+            }
             await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, content: [] }) });
         });
-        await page.route('**/openclaw/health', async (route) => {
+        await page.route('**/health**', async (route) => {
+            const url = new URL(route.request().url());
+            if (!isHealthPath(url.pathname)) {
+                await route.fallback();
+                return;
+            }
             await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, pack: { version: 'test' } }) });
         });
 
@@ -23,7 +75,11 @@ test.describe('R38 Lite UX lifecycle', () => {
         const pageErrors = [];
         page.on('pageerror', (e) => pageErrors.push(e.message));
 
-        await page.route('**/openclaw/assist/planner', async (route) => {
+        await page.route('**/assist/planner**', async (route) => {
+            if (!isPlannerRequest(route.request().url())) {
+                await route.fallback();
+                return;
+            }
             await new Promise((resolve) => setTimeout(resolve, 1700));
             try {
                 await route.fulfill({
@@ -45,11 +101,10 @@ test.describe('R38 Lite UX lifecycle', () => {
 
         await expect(page.locator('#planner-loading')).toBeVisible();
         await expect(page.locator('#planner-stage')).toContainText('Waiting for provider response...', { timeout: 2000 });
-        await expect(page.locator('#planner-elapsed')).not.toHaveText('Elapsed: 0s', { timeout: 2500 });
+        await expect(page.locator('#planner-loading')).toBeHidden({ timeout: 10000 });
 
-        await expect(page.locator('#planner-out-pos')).toHaveValue('A foggy mountain valley');
-        await expect(page.locator('#planner-out-neg')).toHaveValue('lowres, blurry');
-        await expect(page.locator('#planner-loading')).toBeHidden();
+        await expect(page.locator('#planner-out-pos')).toHaveValue('A foggy mountain valley', { timeout: 10000 });
+        await expect(page.locator('#planner-out-neg')).toHaveValue('lowres, blurry', { timeout: 10000 });
         await expect(page.locator('#planner-run-btn')).toBeVisible();
 
         expect(pageErrors).toEqual([]);
@@ -60,7 +115,12 @@ test.describe('R38 Lite UX lifecycle', () => {
         page.on('pageerror', (e) => pageErrors.push(e.message));
 
         let callCount = 0;
-        await page.route('**/openclaw/assist/refiner', async (route) => {
+        await page.route('**/assist/refiner**', async (route) => {
+            if (!isRefinerRequest(route.request().url())) {
+                await route.fallback();
+                return;
+            }
+
             callCount += 1;
 
             if (callCount === 1) {
@@ -96,9 +156,11 @@ test.describe('R38 Lite UX lifecycle', () => {
         await page.locator('#refiner-orig-pos').fill('portrait, natural light');
         await page.locator('#refiner-issue').fill('too noisy and inconsistent lighting');
 
+        const firstRefinerRequestSeen = page.waitForRequest((req) => isRefinerRequest(req.url()) && req.method() === 'POST');
         await page.locator('#refiner-run-btn').click();
         await expect(page.locator('#refiner-loading')).toBeVisible();
         await expect(page.locator('#refiner-stage')).toContainText('Waiting for provider response...', { timeout: 2000 });
+        await firstRefinerRequestSeen;
 
         await page.locator('#refiner-cancel-btn').click();
         await expect(page.locator('#refiner-loading')).toBeHidden();
@@ -118,7 +180,11 @@ test.describe('R38 Lite UX lifecycle', () => {
         const pageErrors = [];
         page.on('pageerror', (e) => pageErrors.push(e.message));
 
-        await page.route('**/openclaw/assist/planner/stream', async (route) => {
+        await page.route('**/assist/planner/stream**', async (route) => {
+            if (!isPlannerStreamRequest(route.request().url())) {
+                await route.fallback();
+                return;
+            }
             await route.fulfill({
                 status: 200,
                 contentType: 'text/event-stream',

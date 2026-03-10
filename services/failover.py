@@ -74,6 +74,9 @@ class FailoverState:
 
         self.state_file = state_file
         self.cooldowns: Dict[str, CooldownEntry] = {}
+        # IMPORTANT: relative in-memory windows must use monotonic time to avoid
+        # NTP/system clock adjustments causing duplicate/throttle false positives.
+        self._window_clock = time.monotonic
         # R37: Storm control state
         self.dedupe_map: Dict[str, float] = {}  # (provider:model:category) -> last_ts
         self.health_scores: Dict[str, int] = {}  # (provider:model) -> score [0-100]
@@ -227,7 +230,7 @@ class FailoverState:
         """
         dedupe_key = self._get_dedupe_key(provider, model, category)
         last_ts = self.dedupe_map.get(dedupe_key, 0)
-        now = time.time()
+        now = self._window_clock()
 
         if now - last_ts < DEDUPE_WINDOW_SEC:
             # Duplicate within window
@@ -283,12 +286,12 @@ class FailoverState:
         """Check if enough time has passed since last attempt (throttle)."""
         key = self._get_key(provider, model)
         last_attempt = self.last_attempts.get(key, 0)
-        return time.time() - last_attempt >= MIN_CANDIDATE_INTERVAL_SEC
+        return self._window_clock() - last_attempt >= MIN_CANDIDATE_INTERVAL_SEC
 
     def mark_attempt(self, provider: str, model: Optional[str]) -> None:
         """Mark current time as last attempt."""
         key = self._get_key(provider, model)
-        self.last_attempts[key] = time.time()
+        self.last_attempts[key] = self._window_clock()
 
 
 # Global failover state instance

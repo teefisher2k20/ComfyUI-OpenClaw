@@ -95,6 +95,17 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Model Manager reliability upgrade: resumable downloads and restart-safe recovery</strong></summary>
+
+- Added resumable managed download support using staged `.part` artifacts plus checkpoint metadata, so interrupted transfers can continue via HTTP Range when upstream contracts are compatible.
+- Added deterministic fallback-to-full restart paths when resume preconditions fail (range unsupported, validator drift, content-range mismatch) without bypassing existing provenance/SHA256 import gates.
+- Added persisted download task registry with startup recovery replay and bounded replay limit control (`OPENCLAW_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT`) to prevent unbounded restart churn.
+- Added backend regression coverage for resume success, fallback behavior, and replay-limit overflow handling, then validated with the full SOP gate.
+
+</details>
+
+<details>
+
 <summary><strong>Embedded model operations UX update: new Model Manager tab and Parameter Lab icon fix</strong></summary>
 
 - Added a dedicated `Model Manager` sidebar tab for model search, managed download task queueing, task lifecycle monitoring, and completed-task import into managed install paths.
@@ -1090,6 +1101,8 @@ Error contract highlights:
   - `GET /openclaw/models/downloads/{task_id}`
   - `POST /openclaw/models/downloads/{task_id}/cancel`
   - states: `queued`, `running`, `completed`, `failed`, `cancelled`
+  - resumable behavior (`F65`): partial `.part` downloads use checkpoint metadata for HTTP Range continuation when upstream supports it; incompatible resume preconditions deterministically fallback to full restart
+  - task payload includes resume/recovery observability fields: `resume_status`, `recovery_attempts`, `last_checkpoint_at`
   - progress/cancel/result states are also emitted through existing events endpoints (`/openclaw/events`, `/openclaw/events/stream`)
 - Activation/import:
   - `POST /openclaw/models/import`
@@ -1101,6 +1114,8 @@ Security gates:
 - Managed downloads are disabled until one of the following is configured:
   - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_HOSTS=host1,host2`
   - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_ANY_PUBLIC=1`
+- Startup replay of non-terminal download tasks is bounded by:
+  - `OPENCLAW_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT` (legacy alias: `MOLTBOT_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT`)
 - Import/activation fails closed unless provenance (`publisher`, `license`, `source_url`) and expected SHA256 verification pass.
 - Destination path is root-bounded before file placement; set install root with `OPENCLAW_MODEL_INSTALL_ROOT` when needed.
 

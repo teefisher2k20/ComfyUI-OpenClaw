@@ -1,13 +1,39 @@
 import { test, expect } from '@playwright/test';
 import { mockComfyUiCore, waitForOpenClawReady, clickTab } from '../utils/helpers.js';
 
+function normalizeApiPath(pathname) {
+    return pathname.startsWith('/api/') ? pathname.slice(4) : pathname;
+}
+
+function isConfigPath(pathname) {
+    const path = normalizeApiPath(pathname);
+    return path === '/openclaw/config' || path === '/moltbot/config';
+}
+
+function isLogsTailPath(pathname) {
+    const path = normalizeApiPath(pathname);
+    return path === '/openclaw/logs/tail' || path === '/moltbot/logs/tail';
+}
+
+function isHealthPath(pathname) {
+    const path = normalizeApiPath(pathname);
+    return path === '/openclaw/health' || path === '/moltbot/health';
+}
+
 test.describe('Settings Tab Stability', () => {
     test.beforeEach(async ({ page }) => {
         await mockComfyUiCore(page);
 
         // Mock Config GET & PUT
-        await page.route('**/openclaw/config', async (route) => {
-            if (route.request().method() === 'GET') {
+        await page.route('**/config**', async (route) => {
+            const req = route.request();
+            const url = new URL(req.url());
+            if (!isConfigPath(url.pathname)) {
+                await route.fallback();
+                return;
+            }
+
+            if (req.method() === 'GET') {
                 await route.fulfill({
                     status: 200,
                     contentType: 'application/json',
@@ -29,7 +55,10 @@ test.describe('Settings Tab Stability', () => {
                         apply: {}
                     }),
                 });
-            } else if (route.request().method() === 'PUT') {
+                return;
+            }
+
+            if (req.method() === 'PUT') {
                 // Mock Config PUT (R53 feedback)
                 await route.fulfill({
                     status: 200,
@@ -42,21 +71,33 @@ test.describe('Settings Tab Stability', () => {
                         }
                     }),
                 });
+                return;
             }
+
+            await route.fallback();
         });
 
         // Mock Logs (Dependency)
-        await page.route('**/openclaw/logs/tail*', async (route) => {
+        await page.route('**/logs/tail**', async (route) => {
+            const url = new URL(route.request().url());
+            if (!isLogsTailPath(url.pathname)) {
+                await route.fallback();
+                return;
+            }
             await route.fulfill({ status: 200, body: JSON.stringify({ ok: true, content: [] }) });
         });
+
         // Mock Health (Dependency)
-        // Note: harness mock for health is overridden by page.route if this line executes?
-        // Actually, harness uses window.fetch. Mocking window.fetch happens in harness.
-        // If we want to support config in health, we modified harness directly.
-        // So this line is REDUNDANT or IGNORED for calls from UI?
-        // But good to keep for any network fallbacks.
-        await page.route('**/openclaw/health', async (route) => {
-            await route.fulfill({ status: 200, body: JSON.stringify({ ok: true, config: { llm_key_configured: true }, pack: { version: 'test' } }) });
+        await page.route('**/health**', async (route) => {
+            const url = new URL(route.request().url());
+            if (!isHealthPath(url.pathname)) {
+                await route.fallback();
+                return;
+            }
+            await route.fulfill({
+                status: 200,
+                body: JSON.stringify({ ok: true, config: { llm_key_configured: true }, pack: { version: 'test' } })
+            });
         });
 
         await page.goto('test-harness.html');
@@ -66,21 +107,19 @@ test.describe('Settings Tab Stability', () => {
     test('loads settings without flicker and populates fields', async ({ page }) => {
         await clickTab(page, 'Settings');
 
-        // Check for specific fields to ensure render complete
-        // We expect the provider select to be 'openai'
-        const providerSelect = page.locator('select').first();
-        // Wait for it to be visible to ensure "Loading..." is gone
-        await expect(providerSelect).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'LLM Settings' })).toBeVisible({ timeout: 10000 });
+
+        const providerSelect = page.getByRole('combobox').first();
+        await expect(providerSelect).toBeVisible({ timeout: 10000 });
         await expect(providerSelect).toHaveValue('openai');
 
-        // Model input should match
-        // Note: The UI has a model select and input. The input is default visible.
-        // Use first visible text input in settings tab logic (approximate but robust enough)
-        const modelInput = page.locator('input[type="text"]').first();
-        await expect(modelInput).toBeVisible();
-        await expect(modelInput).toHaveValue('gpt-4o');
+        const modelSelect = page.getByRole('combobox').nth(1);
+        if (await modelSelect.count()) {
+            await expect(modelSelect).toHaveValue('gpt-4o');
+        } else {
+            await expect(page.locator('input[list="openclaw-model-list"]')).toHaveValue('gpt-4o');
+        }
 
-        // Ensure no 404 warning
         await expect(page.locator('text=Backend 404')).not.toBeVisible();
     });
 
@@ -88,7 +127,10 @@ test.describe('Settings Tab Stability', () => {
         await clickTab(page, 'Settings');
 
         // Click Save (exact match to avoid "Save Key")
-        const savePromise = page.waitForResponse(resp => resp.url().includes('/config') && resp.status() === 200);
+        const savePromise = page.waitForResponse((resp) => {
+            const url = new URL(resp.url());
+            return resp.request().method() === 'PUT' && isConfigPath(url.pathname) && resp.status() === 200;
+        });
         await page.getByRole('button', { name: 'Save', exact: true }).click();
         await savePromise;
 

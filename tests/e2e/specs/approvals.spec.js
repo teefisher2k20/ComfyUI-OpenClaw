@@ -10,15 +10,41 @@ const pendingApproval = {
   inputs: { prompt: 'portrait', style: 'studio' },
 };
 
+function normalizeApiPath(pathname) {
+  const stripped = pathname.startsWith('/api/') ? pathname.slice(4) : pathname;
+  return stripped.replace(/\/+$/, '');
+}
+
+function isApprovalsListPath(pathname) {
+  const path = normalizeApiPath(pathname);
+  return path === '/openclaw/approvals' || path === '/moltbot/approvals';
+}
+
+function isApprovalDetailPath(pathname) {
+  const path = normalizeApiPath(pathname);
+  return /^\/(openclaw|moltbot)\/approvals\/[^/]+$/.test(path);
+}
+
+function isApprovalActionPath(pathname, action) {
+  const path = normalizeApiPath(pathname);
+  return new RegExp(`^\\/(openclaw|moltbot)\\/approvals\\/[^/]+\\/${action}$`).test(path);
+}
+
+function approvalIdFromPath(pathname) {
+  const parts = normalizeApiPath(pathname).split('/').filter(Boolean);
+  if (parts.length < 3) return '';
+  return decodeURIComponent(parts[2] || '');
+}
+
 async function mockApprovalApis(page, { listStatus = 200, listData = [pendingApproval], approveStatus = 200 } = {}) {
   let approvals = [...listData];
 
-  await page.route('**/openclaw/approvals**', async (route) => {
+  const handler = async (route) => {
     const request = route.request();
     const url = new URL(request.url());
 
-    if (request.method() === 'GET' && /\/approvals\/[^/]+$/.test(url.pathname)) {
-      const id = decodeURIComponent(url.pathname.split('/').pop());
+    if (request.method() === 'GET' && isApprovalDetailPath(url.pathname)) {
+      const id = approvalIdFromPath(url.pathname);
       const match = approvals.find((item) => item.approval_id === id);
       await route.fulfill({
         status: match ? 200 : 404,
@@ -28,23 +54,28 @@ async function mockApprovalApis(page, { listStatus = 200, listData = [pendingApp
       return;
     }
 
-    if (request.method() === 'GET') {
+    if (request.method() === 'GET' && isApprovalsListPath(url.pathname)) {
+      const statusFilter = String(url.searchParams.get('status') || '').trim().toLowerCase();
+      const filtered = statusFilter
+        ? approvals.filter((item) => String(item.status || '').toLowerCase() === statusFilter)
+        : approvals;
       await route.fulfill({
         status: listStatus,
         contentType: 'application/json',
         body: JSON.stringify(
-          listStatus === 200 ? { approvals } : { error: 'approval_list_failed' }
+          listStatus === 200 ? { approvals: filtered } : { error: 'approval_list_failed' },
         ),
       });
       return;
     }
 
-    if (request.method() === 'POST' && url.pathname.endsWith('/approve')) {
+    if (request.method() === 'POST' && isApprovalActionPath(url.pathname, 'approve')) {
+      const id = approvalIdFromPath(url.pathname);
       if (approveStatus === 200) {
         approvals = approvals.map((item) =>
-          item.approval_id === pendingApproval.approval_id
+          item.approval_id === id
             ? { ...item, status: 'approved' }
-            : item
+            : item,
         );
       }
       await route.fulfill({
@@ -53,17 +84,18 @@ async function mockApprovalApis(page, { listStatus = 200, listData = [pendingApp
         body: JSON.stringify(
           approveStatus === 200
             ? { executed: true, prompt_id: 'prompt-42' }
-            : { error: 'approve_failed' }
+            : { error: 'approve_failed' },
         ),
       });
       return;
     }
 
-    if (request.method() === 'POST' && url.pathname.endsWith('/reject')) {
+    if (request.method() === 'POST' && isApprovalActionPath(url.pathname, 'reject')) {
+      const id = approvalIdFromPath(url.pathname);
       approvals = approvals.map((item) =>
-        item.approval_id === pendingApproval.approval_id
+        item.approval_id === id
           ? { ...item, status: 'rejected' }
-          : item
+          : item,
       );
       await route.fulfill({
         status: 200,
@@ -74,7 +106,18 @@ async function mockApprovalApis(page, { listStatus = 200, listData = [pendingApp
     }
 
     await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'not_found' }) });
-  });
+  };
+
+  const patterns = [
+    '**/openclaw/approvals**',
+    '**/moltbot/approvals**',
+    '**/api/openclaw/approvals**',
+    '**/api/moltbot/approvals**',
+  ];
+
+  for (const pattern of patterns) {
+    await page.route(pattern, handler);
+  }
 }
 
 test.describe('Approvals surfaces', () => {
@@ -95,8 +138,25 @@ test.describe('Approvals surfaces', () => {
     await expect(page.locator('#apr-list .openclaw-list-item')).toHaveCount(1);
     await expect(page.locator('#apr-list')).toContainText('render_portrait');
 
-    await page.locator('#apr-list button[data-action="approve"]').click();
-    await expect(page.locator('#apr-list')).toContainText('APPROVED');
+    const approveButton = page.locator('#apr-list').getByRole('button', { name: 'Approve' }).first();
+    await expect(approveButton).toBeVisible();
+
+    const approveRequest = page.waitForRequest((req) => {
+      const url = new URL(req.url());
+      return req.method() === 'POST' && isApprovalActionPath(url.pathname, 'approve');
+    });
+
+    await approveButton.click();
+    await approveRequest;
+
+    await expect
+      .poll(async () => {
+        const text = (await page.locator('#apr-list').innerText()).trim();
+        if (text.includes('Loading...')) return 'loading';
+        if (text.includes('APPROVED') || text.includes('No requests found.')) return 'done';
+        return 'pending';
+      }, { timeout: 15000 })
+      .toBe('done');
   });
 
   test('shows approval list fetch failures inside the sidebar', async ({ page }) => {

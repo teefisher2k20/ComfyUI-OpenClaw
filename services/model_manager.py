@@ -1,5 +1,5 @@
 """
-F54 model search/download/import service.
+F54/F65 model search/download/import service.
 """
 
 from __future__ import annotations
@@ -41,6 +41,9 @@ STATE_SUBDIR = "model_manager"
 CATALOG_SUBDIR = "catalog"
 STAGING_SUBDIR = "staging"
 INSTALLATIONS_FILE = "installations.json"
+TASKS_FILE = "download_tasks.json"
+CHECKPOINT_VERSION = 1
+CHECKPOINT_SUFFIX = ".checkpoint.json"
 DEFAULT_MODEL_TYPE = "checkpoint"
 MODEL_TYPE_TO_SUBDIR = {
     "checkpoint": "checkpoints",
@@ -93,6 +96,9 @@ class DownloadTask:
     imported: bool = False
     installation_path: str = ""
     installation_record_id: str = ""
+    resume_status: str = "not_started"
+    recovery_attempts: int = 0
+    last_checkpoint_at: float = 0.0
 
     def is_terminal(self) -> bool:
         return self.state in {"completed", "failed", "cancelled"}
@@ -126,7 +132,47 @@ class DownloadTask:
             "imported": self.imported,
             "installation_path": self.installation_path,
             "installation_record_id": self.installation_record_id,
+            "resume_status": self.resume_status,
+            "recovery_attempts": self.recovery_attempts,
+            "last_checkpoint_at": self.last_checkpoint_at,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "DownloadTask":
+        if not isinstance(payload, dict):
+            raise ValueError("task payload must be an object")
+        return cls(
+            task_id=str(payload.get("task_id") or ""),
+            model_id=str(payload.get("model_id") or ""),
+            name=str(payload.get("name") or ""),
+            model_type=_norm_model_type(str(payload.get("model_type") or "")),
+            source=_norm_source(str(payload.get("source") or "")),
+            source_label=str(payload.get("source_label") or ""),
+            download_url=str(payload.get("download_url") or ""),
+            destination_subdir=str(payload.get("destination_subdir") or ""),
+            filename=str(payload.get("filename") or ""),
+            expected_sha256=str(payload.get("expected_sha256") or ""),
+            provenance=dict(payload.get("provenance") or {}),
+            tenant_id=str(payload.get("tenant_id") or DEFAULT_TENANT_ID),
+            state=str(payload.get("state") or "queued"),
+            created_at=float(payload.get("created_at") or time.time()),
+            updated_at=float(payload.get("updated_at") or time.time()),
+            started_at=float(payload.get("started_at") or 0.0),
+            finished_at=float(payload.get("finished_at") or 0.0),
+            bytes_downloaded=max(0, int(payload.get("bytes_downloaded") or 0)),
+            total_bytes=max(0, int(payload.get("total_bytes") or 0)),
+            progress=max(0.0, min(1.0, float(payload.get("progress") or 0.0))),
+            cancel_requested=bool(payload.get("cancel_requested")),
+            error=str(payload.get("error") or ""),
+            staged_path=str(payload.get("staged_path") or ""),
+            computed_sha256=str(payload.get("computed_sha256") or ""),
+            imported=bool(payload.get("imported")),
+            installation_path=str(payload.get("installation_path") or ""),
+            installation_record_id=str(payload.get("installation_record_id") or ""),
+            resume_status=str(payload.get("resume_status") or "not_started"),
+            recovery_attempts=max(0, int(payload.get("recovery_attempts") or 0)),
+            last_checkpoint_at=float(payload.get("last_checkpoint_at") or 0.0),
+        )
 
 
 def _truthy(value: str) -> bool:
@@ -236,6 +282,39 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _safe_unlink(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
+
+
+def _parse_content_range(value: str) -> tuple[int, int, int]:
+    text = str(value or "").strip()
+    if not text.lower().startswith("bytes "):
+        return -1, -1, -1
+    body = text[6:]
+    if "/" not in body or "-" not in body:
+        return -1, -1, -1
+    range_part, total_part = body.split("/", 1)
+    start_part, end_part = range_part.split("-", 1)
+    try:
+        start = int(start_part.strip())
+        end = int(end_part.strip())
+        total = int(total_part.strip()) if total_part.strip() != "*" else -1
+    except Exception:
+        return -1, -1, -1
+    if start < 0 or end < start:
+        return -1, -1, -1
+    if total != -1 and total <= end:
+        return -1, -1, -1
+    return start, end, total
+
+
 class ModelManager:
     def __init__(
         self, *, state_root: Optional[Path] = None, install_root: Optional[Path] = None
@@ -244,6 +323,7 @@ class ModelManager:
         self.catalog_dir = self.state_root / CATALOG_SUBDIR
         self.staging_dir = self.state_root / STAGING_SUBDIR
         self.installations_path = self.state_root / INSTALLATIONS_FILE
+        self.tasks_path = self.state_root / TASKS_FILE
         self.state_root.mkdir(parents=True, exist_ok=True)
         self.catalog_dir.mkdir(parents=True, exist_ok=True)
         self.staging_dir.mkdir(parents=True, exist_ok=True)
@@ -301,13 +381,25 @@ class ModelManager:
             5,
             3600,
         )
+        self.recovery_replay_limit = self._read_int(
+            (
+                "OPENCLAW_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT",
+                "MOLTBOT_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT",
+            ),
+            32,
+            0,
+            256,
+        )
         self._lock = threading.Lock()
         self._tasks: Dict[str, DownloadTask] = {}
         self._futures: Dict[str, Future] = {}
         self._cancel_events: Dict[str, threading.Event] = {}
+        self._last_tasks_persist_at = 0.0
         self._executor = ThreadPoolExecutor(
             max_workers=self.max_workers, thread_name_prefix="openclaw-model-download"
         )
+        self._load_tasks_from_disk()
+        self._recover_incomplete_tasks()
 
     @staticmethod
     def _read_int(
@@ -325,6 +417,164 @@ class ModelManager:
                 return default
             return val
         return default
+
+    def _persist_tasks_locked(self, *, force: bool = False) -> None:
+        now = time.time()
+        if not force and (now - self._last_tasks_persist_at) < 0.3:
+            return
+        rows = [task.to_dict() for task in self._tasks.values()]
+        rows.sort(key=lambda row: float(row.get("created_at") or 0.0))
+        _atomic_json_write(self.tasks_path, rows)
+        self._last_tasks_persist_at = now
+
+    def _load_tasks_from_disk(self) -> None:
+        if not self.tasks_path.exists():
+            return
+        try:
+            data = json.loads(self.tasks_path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning(
+                "F65: failed to parse download task state, ignoring", exc_info=True
+            )
+            return
+        if not isinstance(data, list):
+            return
+        with self._lock:
+            for item in data:
+                try:
+                    task = DownloadTask.from_dict(item)
+                except Exception:
+                    continue
+                if not task.task_id:
+                    continue
+                self._tasks[task.task_id] = task
+                if not task.is_terminal():
+                    self._cancel_events[task.task_id] = threading.Event()
+
+    def _recover_incomplete_tasks(self) -> None:
+        now = time.time()
+        with self._lock:
+            recoverable = sorted(
+                [t for t in self._tasks.values() if not t.is_terminal()],
+                key=lambda t: t.created_at,
+            )
+            if not recoverable:
+                return
+            for task in recoverable:
+                task.state = "recovering"
+                task.updated_at = now
+                task.error = "restart_recovery_pending"
+                task.recovery_attempts += 1
+                task.resume_status = "restart_recovering"
+            replayable = recoverable[: self.recovery_replay_limit]
+            overflow = recoverable[self.recovery_replay_limit :]
+            for task in overflow:
+                task.state = "failed"
+                task.error = "recovery_replay_limit_exceeded"
+                task.resume_status = "recovery_replay_limit_exceeded"
+                task.finished_at = now
+                task.updated_at = now
+                self._emit(task)
+            for task in replayable:
+                event = self._cancel_events.setdefault(task.task_id, threading.Event())
+                event.clear()
+                task.state = "queued"
+                task.cancel_requested = False
+                task.error = ""
+                task.updated_at = now
+                task.resume_status = "restart_replay_queued"
+                self._futures[task.task_id] = self._executor.submit(
+                    self._run_task, task.task_id
+                )
+                self._emit(task)
+            self._persist_tasks_locked(force=True)
+
+    @staticmethod
+    def _checkpoint_path(part_path: Path) -> Path:
+        return Path(f"{part_path}{CHECKPOINT_SUFFIX}")
+
+    def _load_checkpoint(self, checkpoint_path: Path) -> Dict[str, Any]:
+        if not checkpoint_path.exists():
+            return {}
+        try:
+            payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _checkpoint_matches_task(
+        task: DownloadTask, checkpoint: Dict[str, Any], partial_bytes: int
+    ) -> bool:
+        if not checkpoint:
+            return False
+        if int(checkpoint.get("version") or -1) != CHECKPOINT_VERSION:
+            return False
+        if str(checkpoint.get("task_id") or "") != task.task_id:
+            return False
+        if str(checkpoint.get("download_url") or "") != task.download_url:
+            return False
+        if str(checkpoint.get("expected_sha256") or "") != task.expected_sha256:
+            return False
+        if str(checkpoint.get("filename") or "") != task.filename:
+            return False
+        if int(checkpoint.get("bytes_downloaded") or -1) != int(partial_bytes):
+            return False
+        return True
+
+    @staticmethod
+    def _validators_match(
+        checkpoint: Dict[str, Any], response_etag: str, response_last_modified: str
+    ) -> bool:
+        expected_etag = str(checkpoint.get("etag") or "").strip()
+        expected_last_modified = str(checkpoint.get("last_modified") or "").strip()
+        if expected_etag and response_etag and expected_etag != response_etag:
+            return False
+        if (
+            expected_last_modified
+            and response_last_modified
+            and expected_last_modified != response_last_modified
+        ):
+            return False
+        return True
+
+    def _save_checkpoint(
+        self,
+        checkpoint_path: Path,
+        task: DownloadTask,
+        *,
+        bytes_downloaded: int,
+        total_bytes: int,
+        etag: str,
+        last_modified: str,
+    ) -> None:
+        payload = {
+            "version": CHECKPOINT_VERSION,
+            "task_id": task.task_id,
+            "download_url": task.download_url,
+            "expected_sha256": task.expected_sha256,
+            "filename": task.filename,
+            "bytes_downloaded": max(0, int(bytes_downloaded)),
+            "total_bytes": max(0, int(total_bytes)),
+            "etag": str(etag or ""),
+            "last_modified": str(last_modified or ""),
+            "updated_at": time.time(),
+        }
+        _atomic_json_write(checkpoint_path, payload)
+        with self._lock:
+            current = self._tasks.get(task.task_id)
+            if current is not None:
+                current.last_checkpoint_at = payload["updated_at"]
+                self._persist_tasks_locked(force=False)
+
+    def _set_resume_status(self, task_id: str, status: str) -> None:
+        with self._lock:
+            current = self._tasks.get(task_id)
+            if current is None:
+                return
+            current.resume_status = str(status or "not_started")[:120]
+            current.updated_at = time.time()
+            self._persist_tasks_locked(force=True)
 
     def _tenant_ok(self, record_tenant: str, request_tenant: Optional[str]) -> bool:
         if not is_multi_tenant_enabled():
@@ -364,6 +614,7 @@ class ModelManager:
                 "error": task.error,
                 "source": task.source,
                 "source_label": task.source_label,
+                "resume_status": task.resume_status,
             },
         )
 
@@ -629,6 +880,7 @@ class ModelManager:
             expected_sha256=digest,
             provenance=provenance,
             tenant_id=self._normalize_tenant(tenant_id),
+            resume_status="queued_new",
         )
         with self._lock:
             self._tasks[task.task_id] = task
@@ -636,6 +888,7 @@ class ModelManager:
             self._futures[task.task_id] = self._executor.submit(
                 self._run_task, task.task_id
             )
+            self._persist_tasks_locked(force=True)
         self._emit(task)
         return task.to_dict()
 
@@ -648,7 +901,9 @@ class ModelManager:
             task.state = "running"
             task.started_at = time.time()
             task.updated_at = task.started_at
+            task.resume_status = task.resume_status or "running"
             self._emit(task)
+            self._persist_tasks_locked(force=True)
         try:
             staged_path, digest = self._download(task, cancel_event)
             with self._lock:
@@ -662,6 +917,7 @@ class ModelManager:
                 current.staged_path = staged_path
                 current.computed_sha256 = digest
                 self._emit(current)
+                self._persist_tasks_locked(force=True)
         except DownloadCancelled:
             with self._lock:
                 current = self._tasks.get(task_id)
@@ -672,6 +928,7 @@ class ModelManager:
                 current.updated_at = time.time()
                 current.finished_at = current.updated_at
                 self._emit(current)
+                self._persist_tasks_locked(force=True)
         except Exception as exc:
             with self._lock:
                 current = self._tasks.get(task_id)
@@ -682,6 +939,7 @@ class ModelManager:
                 current.updated_at = time.time()
                 current.finished_at = current.updated_at
                 self._emit(current)
+                self._persist_tasks_locked(force=True)
 
     def _download(
         self, task: DownloadTask, cancel_event: threading.Event
@@ -694,19 +952,117 @@ class ModelManager:
             policy=STANDARD_OUTBOUND_POLICY,
         )
         opener = _build_pinned_opener(pinned_ips)
-        req = urllib.request.Request(task.download_url, method="GET")
-        req.add_header("User-Agent", "ComfyUI-OpenClaw/F54")
         stage_dir = self.staging_dir / task.task_id
         stage_dir.mkdir(parents=True, exist_ok=True)
         part = stage_dir / f"{task.filename}.part"
+        checkpoint = self._checkpoint_path(part)
         final = stage_dir / task.filename
-        for p in (part, final):
-            if p.exists():
-                p.unlink()
+        if final.exists():
+            _safe_unlink(final)
+
+        resume_bytes = part.stat().st_size if part.exists() else 0
+        checkpoint_data = self._load_checkpoint(checkpoint)
+
+        if resume_bytes > 0 and self._checkpoint_matches_task(
+            task, checkpoint_data, resume_bytes
+        ):
+            digest = hashlib.sha256()
+            with open(part, "rb") as fh:
+                while True:
+                    chunk = fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+            self._set_resume_status(task.task_id, "resume_attempt")
+            (
+                downloaded,
+                total,
+                _etag,
+                _last_modified,
+                fallback_reason,
+            ) = self._stream_response_to_part(
+                opener=opener,
+                task=task,
+                cancel_event=cancel_event,
+                part=part,
+                checkpoint=checkpoint,
+                digest=digest,
+                resume_from=resume_bytes,
+                checkpoint_data=checkpoint_data,
+            )
+            if not fallback_reason:
+                got = digest.hexdigest()
+                if got != task.expected_sha256:
+                    _safe_unlink(part)
+                    _safe_unlink(checkpoint)
+                    raise ModelManagerError(
+                        "sha256_mismatch", f"expected {task.expected_sha256}, got {got}"
+                    )
+                os.replace(part, final)
+                _safe_unlink(checkpoint)
+                self._set_resume_status(task.task_id, "resumed_partial")
+                self._progress(task.task_id, downloaded, total or downloaded)
+                return str(final), got
+            self._set_resume_status(task.task_id, fallback_reason)
+
+        elif resume_bytes > 0:
+            # IMPORTANT: resume only when checkpoint metadata matches this task.
+            # Blindly appending without metadata validation can corrupt artifacts.
+            self._set_resume_status(task.task_id, "resume_fallback_checkpoint_mismatch")
+
+        _safe_unlink(part)
+        _safe_unlink(checkpoint)
         digest = hashlib.sha256()
-        downloaded = 0
-        total = 0
-        last_emit = 0.0
+        (
+            downloaded,
+            total,
+            _etag,
+            _last_modified,
+            fallback_reason,
+        ) = self._stream_response_to_part(
+            opener=opener,
+            task=task,
+            cancel_event=cancel_event,
+            part=part,
+            checkpoint=checkpoint,
+            digest=digest,
+            resume_from=0,
+            checkpoint_data={},
+        )
+        if fallback_reason:
+            raise ModelManagerError("download_resume_failed", fallback_reason)
+
+        got = digest.hexdigest()
+        if got != task.expected_sha256:
+            _safe_unlink(part)
+            _safe_unlink(checkpoint)
+            raise ModelManagerError(
+                "sha256_mismatch", f"expected {task.expected_sha256}, got {got}"
+            )
+        os.replace(part, final)
+        _safe_unlink(checkpoint)
+        if resume_bytes <= 0:
+            self._set_resume_status(task.task_id, "started_fresh")
+        self._progress(task.task_id, downloaded, total or downloaded)
+        return str(final), got
+
+    def _stream_response_to_part(
+        self,
+        *,
+        opener: Any,
+        task: DownloadTask,
+        cancel_event: threading.Event,
+        part: Path,
+        checkpoint: Path,
+        digest: "hashlib._Hash",
+        resume_from: int,
+        checkpoint_data: Dict[str, Any],
+    ) -> tuple[int, int, str, str, str]:
+        req = urllib.request.Request(task.download_url, method="GET")
+        req.add_header("User-Agent", "ComfyUI-OpenClaw/F65")
+        if resume_from > 0:
+            req.add_header("Range", f"bytes={resume_from}-")
+
         with opener.open(req, timeout=self.timeout_sec) as resp:
             code = int(resp.getcode() or 0)
             if code in (301, 302, 303, 307, 308):
@@ -716,13 +1072,68 @@ class ModelManager:
                 )
             if code >= 400:
                 raise ModelManagerError("download_http_error", f"HTTP {code}")
+
+            etag = str(resp.headers.get("ETag") or "").strip()
+            last_modified = str(resp.headers.get("Last-Modified") or "").strip()
+            content_length = 0
             try:
-                total = max(0, int(str(resp.headers.get("Content-Length") or "0")))
+                content_length = max(
+                    0,
+                    int(str(resp.headers.get("Content-Length") or "0")),
+                )
             except Exception:
-                total = 0
-            with open(part, "wb") as fh:
+                content_length = 0
+
+            if resume_from > 0:
+                if code != 206:
+                    return (
+                        resume_from,
+                        0,
+                        etag,
+                        last_modified,
+                        "resume_fallback_range_not_supported",
+                    )
+                if not self._validators_match(checkpoint_data, etag, last_modified):
+                    return (
+                        resume_from,
+                        0,
+                        etag,
+                        last_modified,
+                        "resume_fallback_validator_mismatch",
+                    )
+                range_start, _range_end, range_total = _parse_content_range(
+                    str(resp.headers.get("Content-Range") or "")
+                )
+                if range_start != resume_from:
+                    return (
+                        resume_from,
+                        0,
+                        etag,
+                        last_modified,
+                        "resume_fallback_content_range_mismatch",
+                    )
+                total = (
+                    range_total if range_total > 0 else (resume_from + content_length)
+                )
+                mode = "ab"
+                downloaded = resume_from
+            else:
+                total = content_length
+                mode = "wb"
+                downloaded = 0
+
+            last_emit = 0.0
+            with open(part, mode) as fh:
                 while True:
                     if cancel_event.is_set():
+                        self._save_checkpoint(
+                            checkpoint,
+                            task,
+                            bytes_downloaded=downloaded,
+                            total_bytes=total,
+                            etag=etag,
+                            last_modified=last_modified,
+                        )
                         raise DownloadCancelled()
                     chunk = resp.read(64 * 1024)
                     if not chunk:
@@ -733,19 +1144,25 @@ class ModelManager:
                     now = time.time()
                     if now - last_emit >= 0.35:
                         self._progress(task.task_id, downloaded, total)
+                        self._save_checkpoint(
+                            checkpoint,
+                            task,
+                            bytes_downloaded=downloaded,
+                            total_bytes=total,
+                            etag=etag,
+                            last_modified=last_modified,
+                        )
                         last_emit = now
-        got = digest.hexdigest()
-        if got != task.expected_sha256:
-            try:
-                part.unlink(missing_ok=True)  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            raise ModelManagerError(
-                "sha256_mismatch", f"expected {task.expected_sha256}, got {got}"
+            self._progress(task.task_id, downloaded, total or downloaded)
+            self._save_checkpoint(
+                checkpoint,
+                task,
+                bytes_downloaded=downloaded,
+                total_bytes=total,
+                etag=etag,
+                last_modified=last_modified,
             )
-        os.replace(part, final)
-        self._progress(task.task_id, downloaded, total or downloaded)
-        return str(final), got
+            return downloaded, total, etag, last_modified, ""
 
     def _progress(self, task_id: str, downloaded: int, total: int) -> None:
         with self._lock:
@@ -761,6 +1178,7 @@ class ModelManager:
             )
             task.updated_at = time.time()
             self._emit(task)
+            self._persist_tasks_locked(force=False)
 
     def list_download_tasks(
         self,
@@ -824,6 +1242,7 @@ class ModelManager:
                 task.finished_at = time.time()
                 task.updated_at = task.finished_at
             self._emit(task)
+            self._persist_tasks_locked(force=True)
             return task.to_dict()
 
     def import_downloaded_model(
@@ -916,6 +1335,7 @@ class ModelManager:
                 current.installation_record_id = rec["id"]
                 current.updated_at = time.time()
                 self._emit(current)
+                self._persist_tasks_locked(force=True)
         return rec
 
     def list_installations(
