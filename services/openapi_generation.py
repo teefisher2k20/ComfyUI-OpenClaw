@@ -23,10 +23,60 @@ class ContractRoute:
 
 BASE_PATH_RE = re.compile(r"^\*\*Base Path\*\*:\s*`([^`]+)`")
 SECTION_RE = re.compile(r"^###\s+(.+)$")
+VERSION_RE = re.compile(r"^>\s+\*\*Version\*\*:\s*([0-9]+(?:\.[0-9]+)*)\s*$")
+
+REASONING_REVEAL_ROUTE_DESCRIPTIONS = {
+    ("GET", "/trace/{prompt_id}"): (
+        "Trace payloads redact provider reasoning/thinking fields by default. "
+        "Privileged debug reveal is local-only and opt-in."
+    ),
+    ("GET", "/events"): (
+        "Event payloads redact provider reasoning/thinking fields by default. "
+        "Privileged debug reveal is local-only and opt-in."
+    ),
+    ("GET", "/events/stream"): (
+        "SSE event payloads redact provider reasoning/thinking fields by default. "
+        "Privileged debug reveal is local-only and opt-in."
+    ),
+    ("POST", "/assist/planner"): (
+        "Structured assist payloads preserve final answer fields while redacting "
+        "provider reasoning/thinking fields by default. Privileged debug reveal "
+        "is local-only and opt-in."
+    ),
+    ("POST", "/assist/refiner"): (
+        "Structured assist payloads preserve final answer fields while redacting "
+        "provider reasoning/thinking fields by default. Privileged debug reveal "
+        "is local-only and opt-in."
+    ),
+    ("POST", "/assist/planner/stream"): (
+        "Streaming assist final payloads redact provider reasoning/thinking "
+        "fields by default. Privileged debug reveal is local-only and opt-in."
+    ),
+    ("POST", "/assist/refiner/stream"): (
+        "Streaming assist final payloads redact provider reasoning/thinking "
+        "fields by default. Privileged debug reveal is local-only and opt-in."
+    ),
+}
+
+REASONING_REVEAL_PARAMETER_REFS = [
+    {"$ref": "#/components/parameters/OpenClawReasoningRevealHeader"},
+    {"$ref": "#/components/parameters/OpenClawReasoningRevealQuery"},
+]
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _parse_contract_version(path: Optional[str | Path] = None) -> str:
+    contract_path = (
+        Path(path) if path else (_repo_root() / "docs" / "release" / "api_contract.md")
+    )
+    for line in contract_path.read_text(encoding="utf-8").splitlines():
+        match = VERSION_RE.match(line.strip())
+        if match:
+            return match.group(1)
+    return "1.0.0"
 
 
 def _normalize_header_row(cells: List[str]) -> List[str]:
@@ -161,7 +211,9 @@ def _security_from_auth(auth_label: str) -> tuple[list[dict[str, list]], Optiona
     return [], None
 
 
-def build_openapi_document(routes: Iterable[ContractRoute]) -> Dict[str, Any]:
+def build_openapi_document(
+    routes: Iterable[ContractRoute], *, info_version: str = "1.0.0"
+) -> Dict[str, Any]:
     paths: Dict[str, Dict[str, Any]] = {}
     for route in routes:
         method_key = route.method.lower()
@@ -173,6 +225,11 @@ def build_openapi_document(routes: Iterable[ContractRoute]) -> Dict[str, Any]:
             "x-openclaw-auth": route.auth,
             "x-openclaw-section": route.section,
         }
+        reasoning_reveal_description = REASONING_REVEAL_ROUTE_DESCRIPTIONS.get(
+            (route.method, route.path)
+        )
+        if reasoning_reveal_description:
+            operation["description"] = reasoning_reveal_description
         if route.legacy_path:
             operation["x-openclaw-legacy-path"] = route.legacy_path
         if normalized_auth:
@@ -197,13 +254,19 @@ def build_openapi_document(routes: Iterable[ContractRoute]) -> Dict[str, Any]:
                     }
                 )
             operation["parameters"] = params
+        # IMPORTANT: keep generator-owned reveal params here; hand-editing docs/openapi.yaml
+        # causes drift against R66 parity tests and breaks pre-push verification.
+        if reasoning_reveal_description:
+            operation.setdefault("parameters", []).extend(
+                REASONING_REVEAL_PARAMETER_REFS
+            )
         paths.setdefault(route.path, {})[method_key] = operation
 
     return {
         "openapi": "3.0.3",
         "info": {
             "title": "ComfyUI-OpenClaw API",
-            "version": "1.0.0",
+            "version": info_version,
             "description": "Generated from docs/release/api_contract.md (R66 baseline).",
         },
         "servers": [
@@ -212,6 +275,32 @@ def build_openapi_document(routes: Iterable[ContractRoute]) -> Dict[str, Any]:
         ],
         "paths": paths,
         "components": {
+            "parameters": {
+                "OpenClawReasoningRevealHeader": {
+                    "name": "X-OpenClaw-Debug-Reveal-Reasoning",
+                    "in": "header",
+                    "required": False,
+                    "description": (
+                        "Debug-only opt-in for privileged reasoning reveal. "
+                        "Effective only when server-side enablement, admin "
+                        "authorization, loopback source, and permissive local "
+                        "posture all pass."
+                    ),
+                    "schema": {"type": "string", "enum": ["1"]},
+                },
+                "OpenClawReasoningRevealQuery": {
+                    "name": "debug_reasoning",
+                    "in": "query",
+                    "required": False,
+                    "description": (
+                        "Debug-only query opt-in for privileged reasoning reveal. "
+                        "Effective only when server-side enablement, admin "
+                        "authorization, loopback source, and permissive local "
+                        "posture all pass."
+                    ),
+                    "schema": {"type": "string", "enum": ["1"]},
+                },
+            },
             "securitySchemes": {
                 "OpenClawAdminToken": {
                     "type": "apiKey",
@@ -279,7 +368,7 @@ def to_yaml(data: Any, *, indent: int = 0) -> str:
 
 def generate_openapi_yaml(path: Optional[str | Path] = None) -> str:
     routes = parse_api_contract_markdown(path)
-    doc = build_openapi_document(routes)
+    doc = build_openapi_document(routes, info_version=_parse_contract_version(path))
     return to_yaml(doc) + "\n"
 
 

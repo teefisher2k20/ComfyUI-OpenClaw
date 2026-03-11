@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: "ComfyUI-OpenClaw API"
-  version: "1.0.1"
+  version: "1.0.5"
   description: "Generated from docs/release/api_contract.md (R66 baseline)."
 servers:
   - url: "/openclaw"
@@ -59,12 +59,12 @@ paths:
     get:
       operationId: "get_trace_prompt_id"
       summary: "Get execution trace by prompt ID."
-      description: "Trace payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
       x-openclaw-auth: "Observability"
       x-openclaw-section: "1.1 Core Observability & System"
+      description: "Trace payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       x-openclaw-legacy-path: "/moltbot/trace/{id}"
       x-openclaw-auth-tier: "observability"
       security:
@@ -82,12 +82,12 @@ paths:
     get:
       operationId: "get_events"
       summary: "List recent job lifecycle events (JSON polling fallback; includes pagination/scan diagnostics)."
-      description: "Event payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
       x-openclaw-auth: "Observability"
       x-openclaw-section: "1.1 Core Observability & System"
+      description: "Event payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       x-openclaw-legacy-path: "/moltbot/events"
       x-openclaw-auth-tier: "observability"
       security:
@@ -100,12 +100,12 @@ paths:
     get:
       operationId: "get_events_stream"
       summary: "SSE stream of job lifecycle events with resume support."
-      description: "SSE event payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
       x-openclaw-auth: "Observability"
       x-openclaw-section: "1.1 Core Observability & System"
+      description: "SSE event payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       x-openclaw-legacy-path: "/moltbot/events/stream"
       x-openclaw-auth-tier: "observability"
       security:
@@ -230,12 +230,12 @@ paths:
     post:
       operationId: "post_assist_planner"
       summary: "Planner structured prompt generation."
-      description: "Structured assist payloads preserve final answer fields while redacting provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
       x-openclaw-auth: "Admin/Local"
       x-openclaw-section: "1.3 Assist, LLM & Chat"
+      description: "Structured assist payloads preserve final answer fields while redacting provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       x-openclaw-legacy-path: "/moltbot/assist/planner"
       x-openclaw-auth-tier: "admin"
       security:
@@ -248,12 +248,12 @@ paths:
     post:
       operationId: "post_assist_refiner"
       summary: "Prompt refinement with optional image context."
-      description: "Structured assist payloads preserve final answer fields while redacting provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
       x-openclaw-auth: "Admin/Local"
       x-openclaw-section: "1.3 Assist, LLM & Chat"
+      description: "Structured assist payloads preserve final answer fields while redacting provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       x-openclaw-legacy-path: "/moltbot/assist/refiner"
       x-openclaw-auth-tier: "admin"
       security:
@@ -266,12 +266,12 @@ paths:
     post:
       operationId: "post_assist_planner_stream"
       summary: "Optional SSE-style planner streaming response (`text/event-stream`) with staged progress + final payload."
-      description: "Streaming assist final payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
       x-openclaw-auth: "Admin/Local"
       x-openclaw-section: "1.3 Assist, LLM & Chat"
+      description: "Streaming assist final payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       x-openclaw-legacy-path: "/moltbot/assist/planner/stream"
       x-openclaw-auth-tier: "admin"
       security:
@@ -285,12 +285,12 @@ paths:
     post:
       operationId: "post_assist_refiner_stream"
       summary: "Optional SSE-style refiner streaming response (`text/event-stream`) with staged progress + final payload."
-      description: "Streaming assist final payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
       x-openclaw-auth: "Admin/Local"
       x-openclaw-section: "1.3 Assist, LLM & Chat"
+      description: "Streaming assist final payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       x-openclaw-legacy-path: "/moltbot/assist/refiner/stream"
       x-openclaw-auth-tier: "admin"
       security:
@@ -704,7 +704,8 @@ components:
       description: "Debug-only opt-in for privileged reasoning reveal. Effective only when server-side enablement, admin authorization, loopback source, and permissive local posture all pass."
       schema:
         type: "string"
-        enum: ["1"]
+        enum:
+          - "1"
     OpenClawReasoningRevealQuery:
       name: "debug_reasoning"
       in: "query"
@@ -712,7 +713,8 @@ components:
       description: "Debug-only query opt-in for privileged reasoning reveal. Effective only when server-side enablement, admin authorization, loopback source, and permissive local posture all pass."
       schema:
         type: "string"
-        enum: ["1"]
+        enum:
+          - "1"
   securitySchemes:
     OpenClawAdminToken:
       type: "apiKey"

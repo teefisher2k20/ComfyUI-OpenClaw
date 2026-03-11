@@ -23,6 +23,8 @@ class TestR66OpenApiGeneration(unittest.TestCase):
         self.assertIn("OpenClawObservabilityToken", text)
         self.assertIn("/approvals:", text)
         self.assertIn("x-openclaw-auth:", text)
+        self.assertIn("OpenClawReasoningRevealHeader", text)
+        self.assertIn('name: "debug_reasoning"', text)
 
     def test_write_openapi_yaml_writes_file(self):
         from services.openapi_generation import write_openapi_yaml
