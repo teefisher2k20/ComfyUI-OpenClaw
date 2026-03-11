@@ -95,6 +95,18 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Reasoning trace redaction hardening and privileged local-debug reveal gate</strong></summary>
+
+- Added a shared reasoning-redaction boundary helper so reasoning/thinking-like fields are stripped by default from assist responses, event/SSE payloads, trace responses, callback payloads, and connector-facing trace formatting.
+- Added an explicit privileged reveal path that now requires request opt-in, server-side debug enablement, admin authorization, loopback source, and permissive local posture, with audit visibility for reveal attempts.
+- Kept final user-visible answers intact while preventing internal reasoning traces from leaking through default operator-facing serializers.
+- Closed a serializer compatibility regression found during full-gate validation and hardened WSL `/mnt/*` Playwright stability with environment-aware worker and readiness-timeout guardrails.
+- Validated with the full SOP gate on WSL (detect-secrets, pre-commit, backend full suite, real-backend lanes, adversarial gate, and frontend Playwright E2E).
+
+</details>
+
+<details>
+
 <summary><strong>Model Manager reliability upgrade: resumable downloads and restart-safe recovery</strong></summary>
 
 - Added resumable managed download support using staged `.part` artifacts plus checkpoint metadata, so interrupted transfers can continue via HTTP Range when upstream contracts are compatible.
