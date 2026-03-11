@@ -47,7 +47,9 @@ class TestS72ReasoningHelper(unittest.TestCase):
         self.assertEqual(cleaned["text"], "final answer")
         self.assertNotIn("reasoning", cleaned)
         self.assertNotIn("thinking", cleaned["meta"])
-        self.assertEqual(cleaned["meta"]["content"], [{"type": "text", "text": "visible"}])
+        self.assertEqual(
+            cleaned["meta"]["content"], [{"type": "text", "text": "visible"}]
+        )
 
     def test_extract_reasoning_payload_returns_reasoning_only(self):
         payload = {
@@ -64,13 +66,21 @@ class TestS72ReasoningHelper(unittest.TestCase):
         reasoning = extract_reasoning_payload(payload)
 
         self.assertEqual(reasoning["meta"]["thinking"], "secret")
-        self.assertEqual(reasoning["meta"]["content"], [{"type": "reasoning", "text": "step 1"}])
+        self.assertEqual(
+            reasoning["meta"]["content"], [{"type": "reasoning", "text": "step 1"}]
+        )
 
     def test_resolve_reasoning_reveal_denies_non_local_posture(self):
         request = SimpleNamespace(headers={REASONING_REVEAL_HEADER: "1"}, query={})
         with (
-            patch.dict(os.environ, {REASONING_REVEAL_ENV: "1", "OPENCLAW_DEPLOYMENT_PROFILE": "public"}, clear=False),
-            patch("services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"),
+            patch.dict(
+                os.environ,
+                {REASONING_REVEAL_ENV: "1", "OPENCLAW_DEPLOYMENT_PROFILE": "public"},
+                clear=False,
+            ),
+            patch(
+                "services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"
+            ),
         ):
             decision = resolve_reasoning_reveal(request, admin_authorized=True)
 
@@ -99,13 +109,20 @@ class TestS72AssistHandlers(unittest.IsolatedAsyncioTestCase):
                 "seed": 7,
             }
         )
-        self.handler.planner.consume_last_reasoning_debug.return_value = {"reasoning": "hidden"}
+        self.handler.planner.consume_last_reasoning_debug.return_value = {
+            "reasoning": "hidden"
+        }
 
         with (
             patch("api.assist.require_admin_token", return_value=(True, None)),
             patch("api.assist.check_rate_limit", return_value=True),
-            patch("services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"),
-            patch("api.assist.run_in_thread", return_value=("pos", "neg", {"steps": 20, "reasoning": "private"})),
+            patch(
+                "services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"
+            ),
+            patch(
+                "api.assist.run_in_thread",
+                return_value=("pos", "neg", {"steps": 20, "reasoning": "private"}),
+            ),
         ):
             resp = await self.handler.planner_handler(request)
 
@@ -126,14 +143,21 @@ class TestS72AssistHandlers(unittest.IsolatedAsyncioTestCase):
                 "seed": 7,
             }
         )
-        self.handler.planner.consume_last_reasoning_debug.return_value = {"reasoning": "hidden"}
+        self.handler.planner.consume_last_reasoning_debug.return_value = {
+            "reasoning": "hidden"
+        }
 
         with (
             patch.dict(os.environ, {REASONING_REVEAL_ENV: "1"}, clear=False),
             patch("api.assist.require_admin_token", return_value=(True, None)),
             patch("api.assist.check_rate_limit", return_value=True),
-            patch("services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"),
-            patch("api.assist.run_in_thread", return_value=("pos", "neg", {"steps": 20, "reasoning": "private"})),
+            patch(
+                "services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"
+            ),
+            patch(
+                "api.assist.run_in_thread",
+                return_value=("pos", "neg", {"steps": 20, "reasoning": "private"}),
+            ),
         ):
             resp = await self.handler.planner_handler(request)
 
@@ -154,7 +178,9 @@ class TestS72AssistHandlers(unittest.IsolatedAsyncioTestCase):
                 "seed": 7,
             }
         )
-        self.handler.planner.consume_last_reasoning_debug.return_value = {"reasoning": "hidden"}
+        self.handler.planner.consume_last_reasoning_debug.return_value = {
+            "reasoning": "hidden"
+        }
 
         with (
             patch.dict(
@@ -164,8 +190,12 @@ class TestS72AssistHandlers(unittest.IsolatedAsyncioTestCase):
             ),
             patch("api.assist.require_admin_token", return_value=(True, None)),
             patch("api.assist.check_rate_limit", return_value=True),
-            patch("services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"),
-            patch("api.assist.run_in_thread", return_value=("pos", "neg", {"steps": 20})),
+            patch(
+                "services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"
+            ),
+            patch(
+                "api.assist.run_in_thread", return_value=("pos", "neg", {"steps": 20})
+            ),
         ):
             resp = await self.handler.planner_handler(request)
 
@@ -187,7 +217,9 @@ class TestS72EventsAndTrace(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("reasoning", evt.to_dict()["data"])
         self.assertIn('"status":"ok"', evt.to_sse())
         self.assertNotIn("hidden", evt.to_sse())
-        self.assertEqual(evt.to_dict(include_reasoning=True)["data"]["reasoning"], "hidden")
+        self.assertEqual(
+            evt.to_dict(include_reasoning=True)["data"]["reasoning"], "hidden"
+        )
 
     @unittest.skipUnless(AIOHTTP_AVAILABLE, "aiohttp not available")
     async def test_trace_handler_redacts_reasoning_by_default(self):
@@ -205,10 +237,16 @@ class TestS72EventsAndTrace(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(api.routes, "web", mock_web),
-            patch.object(api.routes, "_ensure_observability_deps_ready", return_value=(True, None)),
+            patch.object(
+                api.routes,
+                "_ensure_observability_deps_ready",
+                return_value=(True, None),
+            ),
             patch.object(api.routes, "require_admin_token", return_value=(True, None)),
             patch.object(api.routes, "trace_store") as mock_trace_store,
-            patch("services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"),
+            patch(
+                "services.reasoning_redaction.get_client_ip", return_value="127.0.0.1"
+            ),
         ):
             mock_trace_store.get.return_value = mock_record
             await api.routes.trace_handler(mock_request)
@@ -233,16 +271,28 @@ class TestS72CallbackDelivery(unittest.IsolatedAsyncioTestCase):
             raise AssertionError(f"unexpected func: {func}")
 
         with (
-            patch.object(callback_delivery, "run_io_in_thread", side_effect=fake_run_io),
-            patch.object(callback_delivery.asyncio, "sleep", AsyncMock(return_value=None)),
-            patch.object(callback_delivery, "get_callback_allow_hosts", return_value={"example.com"}),
+            patch.object(
+                callback_delivery, "run_io_in_thread", side_effect=fake_run_io
+            ),
+            patch.object(
+                callback_delivery.asyncio, "sleep", AsyncMock(return_value=None)
+            ),
+            patch.object(
+                callback_delivery,
+                "get_callback_allow_hosts",
+                return_value={"example.com"},
+            ),
             patch.object(callback_delivery, "get_job_status", return_value="completed"),
             patch.object(
                 callback_delivery,
                 "extract_images",
-                return_value=[{"url": "https://example.com/x.png", "reasoning": "hidden"}],
+                return_value=[
+                    {"url": "https://example.com/x.png", "reasoning": "hidden"}
+                ],
             ),
-            patch.object(callback_delivery, "get_job_event_store", return_value=MagicMock()),
+            patch.object(
+                callback_delivery, "get_job_event_store", return_value=MagicMock()
+            ),
             patch.object(callback_delivery.trace_store, "add_event", return_value=None),
         ):
             await callback_delivery._watch_and_deliver(

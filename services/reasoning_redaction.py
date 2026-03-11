@@ -151,9 +151,11 @@ def resolve_reasoning_reveal(request: Any, *, admin_authorized: bool) -> Dict[st
     query = getattr(request, "query", {}) or {}
     if not isinstance(query, Mapping):
         query = {}
-    requested = _is_truthy_flag(headers.get(REASONING_REVEAL_HEADER)) or _is_truthy_flag(
-        headers.get(LEGACY_REASONING_REVEAL_HEADER)
-    ) or _is_truthy_flag(query.get(REASONING_REVEAL_QUERY))
+    requested = (
+        _is_truthy_flag(headers.get(REASONING_REVEAL_HEADER))
+        or _is_truthy_flag(headers.get(LEGACY_REASONING_REVEAL_HEADER))
+        or _is_truthy_flag(query.get(REASONING_REVEAL_QUERY))
+    )
 
     deployment_profile = (
         os.environ.get("OPENCLAW_DEPLOYMENT_PROFILE", "").strip().lower() or "local"
@@ -199,7 +201,11 @@ def resolve_reasoning_reveal(request: Any, *, admin_authorized: bool) -> Dict[st
 
 
 def audit_reasoning_reveal(
-    request: Any, *, target: str, decision: Dict[str, Any], extra_details: Dict[str, Any] | None = None
+    request: Any,
+    *,
+    target: str,
+    decision: Dict[str, Any],
+    extra_details: Dict[str, Any] | None = None,
 ) -> None:
     """Emit an audit event for explicit reasoning reveal attempts."""
     if not decision.get("requested"):
