@@ -93,6 +93,7 @@ OPENCLAW_TRUST_X_FORWARDED_FOR=0
 OPENCLAW_ENABLE_EXTERNAL_TOOLS=0
 OPENCLAW_ENABLE_REGISTRY_SYNC=0
 OPENCLAW_ENABLE_TRANSFORMS=0
+OPENCLAW_DEBUG_REASONING_REVEAL=0
 OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0
 OPENCLAW_ALLOW_INSECURE_BASE_URL=0
 OPENCLAW_SECURITY_DANGEROUS_BIND_OVERRIDE=0
@@ -112,10 +113,11 @@ OPENCLAW_ADMIN_TOKEN=change-this-local-admin-token
 2. Keep remote admin disabled.
 3. Keep external tools/registry sync/transforms disabled unless explicitly needed.
 4. For local LLM providers (Ollama/LM Studio), use loopback URLs only (`localhost`/`127.0.0.1`/`::1`); keep `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0` and `OPENCLAW_ALLOW_INSECURE_BASE_URL=0`.
-5. Keep `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0` unless you explicitly need local CLI/no-origin compatibility.
-6. Run:
+5. Keep `OPENCLAW_DEBUG_REASONING_REVEAL=0` unless you are doing short-lived local admin debugging and explicitly need privileged reasoning reveal.
+6. Keep `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0` unless you explicitly need local CLI/no-origin compatibility.
+7. Run:
    - `python scripts/check_deployment_profile.py --profile local`
-7. If you enable optional high-risk features, document why and time-box the change.
+8. If you enable optional high-risk features, document why and time-box the change.
 
 ## 4. LAN (Trusted Subnet)
 
@@ -137,6 +139,7 @@ OPENCLAW_WEBHOOK_REQUIRE_REPLAY_PROTECTION=1
 OPENCLAW_ENABLE_EXTERNAL_TOOLS=0
 OPENCLAW_ENABLE_REGISTRY_SYNC=0
 OPENCLAW_ENABLE_TRANSFORMS=0
+OPENCLAW_DEBUG_REASONING_REVEAL=0
 OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0
 OPENCLAW_ALLOW_INSECURE_BASE_URL=0
 OPENCLAW_SECURITY_DANGEROUS_BIND_OVERRIDE=0
@@ -201,6 +204,7 @@ OPENCLAW_CALLBACK_ALLOW_HOSTS=example.com,api.example.com
 OPENCLAW_ENABLE_EXTERNAL_TOOLS=0
 OPENCLAW_ENABLE_REGISTRY_SYNC=0
 OPENCLAW_ENABLE_TRANSFORMS=0
+OPENCLAW_DEBUG_REASONING_REVEAL=0
 OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0
 OPENCLAW_ALLOW_INSECURE_BASE_URL=0
 OPENCLAW_SECURITY_DANGEROUS_BIND_OVERRIDE=0
@@ -218,9 +222,10 @@ OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0
    - deny ComfyUI-native high-risk paths (`/prompt`, `/history*`, `/view*`, `/upload*`, `/ws`) and `/api/*` equivalents.
 4. Set `OPENCLAW_PUBLIC_SHARED_SURFACE_BOUNDARY_ACK=1` only after step 3 and network ACL hardening are in place.
 5. Enforce split control plane in public posture (`OPENCLAW_CONTROL_PLANE_MODE=split` + external URL/TOKEN).
-6. If any connector platform token/enable flag is configured, set corresponding platform allowlist vars before startup (`DP-PUBLIC-009` fail-closed).
-7. Keep risky features disabled on public user-facing plane.
-8. Keep `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0` in public deployments.
+6. Keep `OPENCLAW_DEBUG_REASONING_REVEAL=0`; privileged reasoning reveal is for local debugging only and must not be enabled on public user planes.
+7. If any connector platform token/enable flag is configured, set corresponding platform allowlist vars before startup (`DP-PUBLIC-009` fail-closed).
+8. Keep risky features disabled on public user-facing plane.
+9. Keep `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0` in public deployments.
 9. Verify split posture from capabilities:
    - `GET /openclaw/capabilities` and confirm `control_plane.mode=split`
 10. Run:

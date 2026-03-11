@@ -103,6 +103,31 @@ export OPENCLAW_ADMIN_TOKEN="your-secure-random-admin-token-here"
 
 Then configure your proxy or client to send the header `X-OpenClaw-Obs-Token: your-secure-random-token-here` (legacy: `X-Moltbot-Obs-Token`).
 
+### 1.1 Reasoning Debug Reveal Boundary (Local-only)
+
+Operator-facing payloads strip provider reasoning / thinking traces by default across:
+
+- assist responses
+- event / SSE payloads
+- trace responses
+- callback payloads
+- connector trace/debug replies
+
+There is a privileged local-debug reveal path for troubleshooting, but it is fail-closed unless **all** of the following are true:
+
+- request explicitly opts in via `X-OpenClaw-Debug-Reveal-Reasoning: 1` or `?debug_reasoning=1`
+- server-side debug switch is enabled with `OPENCLAW_DEBUG_REASONING_REVEAL=1`
+- request is admin-authorized
+- client IP resolves to loopback
+- deployment profile is `local` or `lan`
+- runtime profile is not hardened
+
+Operational rules:
+
+- do not enable `OPENCLAW_DEBUG_REASONING_REVEAL` on public deployments
+- treat any successful reveal as privileged debugging activity and review related audit events (`reasoning.debug_reveal`)
+- the reveal path appends debug reasoning payloads only for the privileged request; default operator outputs remain redacted
+
 ### 2. Trusted Proxy Attribution
 
 If using a reverse proxy, OpenClaw needs to know the *real* client IP for rate limiting enforcement.

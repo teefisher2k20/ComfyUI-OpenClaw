@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: "ComfyUI-OpenClaw API"
-  version: "1.0.0"
+  version: "1.0.1"
   description: "Generated from docs/release/api_contract.md (R66 baseline)."
 servers:
   - url: "/openclaw"
@@ -59,6 +59,7 @@ paths:
     get:
       operationId: "get_trace_prompt_id"
       summary: "Get execution trace by prompt ID."
+      description: "Trace payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
@@ -75,10 +76,13 @@ paths:
           required: true
           schema:
             type: "string"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealHeader"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealQuery"
   /events:
     get:
       operationId: "get_events"
       summary: "List recent job lifecycle events (JSON polling fallback; includes pagination/scan diagnostics)."
+      description: "Event payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
@@ -89,10 +93,14 @@ paths:
       security:
         - OpenClawObservabilityToken:
             []
+      parameters:
+        - $ref: "#/components/parameters/OpenClawReasoningRevealHeader"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealQuery"
   /events/stream:
     get:
       operationId: "get_events_stream"
       summary: "SSE stream of job lifecycle events with resume support."
+      description: "SSE event payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
@@ -104,6 +112,9 @@ paths:
         - OpenClawObservabilityToken:
             []
       x-openclaw-streaming: true
+      parameters:
+        - $ref: "#/components/parameters/OpenClawReasoningRevealHeader"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealQuery"
   /config:
     get:
       operationId: "get_config"
@@ -219,6 +230,7 @@ paths:
     post:
       operationId: "post_assist_planner"
       summary: "Planner structured prompt generation."
+      description: "Structured assist payloads preserve final answer fields while redacting provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
@@ -229,10 +241,14 @@ paths:
       security:
         - OpenClawAdminToken:
             []
+      parameters:
+        - $ref: "#/components/parameters/OpenClawReasoningRevealHeader"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealQuery"
   /assist/refiner:
     post:
       operationId: "post_assist_refiner"
       summary: "Prompt refinement with optional image context."
+      description: "Structured assist payloads preserve final answer fields while redacting provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
@@ -243,10 +259,14 @@ paths:
       security:
         - OpenClawAdminToken:
             []
+      parameters:
+        - $ref: "#/components/parameters/OpenClawReasoningRevealHeader"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealQuery"
   /assist/planner/stream:
     post:
       operationId: "post_assist_planner_stream"
       summary: "Optional SSE-style planner streaming response (`text/event-stream`) with staged progress + final payload."
+      description: "Streaming assist final payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
@@ -258,10 +278,14 @@ paths:
         - OpenClawAdminToken:
             []
       x-openclaw-streaming: true
+      parameters:
+        - $ref: "#/components/parameters/OpenClawReasoningRevealHeader"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealQuery"
   /assist/refiner/stream:
     post:
       operationId: "post_assist_refiner_stream"
       summary: "Optional SSE-style refiner streaming response (`text/event-stream`) with staged progress + final payload."
+      description: "Streaming assist final payloads redact provider reasoning/thinking fields by default. Privileged debug reveal is local-only and opt-in."
       responses:
         200:
           description: "OK"
@@ -273,6 +297,9 @@ paths:
         - OpenClawAdminToken:
             []
       x-openclaw-streaming: true
+      parameters:
+        - $ref: "#/components/parameters/OpenClawReasoningRevealHeader"
+        - $ref: "#/components/parameters/OpenClawReasoningRevealQuery"
   /connector/installations:
     get:
       operationId: "get_connector_installations"
@@ -669,6 +696,23 @@ paths:
       x-openclaw-auth: "Unknown"
       x-openclaw-section: "1.6 Bridge (Sidecar)"
 components:
+  parameters:
+    OpenClawReasoningRevealHeader:
+      name: "X-OpenClaw-Debug-Reveal-Reasoning"
+      in: "header"
+      required: false
+      description: "Debug-only opt-in for privileged reasoning reveal. Effective only when server-side enablement, admin authorization, loopback source, and permissive local posture all pass."
+      schema:
+        type: "string"
+        enum: ["1"]
+    OpenClawReasoningRevealQuery:
+      name: "debug_reasoning"
+      in: "query"
+      required: false
+      description: "Debug-only query opt-in for privileged reasoning reveal. Effective only when server-side enablement, admin authorization, loopback source, and permissive local posture all pass."
+      schema:
+        type: "string"
+        enum: ["1"]
   securitySchemes:
     OpenClawAdminToken:
       type: "apiKey"

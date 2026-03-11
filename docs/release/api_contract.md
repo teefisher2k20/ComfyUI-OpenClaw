@@ -1,8 +1,8 @@
 # OpenClaw API Contract (v1)
 
 > **Status**: normative
-> **Version**: 1.0.4
-> **Date**: 2026-03-07
+> **Version**: 1.0.5
+> **Date**: 2026-03-12
 
 This document defines the public API contract for OpenClaw. It serves as the authoritative baseline for client compatibility and breaking change policies.
 
@@ -47,6 +47,18 @@ All new integrations should use the `/openclaw/` prefix. Use of `/moltbot/` is d
 | `PUT` | `/config` | `/moltbot/config` | Admin | Update system configuration. |
 | `GET` | `/jobs` | `/moltbot/jobs` | Observability | List recent jobs (Stub/Not Implemented). |
 
+Reasoning-content redaction contract:
+
+- operator-visible trace and events payloads strip provider reasoning / thinking-like fields by default
+- privileged reveal is opt-in only and requires:
+  - request header `X-OpenClaw-Debug-Reveal-Reasoning: 1` or query `debug_reasoning=1`
+  - server-side enablement via `OPENCLAW_DEBUG_REASONING_REVEAL=1`
+  - admin authorization
+  - loopback source
+  - non-hardened runtime profile
+  - deployment profile `local` or `lan`
+- clients MUST treat reveal behavior as debug-only and MUST NOT depend on reasoning payload presence in normal operation
+
 ### 1.2 Webhooks & Triggers
 
 **Auth**: Requires configured webhook secret or Admin Token.
@@ -69,6 +81,11 @@ All new integrations should use the `/openclaw/` prefix. Use of `/moltbot/` is d
 | `POST` | `/assist/refiner` | `/moltbot/assist/refiner` | Admin/Local | Prompt refinement with optional image context. |
 | `POST` | `/assist/planner/stream` | `/moltbot/assist/planner/stream` | Admin/Local | Optional SSE-style planner streaming response (`text/event-stream`) with staged progress + final payload. |
 | `POST` | `/assist/refiner/stream` | `/moltbot/assist/refiner/stream` | Admin/Local | Optional SSE-style refiner streaming response (`text/event-stream`) with staged progress + final payload. |
+
+Assist payload redaction contract:
+
+- structured assist responses preserve final operator-visible answer fields but strip provider reasoning / chain-of-thought style fields by default
+- when the privileged reveal gate is allowed, debug reasoning is exposed only in a separate debug payload and not merged back into the normal structured answer fields
 
 ### 1.3B Connector Installation Diagnostics
 
@@ -192,6 +209,7 @@ Tenant-boundary error notes:
   - `error`
   - `keepalive`
 - Clients MUST treat `final` as the source of truth for structured assist results. `delta` preview text is best-effort and may be truncated or differ from the final parsed payload.
+- Event-stream and polling payloads redact provider reasoning / thinking traces by default; reveal is debug-only and gated by the same privileged local-debug contract used by trace/assist surfaces.
 - Clients SHOULD gracefully fall back to non-streaming assist endpoints when streaming capability is absent or streaming transport fails.
 
 ### 2.4 Pagination & Scan Diagnostics (Management Query Contract)

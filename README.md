@@ -50,11 +50,12 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 
 ## Security stance (how this project differs from convenience-first automation packs):
 
-- Multi-tenant boundary model rejects cross-tenant mismatches fail-closed and keeps tenant-scoped isolation across config, secret sources, connector installations, approvals, presets/templates visibility, and execution concurrency budgets, with explicit compatibility fallback controls
 - Public profile requires explicit shared-surface boundary acknowledgement to reduce accidental exposure of ComfyUI-native high-risk routes behind reverse proxies
 - Public MAE route-plane posture is guaranteed by startup enforcement plus no-skip CI route-drift checks
 - Public deployments enforce Control Plane Split so high-risk controls are externalized and embedded UI stays on safer read/UX surfaces
 - Runtime profile startup hardening is fail-closed in hardened mode
+- Multi-tenant boundary model rejects cross-tenant mismatches fail-closed and keeps tenant-scoped isolation across config, secret sources, connector installations, approvals, presets/templates visibility, and execution concurrency budgets, with explicit compatibility fallback controls
+- Operator-facing outputs redact provider reasoning/thinking traces by default across assist, events, traces, callbacks, and connector replies; privileged local-debug reveal is explicit, loopback/admin-gated, auditable, and fail-closed outside permissive local posture
 - Connector ingress is fail-closed in public/hardened posture when platform allowlists are missing, with synchronized startup gate, deployment-profile check, Security Doctor posture, and startup audit visibility
 - Admin write actions are protected by an explicit **Admin Token** boundary
 - Webhook ingress is **deny-by-default** until authentication is configured
@@ -62,7 +63,10 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 - Bridge worker ingress enforces device token auth, scope checks, and idempotency handling
 - Outbound SSRF policy is strict for callbacks and custom LLM base URLs
 - External tool sandboxing is fail-closed with filesystem path guards
+- Secrets are never stored in browser storage; optional server-side key store remains local-only convenience
+- Secrets-at-rest encryption depends on cryptography; WeChat AES ingress stays optional via `pycryptodomex`
 - Optional local secret-manager integration supports 1Password CLI with explicit enable + command allowlist fail-closed controls while keeping frontend surfaces secret-blind
+- Cryptographic lifecycle drills emit machine-readable evidence for rotate/revoke/key-loss/token-compromise fail-closed exercises
 - Layered config resolution is deterministic (`env > runtime override > persisted > default`) with compatibility aliases preserved, reducing config drift/misrouting risk across API/node/runtime paths
 - Module capability gates prevent disabled modules from registering routes/workers
 - Endpoint inventory metadata plus route-drift tests catch unclassified API exposure regressions
@@ -71,9 +75,6 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 - Replay risk is reduced with deterministic dedupe keys for payloads without message IDs
 - Localhost-first defaults remain in place; remote access is explicit opt-in
 - Localhost no-origin CSRF override posture is surfaced in startup logs, Security Doctor, and audit visibility
-- Secrets are never stored in browser storage; optional server-side key store remains local-only convenience
-- Secrets-at-rest encryption depends on cryptography; WeChat AES ingress stays optional via `pycryptodomex`
-- Cryptographic lifecycle drills emit machine-readable evidence for rotate/revoke/key-loss/token-compromise fail-closed exercises
 - Runtime guardrails are runtime-only, with diagnostics, clamping, and reject-on-persist behavior for safety-critical limits
 - Management queries enforce deterministic pagination normalization and bounded scans against malformed or unbounded admin/list requests
 - Retry partition hardening separates rate-limit and transport budgets with deterministic degrade decisions and lane-level diagnostics/audit evidence
@@ -95,6 +96,17 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Model Manager reliability upgrade: resumable downloads and restart-safe recovery</strong></summary>
+
+- Added resumable managed download support using staged `.part` artifacts plus checkpoint metadata, so interrupted transfers can continue via HTTP Range when upstream contracts are compatible.
+- Added deterministic fallback-to-full restart paths when resume preconditions fail (range unsupported, validator drift, content-range mismatch) without bypassing existing provenance/SHA256 import gates.
+- Added persisted download task registry with startup recovery replay and bounded replay limit control (`OPENCLAW_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT`) to prevent unbounded restart churn.
+- Added backend regression coverage for resume success, fallback behavior, and replay-limit overflow handling, then validated with the full SOP gate.
+
+</details>
+
+<details>
+
 <summary><strong>Reasoning trace redaction hardening and privileged local-debug reveal gate</strong></summary>
 
 - Added a shared reasoning-redaction boundary helper so reasoning/thinking-like fields are stripped by default from assist responses, event/SSE payloads, trace responses, callback payloads, and connector-facing trace formatting.
@@ -102,17 +114,6 @@ Deployment profiles and hardening checklists:
 - Kept final user-visible answers intact while preventing internal reasoning traces from leaking through default operator-facing serializers.
 - Closed a serializer compatibility regression found during full-gate validation and hardened WSL `/mnt/*` Playwright stability with environment-aware worker and readiness-timeout guardrails.
 - Validated with the full SOP gate on WSL (detect-secrets, pre-commit, backend full suite, real-backend lanes, adversarial gate, and frontend Playwright E2E).
-
-</details>
-
-<details>
-
-<summary><strong>Model Manager reliability upgrade: resumable downloads and restart-safe recovery</strong></summary>
-
-- Added resumable managed download support using staged `.part` artifacts plus checkpoint metadata, so interrupted transfers can continue via HTTP Range when upstream contracts are compatible.
-- Added deterministic fallback-to-full restart paths when resume preconditions fail (range unsupported, validator drift, content-range mismatch) without bypassing existing provenance/SHA256 import gates.
-- Added persisted download task registry with startup recovery replay and bounded replay limit control (`OPENCLAW_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT`) to prevent unbounded restart churn.
-- Added backend regression coverage for resume success, fallback behavior, and replay-limit overflow handling, then validated with the full SOP gate.
 
 </details>
 
@@ -877,6 +878,8 @@ Access control:
 
 - loopback is allowed
 - remote access requires `OPENCLAW_OBSERVABILITY_TOKEN` via `X-OpenClaw-Obs-Token`
+- trace/events payloads redact provider reasoning/thinking-like content by default; do not treat them as stable client-facing fields
+- privileged debug reveal is opt-in via `X-OpenClaw-Debug-Reveal-Reasoning: 1` or `?debug_reasoning=1`, and only becomes effective when server-side debug enablement, admin auth, loopback source, and permissive local posture all pass
 
 ### LLM config (non-secret)
 
@@ -899,6 +902,7 @@ Notes:
 
 - Queue submission uses `OPENCLAW_COMFYUI_URL` (default `http://127.0.0.1:8188`).
 - Planner/Refiner UI uses capability-gated assist streaming when available and falls back to the non-stream endpoints automatically.
+- Assist endpoints preserve final user-visible answer fields while redacting provider reasoning/thinking-like content by default; privileged reveal, when allowed, is appended only as debug data and must not be treated as a normal client contract.
 - Planner profiles/system prompt are file-backed:
   - package defaults: `data/planner/profiles.json`, `data/planner/system_prompt.txt`
   - operator overrides: `<OPENCLAW_STATE_DIR>/planner/profiles.json`, `<OPENCLAW_STATE_DIR>/planner/system_prompt.txt`
