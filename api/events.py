@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from inspect import signature
 from typing import Any, Dict
 
 try:
@@ -22,17 +23,31 @@ except ModuleNotFoundError:  # pragma: no cover
     web = None  # type: ignore
 
 if __package__ and "." in __package__:
-    from ..services.access_control import require_observability_access
+    from ..services.access_control import (
+        require_admin_token,
+        require_observability_access,
+    )
     from ..services.job_events import get_job_event_store
     from ..services.management_query import normalize_cursor_limit
     from ..services.metrics import metrics
     from ..services.rate_limit import check_rate_limit
+    from ..services.reasoning_redaction import (
+        audit_reasoning_reveal,
+        resolve_reasoning_reveal,
+    )
 else:  # pragma: no cover
-    from services.access_control import require_observability_access  # type: ignore
+    from services.access_control import (  # type: ignore
+        require_admin_token,
+        require_observability_access,
+    )
     from services.job_events import get_job_event_store  # type: ignore
     from services.management_query import normalize_cursor_limit  # type: ignore
     from services.metrics import metrics  # type: ignore
     from services.rate_limit import check_rate_limit  # type: ignore
+    from services.reasoning_redaction import (  # type: ignore
+        audit_reasoning_reveal,
+        resolve_reasoning_reveal,
+    )
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.events")
 
@@ -40,6 +55,23 @@ logger = logging.getLogger("ComfyUI-OpenClaw.api.events")
 SSE_KEEPALIVE_SEC = 15
 # Maximum SSE connection duration (seconds) — prevents zombie connections
 SSE_MAX_DURATION_SEC = 300  # 5 minutes
+
+
+def _call_event_serializer(
+    event: Any,
+    method_name: str,
+    *,
+    include_reasoning: bool,
+) -> Any:
+    """Use enhanced serializers when supported, but stay compatible with old test doubles."""
+    serializer = getattr(event, method_name)
+    try:
+        params = signature(serializer).parameters
+    except (TypeError, ValueError):
+        params = {}
+    if "include_reasoning" in params:
+        return serializer(include_reasoning=include_reasoning)
+    return serializer()
 
 
 # R98: Endpoint Metadata
@@ -90,6 +122,9 @@ async def events_stream_handler(request: web.Request) -> web.StreamResponse:
     allowed, error = require_observability_access(request)
     if not allowed:
         return web.json_response({"ok": False, "error": error}, status=403)
+    admin_allowed, _ = require_admin_token(request)
+    reveal = resolve_reasoning_reveal(request, admin_authorized=admin_allowed)
+    audit_reasoning_reveal(request, target="events.stream", decision=reveal)
 
     store = get_job_event_store()
 
@@ -139,7 +174,13 @@ async def events_stream_handler(request: web.Request) -> web.StreamResponse:
 
             if events:
                 for evt in events:
-                    await response.write(evt.to_sse().encode("utf-8"))
+                    await response.write(
+                        _call_event_serializer(
+                            evt,
+                            "to_sse",
+                            include_reasoning=reveal["allowed"],
+                        ).encode("utf-8")
+                    )
                     last_seq = evt.seq
             else:
                 # Send keep-alive header only if interval exceeded
@@ -192,6 +233,9 @@ async def events_poll_handler(request: web.Request) -> web.Response:
     allowed, error = require_observability_access(request)
     if not allowed:
         return web.json_response({"ok": False, "error": error}, status=403)
+    admin_allowed, _ = require_admin_token(request)
+    reveal = resolve_reasoning_reveal(request, admin_authorized=admin_allowed)
+    audit_reasoning_reveal(request, target="events.poll", decision=reveal)
 
     store = get_job_event_store()
 
@@ -256,7 +300,14 @@ async def events_poll_handler(request: web.Request) -> web.Response:
     return web.json_response(
         {
             "ok": True,
-            "events": [e.to_dict() for e in events],
+            "events": [
+                _call_event_serializer(
+                    e,
+                    "to_dict",
+                    include_reasoning=reveal["allowed"],
+                )
+                for e in events
+            ],
             "latest_seq": latest_seq,
             "pagination": {
                 "limit": page.limit,

@@ -13,6 +13,11 @@ try:
     from ..services.planner import PlannerService
     from ..services.planner_registry import get_planner_registry
     from ..services.rate_limit import check_rate_limit
+    from ..services.reasoning_redaction import (
+        audit_reasoning_reveal,
+        resolve_reasoning_reveal,
+        sanitize_operator_payload,
+    )
     from ..services.refiner import RefinerService
 except ImportError:
     # Fallback for ComfyUI's non-package loader or ad-hoc imports.
@@ -22,6 +27,11 @@ except ImportError:
     from services.planner import PlannerService
     from services.planner_registry import get_planner_registry
     from services.rate_limit import check_rate_limit
+    from services.reasoning_redaction import (
+        audit_reasoning_reveal,
+        resolve_reasoning_reveal,
+        sanitize_operator_payload,
+    )
     from services.refiner import RefinerService
 
 # R98: Endpoint Metadata
@@ -181,6 +191,26 @@ class AssistHandlers:
             "goal": goal,
         }, None
 
+    def _finalize_operator_payload(
+        self,
+        request: web.Request,
+        *,
+        target: str,
+        payload: Dict[str, Any],
+        service: Any,
+    ) -> Dict[str, Any]:
+        admin_allowed, _ = require_admin_token(request)
+        reveal = resolve_reasoning_reveal(request, admin_authorized=admin_allowed)
+        audit_reasoning_reveal(request, target=target, decision=reveal)
+
+        final_payload = sanitize_operator_payload(payload)
+        consume_debug = getattr(service, "consume_last_reasoning_debug", None)
+        reasoning_debug = consume_debug() if callable(consume_debug) else None
+        if reveal["allowed"] and reasoning_debug not in (None, {}, []):
+            final_payload = dict(final_payload)
+            final_payload["debug"] = {"reasoning": reasoning_debug}
+        return final_payload
+
     @staticmethod
     def _sse_frame(event: str, payload: Dict[str, Any]) -> bytes:
         return (
@@ -269,6 +299,17 @@ class AssistHandlers:
                     }
                 else:
                     final_payload = {"result": result}
+                service = (
+                    self.planner
+                    if kind == "planner"
+                    else self.refiner if kind == "refiner" else self.composer
+                )
+                final_payload = self._finalize_operator_payload(
+                    request,
+                    target=f"assist.{kind}.stream",
+                    payload=final_payload,
+                    service=service,
+                )
                 emit(
                     "final",
                     {
@@ -370,7 +411,12 @@ class AssistHandlers:
             )
 
             return web.json_response(
-                {"positive": pos, "negative": neg, "params": params}
+                self._finalize_operator_payload(
+                    request,
+                    target="assist.planner",
+                    payload={"positive": pos, "negative": neg, "params": params},
+                    service=self.planner,
+                )
             )
 
         except Exception as e:
@@ -411,12 +457,17 @@ class AssistHandlers:
             )
 
             return web.json_response(
-                {
-                    "refined_positive": new_pos,
-                    "refined_negative": new_neg,
-                    "param_patch": patch,
-                    "rationale": rationale,
-                }
+                self._finalize_operator_payload(
+                    request,
+                    target="assist.refiner",
+                    payload={
+                        "refined_positive": new_pos,
+                        "refined_negative": new_neg,
+                        "param_patch": patch,
+                        "rationale": rationale,
+                    },
+                    service=self.refiner,
+                )
             )
         except Exception as e:
             logger.exception("Refiner API failed")
@@ -564,7 +615,14 @@ class AssistHandlers:
                 trace_id=trace_id,
                 callback=callback,
             )
-            return web.json_response({"ok": True, **result})
+            return web.json_response(
+                self._finalize_operator_payload(
+                    request,
+                    target="assist.compose",
+                    payload={"ok": True, **result},
+                    service=self.composer,
+                )
+            )
         except ValueError as e:
             return web.json_response({"error": str(e)}, status=400)
         except Exception:

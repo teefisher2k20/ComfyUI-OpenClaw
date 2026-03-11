@@ -1,5 +1,23 @@
 import { expect } from '@playwright/test';
 
+function resolveUiTimeoutMs() {
+  const raw = process.env.OPENCLAW_E2E_READY_TIMEOUT_MS;
+  if (raw) {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  // IMPORTANT: WSL on /mnt/* can load the module-heavy harness much slower than
+  // native filesystems; give readiness checks extra budget to avoid false reds.
+  if (process.platform === 'linux' && process.env.WSL_DISTRO_NAME && process.cwd().startsWith('/mnt/')) {
+    return 60_000;
+  }
+
+  return 30_000;
+}
+
 export async function mockComfyUiCore(page) {
   // CRITICAL: only fulfill root /scripts/app.js.
   // Do NOT accept /extensions/<pack>/scripts/app.js, otherwise bad relative imports are masked in E2E.
@@ -42,10 +60,11 @@ export async function mockComfyUiCore(page) {
 }
 
 export async function waitForOpenClawReady(page) {
+  const timeoutMs = resolveUiTimeoutMs();
   await page.waitForFunction(
     () => window.__openclawTestReady === true || window.__openclawTestError,
     null,
-    { timeout: 30_000 }
+    { timeout: timeoutMs }
   );
 
   const error = await page.evaluate(() => window.__openclawTestError);
@@ -60,5 +79,7 @@ export async function waitForOpenClawReady(page) {
 
 export async function clickTab(page, title) {
   const tab = page.locator('.openclaw-tab', { hasText: title });
-  await tab.click();
+  const timeoutMs = resolveUiTimeoutMs();
+  await expect(tab).toBeVisible({ timeout: timeoutMs });
+  await tab.click({ timeout: timeoutMs });
 }

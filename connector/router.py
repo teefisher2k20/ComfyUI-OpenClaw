@@ -21,6 +21,11 @@ from .prompts import CHAT_STATUS_PROMPT, CHAT_SYSTEM_PROMPT
 from .rate_limiter import RateLimiter
 from .semantic_guard import GuardAction, SemanticGuard
 
+try:
+    from services.reasoning_redaction import sanitize_operator_payload
+except Exception:  # pragma: no cover - connector tests may stub import graph
+    sanitize_operator_payload = lambda value, **_: value  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 
@@ -663,9 +668,8 @@ class CommandRouter:
             return CommandResponse(text=f"[Error] {res.get('error')}")
 
         # Dump trace
-        return CommandResponse(
-            text=f"Trace {args[0]}: {str(res.get('data'))[:1000]}..."
-        )
+        sanitized = sanitize_operator_payload(res.get("data"))
+        return CommandResponse(text=f"Trace {args[0]}: {str(sanitized)[:1000]}...")
 
     async def _handle_jobs(
         self, req: CommandRequest, args: List[str]
@@ -674,7 +678,9 @@ class CommandRouter:
         res = await self.client.get_jobs()
         if res.get("ok"):
             # Format nice summary
-            return CommandResponse(text=f"Default Jobs View: {res.get('data')}")
+            return CommandResponse(
+                text=f"Default Jobs View: {sanitize_operator_payload(res.get('data'))}"
+            )
 
         # Fallback: Queue
         q = await self.client.get_prompt_queue()

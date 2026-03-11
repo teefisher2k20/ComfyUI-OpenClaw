@@ -12,6 +12,7 @@ from .async_utils import run_io_in_thread
 from .comfyui_history import extract_images, fetch_history, get_job_status
 from .job_events import JobEventType, get_job_event_store  # R71
 from .metrics import metrics
+from .reasoning_redaction import sanitize_operator_payload
 from .safe_io import SSRFError, safe_request_json
 from .trace_store import trace_store
 
@@ -139,6 +140,7 @@ async def _watch_and_deliver(
         "status": get_job_status(history_item),
         "outputs": images,
     }
+    payload = sanitize_operator_payload(payload)
 
     # R121: Dual-lane delivery retries
     from .retry_partition import RetryDecision, RetryPartition

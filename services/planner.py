@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from .llm_client import LLMClient
 from .llm_output import extract_json_object, sanitize_string
 from .planner_registry import get_planner_registry
+from .reasoning_redaction import get_redacted_reasoning_debug
 
 try:
     from ..models.schemas import GenerationParams
@@ -37,6 +38,7 @@ class PlannerService:
 
     def __init__(self):
         self.llm_client = LLMClient()
+        self._last_reasoning_debug: Any = None
 
     def _get_request_llm_client(self):
         # CRITICAL: refresh the default LLMClient per request.
@@ -46,6 +48,11 @@ class PlannerService:
         if isinstance(self.llm_client, LLMClient):
             self.llm_client = LLMClient()
         return self.llm_client
+
+    def consume_last_reasoning_debug(self) -> Any:
+        debug_payload = self._last_reasoning_debug
+        self._last_reasoning_debug = None
+        return debug_payload
 
     def plan_generation(
         self,
@@ -62,6 +69,7 @@ class PlannerService:
             (positive_prompt, negative_prompt, params_dict)
         """
         metrics.increment("planner_calls")
+        self._last_reasoning_debug = None
         registry = get_planner_registry()
 
         # 1. Select Profile
@@ -109,6 +117,9 @@ Style: {style_directives}
                 response = llm_client.complete(
                     system_prompt, user_message, tools=tools, tool_choice="auto"
                 )
+                self._last_reasoning_debug = get_redacted_reasoning_debug(
+                    response.get("raw", {})
+                )
 
                 # Extract tool call
                 tool_args, tool_error = extract_tool_call_by_name(
@@ -149,6 +160,9 @@ Style: {style_directives}
                     user_message,
                     streaming=on_text_delta is not None,
                     on_text_delta=on_text_delta,
+                )
+                self._last_reasoning_debug = get_redacted_reasoning_debug(
+                    response.get("raw", {})
                 )
 
             # Traditional JSON extraction (fallback or default path)

@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from .llm_client import LLMClient
 from .llm_output import extract_json_object, filter_allowed_keys, sanitize_string
+from .reasoning_redaction import get_redacted_reasoning_debug
 
 try:
     from ..models.schemas import GenerationParams
@@ -43,6 +44,7 @@ class RefinerService:
 
     def __init__(self):
         self.llm_client = LLMClient()
+        self._last_reasoning_debug: Any = None
 
     def _get_request_llm_client(self):
         # CRITICAL: refresh the default LLMClient per request.
@@ -52,6 +54,11 @@ class RefinerService:
         if isinstance(self.llm_client, LLMClient):
             self.llm_client = LLMClient()
         return self.llm_client
+
+    def consume_last_reasoning_debug(self) -> Any:
+        debug_payload = self._last_reasoning_debug
+        self._last_reasoning_debug = None
+        return debug_payload
 
     def refine_prompt(
         self,
@@ -78,6 +85,7 @@ class RefinerService:
             (refined_positive, refined_negative, param_patch_dict, rationale)
         """
         metrics.increment("refiner_calls")
+        self._last_reasoning_debug = None
 
         # 2. Parse Baseline Params
         try:
@@ -143,6 +151,9 @@ Issue: {issue}
                     tools=tools,
                     tool_choice="auto",
                 )
+                self._last_reasoning_debug = get_redacted_reasoning_debug(
+                    response.get("raw", {})
+                )
 
                 tool_args, tool_error = extract_tool_call_by_name(
                     response.get("raw", {}),
@@ -193,6 +204,9 @@ Issue: {issue}
                     image_base64=image_b64,
                     streaming=on_text_delta is not None,
                     on_text_delta=on_text_delta,
+                )
+                self._last_reasoning_debug = get_redacted_reasoning_debug(
+                    response.get("raw", {})
                 )
 
                 content = response.get("text", "")

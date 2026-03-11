@@ -26,6 +26,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from .reasoning_redaction import sanitize_operator_payload
+
 logger = logging.getLogger("ComfyUI-OpenClaw.services.job_events")
 
 # ---------------------------------------------------------------------------
@@ -73,14 +75,16 @@ class JobEvent:
         if self.timestamp == 0.0:
             self.timestamp = time.time()
 
-    def to_sse(self) -> str:
+    def to_sse(self, *, include_reasoning: bool = False) -> str:
         """Format as an SSE event string."""
         payload = {
             "event_type": self.event_type,
             "prompt_id": self.prompt_id,
             "trace_id": self.trace_id,
             "timestamp": self.timestamp,
-            "data": self.data,
+            "data": sanitize_operator_payload(
+                self.data, include_reasoning=include_reasoning
+            ),
         }
         lines = [
             f"id: {self.seq}",
@@ -91,7 +95,7 @@ class JobEvent:
         ]
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, *, include_reasoning: bool = False) -> Dict[str, Any]:
         """Serialise for JSON polling responses."""
         return {
             "seq": self.seq,
@@ -99,7 +103,9 @@ class JobEvent:
             "prompt_id": self.prompt_id,
             "trace_id": self.trace_id,
             "timestamp": self.timestamp,
-            "data": self.data,
+            "data": sanitize_operator_payload(
+                self.data, include_reasoning=include_reasoning
+            ),
         }
 
 

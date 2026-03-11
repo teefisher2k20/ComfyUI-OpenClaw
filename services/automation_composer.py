@@ -15,6 +15,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from .llm_client import LLMClient
+from .reasoning_redaction import get_redacted_reasoning_debug
 from .templates import is_template_allowed
 
 try:
@@ -39,6 +40,7 @@ class AutomationComposerService:
 
     def __init__(self):
         self.llm_client = LLMClient()
+        self._last_reasoning_debug: Any = None
 
     def _get_request_llm_client(self):
         # CRITICAL: Assist compose service is held by long-lived route handlers.
@@ -47,6 +49,11 @@ class AutomationComposerService:
         if isinstance(self.llm_client, LLMClient):
             self.llm_client = LLMClient()
         return self.llm_client
+
+    def consume_last_reasoning_debug(self) -> Any:
+        debug_payload = self._last_reasoning_debug
+        self._last_reasoning_debug = None
+        return debug_payload
 
     def compose_payload(
         self,
@@ -61,6 +68,7 @@ class AutomationComposerService:
         callback: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         normalized_kind = str(kind or "").strip().lower()
+        self._last_reasoning_debug = None
         if normalized_kind not in {"trigger", "webhook"}:
             raise ValueError("kind must be 'trigger' or 'webhook'")
 
@@ -200,6 +208,9 @@ class AutomationComposerService:
                 user_message=user,
                 tools=tools,
                 tool_choice="auto",
+            )
+            self._last_reasoning_debug = get_redacted_reasoning_debug(
+                response.get("raw", {})
             )
 
             tool_args, tool_error = extract_tool_call_by_name(

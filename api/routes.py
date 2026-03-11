@@ -632,12 +632,27 @@ async def trace_handler(request: web.Request) -> web.Response:
     # S24: Apply redaction to trace data
     trace_data = rec.to_dict()
     try:
+        from ..services.reasoning_redaction import (
+            audit_reasoning_reveal,
+            resolve_reasoning_reveal,
+            sanitize_operator_payload,
+        )
         from ..services.redaction import redact_json
     except ImportError:
+        from services.reasoning_redaction import (  # type: ignore
+            audit_reasoning_reveal,
+            resolve_reasoning_reveal,
+            sanitize_operator_payload,
+        )
         from services.redaction import redact_json
 
     if redact_json:
         trace_data = redact_json(trace_data)
+    reveal = resolve_reasoning_reveal(request, admin_authorized=allowed)
+    audit_reasoning_reveal(request, target="trace.get", decision=reveal)
+    trace_data = sanitize_operator_payload(
+        trace_data, include_reasoning=reveal["allowed"]
+    )
 
     return web.json_response({"ok": True, "trace": trace_data})
 
