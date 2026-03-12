@@ -339,6 +339,10 @@ else
   fi
 fi
 
+# IMPORTANT: generated spec drift must fail before backend tests so docs-only
+# edits cannot hide until deep in the pre-push unit suite.
+"$VENV_PY" scripts/check_openapi_sync.py
+
 echo "[pre-push] 3/7 backend unit tests"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_unit" \
   "$VENV_PY" scripts/run_unittests.py --start-dir tests --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json

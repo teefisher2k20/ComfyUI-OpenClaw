@@ -29,6 +29,12 @@ repos:
         language: python
         pass_filenames: false
         always_run: true
+      - id: guard-openapi-sync
+        name: guard generated OpenAPI sync (staged)
+        entry: python -B scripts/check_openapi_sync.py --staged
+        language: python
+        pass_filenames: false
+        always_run: true
 
   # Secret detection
   - repo: https://github.com/Yelp/detect-secrets

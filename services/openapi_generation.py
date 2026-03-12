@@ -322,7 +322,7 @@ def build_openapi_document(
                     "in": "header",
                     "name": "X-OpenClaw-Bridge-Token",
                 },
-            }
+            },
         },
     }
 
