@@ -62,7 +62,9 @@ def validate_openapi_sync(
     generate_openapi_yaml: Callable[[str | Path | None], str] | None = None,
 ) -> tuple[bool, str]:
     root = _repo_root()
-    openapi_file = Path(openapi_path) if openapi_path else root / "docs" / "openapi.yaml"
+    openapi_file = (
+        Path(openapi_path) if openapi_path else root / "docs" / "openapi.yaml"
+    )
     contract_file = (
         Path(contract_path)
         if contract_path
