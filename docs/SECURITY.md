@@ -248,6 +248,10 @@ OpenClaw validates custom LLM `base_url` settings to prevent Server-Side Request
     ```bash
     export OPENCLAW_LLM_ALLOWED_HOSTS="api.example.com,llm.example.com"
     ```
+  - `OPENCLAW_LLM_ALLOWED_HOSTS` only permits additional exact public hosts; it does not bypass the private/reserved-IP block.
+  - `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1` widens to any public host only.
+  - `OPENCLAW_ALLOW_INSECURE_BASE_URL=1` is the explicit risk-acceptance override for HTTP or private/reserved IP targets.
+  - wildcard values such as `OPENCLAW_LLM_ALLOWED_HOSTS="*"` are not supported.
   - avoid broad bypass flags in production (`OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST`, `OPENCLAW_ALLOW_INSECURE_BASE_URL`).
 
 ### 7. Rate Limiting

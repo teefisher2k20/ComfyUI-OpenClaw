@@ -71,6 +71,7 @@ sudo ufw allow from 192.168.1.0/24 to any port 8188
 - ❌ Do not forward port 8188 on your router.
 - ❌ Do not use `--listen 0.0.0.0` on a laptop connected to public WiFi.
 - ❌ Do not set `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=true` on LAN/shared deployments.
+- ❌ Do not assume LAN Remote Admin access also permits LAN-hosted custom LLM targets; `OPENCLAW_LLM_ALLOWED_HOSTS` alone does not allow private/reserved IP `base_url` values.
 
 ## Testing
 

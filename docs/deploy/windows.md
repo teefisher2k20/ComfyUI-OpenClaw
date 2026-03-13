@@ -21,6 +21,12 @@ set OPENCLAW_LOG_TRUNCATE_ON_START=1
 pause
 ```
 
+Important:
+
+- `set KEY=value` must appear before launching `python_embeded\\python.exe`.
+- Do not write `set KEY = value`; CMD treats the spaces as part of the variable name.
+- Editing Windows Environment Variables or using `setx` does not change an already-running portable ComfyUI process. Restart the launcher after changes.
+
 ### PowerShell
 
 ```powershell
@@ -52,6 +58,23 @@ Find your LAN IP:
 ```powershell
 ipconfig
 ```
+
+## Custom LLM Base URL on Another LAN Machine
+
+If Remote Admin is running on this Windows host, but your custom/OpenAI-compatible LLM is on another LAN machine such as `192.168.x.x`, the current SSRF policy is stricter than the remote-admin policy:
+
+- `OPENCLAW_LLM_ALLOWED_HOSTS` only allows additional exact public hosts.
+- `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1` still applies only to public hosts.
+- Private/reserved LAN IPs still require `OPENCLAW_ALLOW_INSECURE_BASE_URL=1`.
+- `OPENCLAW_LLM_ALLOWED_HOSTS=*` is not supported.
+
+Recommended verification in the same embedded runtime:
+
+```bat
+.\python_embeded\python.exe -c "import os; print(repr(os.environ.get('OPENCLAW_LLM_ALLOWED_HOSTS')))"
+```
+
+If you intentionally accept the risk and enable `OPENCLAW_ALLOW_INSECURE_BASE_URL=1`, restart ComfyUI fully after changing the env vars.
 
 ## Service Mode (NSSM)
 

@@ -332,6 +332,8 @@ class TestModelListAPI(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.status, 403)
         data = json.loads(resp.body)
         self.assertIn("SSRF policy blocked", data["error"])
+        self.assertIn("private/reserved IP targets still require", data["error"])
+        self.assertIn("Wildcard '*'", data["error"])
 
     @patch("api.config.get_effective_config")
     @patch("services.providers.keys.get_api_key_for_provider")

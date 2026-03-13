@@ -96,6 +96,28 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Private-host LLM SSRF contract clarified across Remote Admin, docs, and deployment guidance</strong></summary>
+
+- Clarified that `OPENCLAW_LLM_ALLOWED_HOSTS` only extends the exact public-host allowlist for custom LLM `base_url` values and does not permit private/reserved LAN targets by itself.
+- Updated Remote Admin and model-refresh SSRF error messages so operators can distinguish public-host allowlisting from the explicit insecure override required for private-IP targets.
+- Documented Windows portable env inheritance expectations, including the need to set variables before launching `python_embeded\python.exe`, restart after changes, and avoid unsupported wildcard entries such as `*`.
+- Added regression coverage for the clarified SSRF error contract and re-validated with the full SOP gate.
+
+</details>
+
+<details>
+
+<summary><strong>Inventory indexing moved to snapshot-first refresh with background deep-scan</strong></summary>
+
+- Changed `/openclaw/preflight/inventory` to return a fast snapshot first, then refresh inventory state in the background instead of blocking on full directory traversal.
+- Added snapshot freshness/status metadata (`snapshot_ts`, `scan_state`, `stale`, `last_error`) so the API and explorer UI can surface refresh progress and degraded scan results explicitly.
+- Added bounded traversal checkpoints and background refresh scheduling to reduce latency spikes on large model directories while keeping later reads convergent.
+- Added backend regression coverage for snapshot, stale/error, and API-state transitions, then validated with the full SOP gate.
+
+</details>
+
+<details>
+
 <summary><strong>Model Manager reliability upgrade: resumable downloads and restart-safe recovery</strong></summary>
 
 - Added resumable managed download support using staged `.part` artifacts plus checkpoint metadata, so interrupted transfers can continue via HTTP Range when upstream contracts are compatible.
@@ -684,6 +706,7 @@ Public profile boundary acknowledgement (required when `OPENCLAW_DEPLOYMENT_PROF
   - `setx OPENCLAW_LOG_TRUNCATE_ON_START "1"` (optional)
 - CMD (current session only): `set OPENCLAW_LLM_API_KEY=<YOUR_API_KEY>`
 - Portable `.bat` launchers: add `set OPENCLAW_LLM_API_KEY=...` / `set OPENCLAW_ADMIN_TOKEN=...` (optionally `set OPENCLAW_LOG_TRUNCATE_ON_START=1`) before launching ComfyUI.
+- Windows note: changing env vars in System Properties or with `setx` does not update an already-running portable ComfyUI process; fully restart the launcher so `python_embeded\\python.exe` inherits the new values.
 - ComfyUI Desktop: if env vars are not passed through reliably, prefer the Settings UI key store for localhost-only convenience, or set system-wide env vars.
 
 ## Remote Admin Console (Mobile UI)
@@ -723,6 +746,7 @@ Notes:
 
 - On Windows, if a port fails with bind errors (for example WinError 10013), choose a different port outside excluded ranges.
 - If write actions are denied remotely, verify both `OPENCLAW_ADMIN_TOKEN` and `OPENCLAW_ALLOW_REMOTE_ADMIN=1`.
+- Remote Admin being reachable from LAN does not imply LAN-hosted custom LLM targets are allowed. SSRF rules for `base_url` remain separate and stricter.
 
 ### Basic operations
 
@@ -923,9 +947,12 @@ Notes:
   - capacity: 16 entries (LRU eviction)
 - Custom `base_url` is protected by SSRF policy:
   - built-in provider hosts are allowlisted by default
-  - allow additional exact hosts via `OPENCLAW_LLM_ALLOWED_HOSTS=host1,host2`
+  - `OPENCLAW_ALLOW_CUSTOM_BASE_URL=1` is required before custom `base_url` changes are accepted
+  - allow additional exact public hosts via `OPENCLAW_LLM_ALLOWED_HOSTS=host1,host2`
   - or opt in to any public host via `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1`
-  - `OPENCLAW_ALLOW_INSECURE_BASE_URL=1` disables SSRF blocking (not recommended)
+  - private/reserved IPs are still blocked even when present in `OPENCLAW_LLM_ALLOWED_HOSTS`
+  - `OPENCLAW_ALLOW_INSECURE_BASE_URL=1` is the explicit risk-acceptance override for HTTP or private/reserved IP targets (not recommended)
+  - wildcard entries such as `OPENCLAW_LLM_ALLOWED_HOSTS=*` are not supported
 - Local providers (`ollama`, `lmstudio`) are loopback-only by design:
   - valid targets: `localhost` / `127.0.0.1` / `::1`
   - do **not** enable `OPENCLAW_ALLOW_INSECURE_BASE_URL` just to use local LLM
@@ -1391,6 +1418,34 @@ Checklist:
 4. Keep these flags disabled:
    - `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0`
    - `OPENCLAW_ALLOW_INSECURE_BASE_URL=0`
+
+### Remote Admin can open, but custom LLM on `192.168.x.x` is still blocked
+
+This is expected under the current SSRF design.
+
+- `OPENCLAW_ALLOW_REMOTE_ADMIN=1` only allows remote admin access; it does not relax outbound LLM egress rules.
+- `OPENCLAW_LLM_ALLOWED_HOSTS` only extends the exact-host allowlist for custom public hosts.
+- Private/reserved IP targets such as `192.168.x.x`, `10.x.x.x`, and `172.16.x.x` remain blocked unless `OPENCLAW_ALLOW_INSECURE_BASE_URL=1` is also set.
+- `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1` does not allow private/reserved IPs.
+- `OPENCLAW_LLM_ALLOWED_HOSTS=*` is not a wildcard and will not bypass the policy.
+
+Correct setup flow:
+
+1. If you are using a built-in local provider (`ollama`, `lmstudio`), keep it on loopback only and use the provider default or `localhost` / `127.0.0.1` / `::1`.
+2. If you need a custom public LLM host, set:
+   - `OPENCLAW_ALLOW_CUSTOM_BASE_URL=1`
+   - `OPENCLAW_LLM_ALLOWED_HOSTS=<exact-host>` or `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1`
+3. If you intentionally need a LAN/private-IP target, set `OPENCLAW_ALLOW_INSECURE_BASE_URL=1`, accept the SSRF risk, and fully restart ComfyUI.
+4. On Windows portable, set env vars in the same launcher that starts `python_embeded\\python.exe`, or restart after `setx` / System Properties changes.
+5. Verify the effective value in the same embedded Python runtime:
+
+```bat
+python_embeded\python.exe -c "import os; print(repr(os.environ.get('OPENCLAW_LLM_ALLOWED_HOSTS')))"
+```
+
+Safer alternative:
+
+- keep the LLM behind a reviewed public HTTPS reverse proxy and allowlist that public host, instead of enabling `OPENCLAW_ALLOW_INSECURE_BASE_URL`.
 
 ### Admin Token: server-side vs UI
 

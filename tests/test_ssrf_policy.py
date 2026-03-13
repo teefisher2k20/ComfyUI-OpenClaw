@@ -71,6 +71,8 @@ class TestSSRFPolicy(unittest.TestCase):
             sanitized, errors = validate_config_update(updates)
             self.assertTrue(len(errors) > 0)
             self.assertIn("SRF", errors[0])  # Should contain SSRF error
+            self.assertIn("private/reserved IP targets still require", errors[0])
+            self.assertIn("Wildcard '*'", errors[0])
 
     def test_ssrf_override(self):
         updates = {"provider": "custom", "base_url": "http://192.168.1.1/secret"}

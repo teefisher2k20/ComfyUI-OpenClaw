@@ -21,7 +21,7 @@ If the deployment enables remote control or bridge features, it must also pass *
 - [ ] **Connector Ingress Defaults**: Platform adapters remain disabled unless required token/enable vars are configured (Telegram/Discord/LINE/WhatsApp/WeChat/Kakao/Slack).
 - [ ] **Connector Allowlists (Strict Posture)**: In `public` deployment or `hardened` runtime posture, active connector platforms must have allowlist coverage before startup (fail-closed; public check code `DP-PUBLIC-009`).
 - [ ] **Observability**: `/openclaw/logs/tail` and `/openclaw/config` require `OPENCLAW_OBSERVABILITY_TOKEN` (legacy: `MOLTBOT_OBSERVABILITY_TOKEN`) if accessed remotely, or are loopback-only.
-- [ ] **SSRF**: LLM `base_url` defaults to known providers. Custom URLs require `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1` or explicit allowlist.
+- [ ] **SSRF**: LLM `base_url` defaults to known providers. Custom public URLs require `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1` or explicit allowlist; private/reserved IP targets still require `OPENCLAW_ALLOW_INSECURE_BASE_URL=1`.
 - [ ] **Public Boundary Contract (S69)**: for `OPENCLAW_DEPLOYMENT_PROFILE=public`, set `OPENCLAW_PUBLIC_SHARED_SURFACE_BOUNDARY_ACK=1` only after reverse-proxy path allowlist + network ACL deny ComfyUI-native high-risk routes.
 - [ ] **Budgets**: `OPENCLAW_MAX_INFLIGHT_SUBMITS_TOTAL` (concurrency) and `OPENCLAW_MAX_RENDERED_WORKFLOW_BYTES` (payloads) are enforced.
 - [ ] **Contracts**: API endpoints match `docs/release/api_contract.md`; Configuration follows `docs/release/config_secrets_contract.md`.

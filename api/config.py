@@ -377,6 +377,19 @@ def _get_llm_allowed_hosts() -> set:
     return set(get_default_public_llm_hosts()) | env_hosts
 
 
+def _format_llm_ssrf_error(exc: Exception) -> str:
+    detail = str(exc)
+    # IMPORTANT: keep this guidance aligned with services.runtime_config so Remote
+    # Admin config writes and model refreshes explain the same fail-closed policy.
+    return (
+        f"SSRF policy blocked outbound URL: {detail}. "
+        "OPENCLAW_LLM_ALLOWED_HOSTS only allows additional exact public hosts; "
+        "private/reserved IP targets still require "
+        "OPENCLAW_ALLOW_INSECURE_BASE_URL=1. Wildcard '*' entries are not "
+        "supported."
+    )
+
+
 def _extract_models_from_payload(payload: dict) -> list:
     """
     Extract model IDs from common provider responses.
@@ -583,7 +596,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                 )
             except Exception as e:
                 return web.json_response(
-                    {"ok": False, "error": f"SSRF policy blocked outbound URL: {e}"},
+                    {"ok": False, "error": _format_llm_ssrf_error(e)},
                     status=403,
                 )
 
@@ -639,7 +652,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                 )
             except SSRFError as e:
                 return web.json_response(
-                    {"ok": False, "error": f"SSRF policy blocked outbound URL: {e}"},
+                    {"ok": False, "error": _format_llm_ssrf_error(e)},
                     status=403,
                 )
             except RuntimeError as e:

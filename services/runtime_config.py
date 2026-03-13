@@ -864,7 +864,13 @@ def validate_config_update(updates: Dict[str, Any]) -> Tuple[Dict[str, Any], lis
                         default=False,
                     ):
                         errors.append(
-                            f"Unsafe Base URL blocked (SSRF): {e}. Set OPENCLAW_LLM_ALLOWED_HOSTS (or legacy MOLTBOT_LLM_ALLOWED_HOSTS) to allow."
+                            "Unsafe Base URL blocked (SSRF): "
+                            f"{e}. OPENCLAW_LLM_ALLOWED_HOSTS "
+                            "(or legacy MOLTBOT_LLM_ALLOWED_HOSTS) only allows "
+                            "additional exact public hosts; private/reserved IP "
+                            "targets still require "
+                            "OPENCLAW_ALLOW_INSECURE_BASE_URL=1. Wildcard '*' "
+                            "entries are not supported."
                         )
                         continue
         elif key == "model":
