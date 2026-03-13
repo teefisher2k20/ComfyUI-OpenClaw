@@ -29,6 +29,28 @@ function Invoke-Checked {
   }
 }
 
+function Get-GitDiffSnapshot {
+  param([switch]$Cached)
+  # IMPORTANT: compare both worktree and index; pre-commit can mutate staged files while exiting 0.
+  if ($Cached) {
+    return (& git diff --cached --binary -- . | Out-String)
+  }
+  return (& git diff --binary -- . | Out-String)
+}
+
+function Assert-PreCommitDidNotMutateRepo {
+  param(
+    [Parameter(Mandatory = $true)][string]$BeforeWorktree,
+    [Parameter(Mandatory = $true)][string]$BeforeIndex
+  )
+
+  $afterWorktree = Get-GitDiffSnapshot
+  $afterIndex = Get-GitDiffSnapshot -Cached
+  if ($BeforeWorktree -ne $afterWorktree -or $BeforeIndex -ne $afterIndex) {
+    throw "[tests] ERROR: pre-commit hooks modified tracked files (worktree or index). Review/stage the hook changes, then rerun the acceptance gate.`n$(& git status --short | Out-String)"
+  }
+}
+
 Require-Cmd node
 Require-Cmd npm
 
@@ -210,11 +232,14 @@ Write-Host "[tests] 1/8 detect-secrets"
 Invoke-Checked "detect-secrets" { & $venvPython -m pre_commit run detect-secrets --all-files }
 
 Write-Host "[tests] 2/8 pre-commit all hooks (pass 1: autofix)"
+$preCommitWorktreeBefore = Get-GitDiffSnapshot
+$preCommitIndexBefore = Get-GitDiffSnapshot -Cached
 & $venvPython -m pre_commit run --all-files --show-diff-on-failure
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[tests] INFO: pre-commit reported changes/issues; running pass 2 verification..."
   Invoke-Checked "pre-commit all hooks (pass 2 verify)" { & $venvPython -m pre_commit run --all-files --show-diff-on-failure }
 }
+Assert-PreCommitDidNotMutateRepo -BeforeWorktree $preCommitWorktreeBefore -BeforeIndex $preCommitIndexBefore
 
 Write-Host "[tests] 3/8 backend unit tests"
 $env:MOLTBOT_STATE_DIR = "$root\moltbot_state\_local_unit"

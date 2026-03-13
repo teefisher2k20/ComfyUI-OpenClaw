@@ -168,14 +168,14 @@ test.describe('Approvals surfaces', () => {
     await expect(page.locator('.openclaw-error-box')).toContainText('approval_list_failed');
   });
 
-  test('keeps admin console pending approvals aligned with sidebar data', async ({ page }) => {
+  test('keeps admin console pending approvals aligned with sidebar data', async ({ page, baseURL }) => {
     await mockApprovalApis(page);
     await page.goto('test-harness.html');
     await waitForOpenClawReady(page);
     await clickTab(page, 'Approvals');
     await expect(page.locator('#apr-list')).toContainText('apr-001');
 
-    await page.goto('http://127.0.0.1:3000/web/admin_console.html');
+    await page.goto(new URL('/web/admin_console.html', baseURL).toString());
     await page.locator('#refreshApprovals').click();
 
     await expect(page.locator('#approvalsList')).toContainText('apr-001');

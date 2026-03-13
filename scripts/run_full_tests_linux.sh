@@ -53,6 +53,36 @@ pip_install_or_fail() {
   exit 1
 }
 
+capture_precommit_snapshots() {
+  # IMPORTANT: compare both worktree and index; pre-commit can mutate staged files while exiting 0.
+  PRECOMMIT_WORKTREE_SNAPSHOT="$(mktemp)"
+  PRECOMMIT_INDEX_SNAPSHOT="$(mktemp)"
+  git diff --binary -- . >"$PRECOMMIT_WORKTREE_SNAPSHOT"
+  git diff --cached --binary -- . >"$PRECOMMIT_INDEX_SNAPSHOT"
+}
+
+cleanup_precommit_snapshots() {
+  rm -f "${PRECOMMIT_WORKTREE_SNAPSHOT:-}" "${PRECOMMIT_INDEX_SNAPSHOT:-}" \
+    "${PRECOMMIT_WORKTREE_SNAPSHOT_AFTER:-}" "${PRECOMMIT_INDEX_SNAPSHOT_AFTER:-}"
+}
+
+precommit_changed_repo_state() {
+  PRECOMMIT_WORKTREE_SNAPSHOT_AFTER="$(mktemp)"
+  PRECOMMIT_INDEX_SNAPSHOT_AFTER="$(mktemp)"
+  git diff --binary -- . >"$PRECOMMIT_WORKTREE_SNAPSHOT_AFTER"
+  git diff --cached --binary -- . >"$PRECOMMIT_INDEX_SNAPSHOT_AFTER"
+  ! cmp -s "$PRECOMMIT_WORKTREE_SNAPSHOT" "$PRECOMMIT_WORKTREE_SNAPSHOT_AFTER" || \
+    ! cmp -s "$PRECOMMIT_INDEX_SNAPSHOT" "$PRECOMMIT_INDEX_SNAPSHOT_AFTER"
+}
+
+report_precommit_repo_drift_and_exit() {
+  echo "[tests] ERROR: pre-commit hooks modified tracked files (worktree or index)." >&2
+  echo "[tests] Review/stage the hook changes, then rerun the acceptance gate." >&2
+  git status --short
+  cleanup_precommit_snapshots
+  exit 1
+}
+
 require_cmd node
 require_cmd npm
 
@@ -153,12 +183,17 @@ echo "[tests] 1/8 detect-secrets"
 "$VENV_PY" -m pre_commit run detect-secrets --all-files
 
 echo "[tests] 2/8 pre-commit all hooks (pass 1: autofix)"
+capture_precommit_snapshots
 if "$VENV_PY" -m pre_commit run --all-files --show-diff-on-failure; then
   :
 else
   echo "[tests] INFO: pre-commit reported changes/issues; running pass 2 verification..."
   "$VENV_PY" -m pre_commit run --all-files --show-diff-on-failure
 fi
+if precommit_changed_repo_state; then
+  report_precommit_repo_drift_and_exit
+fi
+cleanup_precommit_snapshots
 
 echo "[tests] 3/8 backend unit tests"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_local_unit" "$VENV_PY" scripts/run_unittests.py --start-dir tests --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json

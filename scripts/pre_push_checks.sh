@@ -50,6 +50,36 @@ pip_install_or_fail() {
   exit 1
 }
 
+capture_precommit_snapshots() {
+  # IMPORTANT: compare both worktree and index; pre-commit can mutate staged files while exiting 0.
+  PRECOMMIT_WORKTREE_SNAPSHOT="$(mktemp)"
+  PRECOMMIT_INDEX_SNAPSHOT="$(mktemp)"
+  git diff --binary -- . >"$PRECOMMIT_WORKTREE_SNAPSHOT"
+  git diff --cached --binary -- . >"$PRECOMMIT_INDEX_SNAPSHOT"
+}
+
+cleanup_precommit_snapshots() {
+  rm -f "${PRECOMMIT_WORKTREE_SNAPSHOT:-}" "${PRECOMMIT_INDEX_SNAPSHOT:-}" \
+    "${PRECOMMIT_WORKTREE_SNAPSHOT_AFTER:-}" "${PRECOMMIT_INDEX_SNAPSHOT_AFTER:-}"
+}
+
+precommit_changed_repo_state() {
+  PRECOMMIT_WORKTREE_SNAPSHOT_AFTER="$(mktemp)"
+  PRECOMMIT_INDEX_SNAPSHOT_AFTER="$(mktemp)"
+  git diff --binary -- . >"$PRECOMMIT_WORKTREE_SNAPSHOT_AFTER"
+  git diff --cached --binary -- . >"$PRECOMMIT_INDEX_SNAPSHOT_AFTER"
+  ! cmp -s "$PRECOMMIT_WORKTREE_SNAPSHOT" "$PRECOMMIT_WORKTREE_SNAPSHOT_AFTER" || \
+    ! cmp -s "$PRECOMMIT_INDEX_SNAPSHOT" "$PRECOMMIT_INDEX_SNAPSHOT_AFTER"
+}
+
+report_precommit_repo_drift_and_exit() {
+  echo "[pre-push] ERROR: pre-commit hooks modified tracked files (worktree or index)." >&2
+  echo "[pre-push] Please review/stage the hook fixes, then push again." >&2
+  git status --short
+  cleanup_precommit_snapshots
+  exit 1
+}
+
 is_wsl() {
   grep -qiE "(microsoft|wsl)" /proc/version 2>/dev/null
 }
@@ -322,6 +352,7 @@ echo "[pre-push] 1/7 detect-secrets"
 run_pre_commit_safe run detect-secrets --all-files
 
 echo "[pre-push] 2/7 pre-commit all hooks (pass 1)"
+capture_precommit_snapshots
 if run_pre_commit_safe run --all-files --show-diff-on-failure; then
   :
 else
@@ -338,6 +369,10 @@ else
     exit 1
   fi
 fi
+if precommit_changed_repo_state; then
+  report_precommit_repo_drift_and_exit
+fi
+cleanup_precommit_snapshots
 
 # IMPORTANT: generated spec drift must fail before backend tests so docs-only
 # edits cannot hide until deep in the pre-push unit suite.

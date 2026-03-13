@@ -46,7 +46,9 @@ class TestR141InventoryIndexing(unittest.TestCase):
             patch.object(
                 services.preflight, "folder_paths", MagicMock(), create=True
             ) as mock_folder_paths,
-            patch.object(services.preflight, "_scan_model_inventory", side_effect=slow_scan),
+            patch.object(
+                services.preflight, "_scan_model_inventory", side_effect=slow_scan
+            ),
         ):
             mock_folder_paths.folder_names_and_paths = {"checkpoints": [("/tmp", None)]}
 
@@ -67,10 +69,10 @@ class TestR141InventoryIndexing(unittest.TestCase):
                 )
             )
 
-            final = services.preflight.get_model_inventory_snapshot(trigger_refresh=False)
-            self.assertEqual(
-                final["models"], {"checkpoints": ["sdxl.safetensors"]}
+            final = services.preflight.get_model_inventory_snapshot(
+                trigger_refresh=False
             )
+            self.assertEqual(final["models"], {"checkpoints": ["sdxl.safetensors"]})
             self.assertEqual(final["scan_state"], "idle")
             self.assertFalse(final["stale"])
             self.assertIsNone(final["last_error"])
@@ -105,7 +107,9 @@ class TestR141InventoryIndexing(unittest.TestCase):
                 )
             )
 
-            final = services.preflight.get_model_inventory_snapshot(trigger_refresh=False)
+            final = services.preflight.get_model_inventory_snapshot(
+                trigger_refresh=False
+            )
             self.assertEqual(final["models"], {})
             self.assertEqual(final["scan_state"], "error")
             self.assertTrue(final["stale"])
@@ -117,13 +121,15 @@ class TestR141InventoryIndexing(unittest.TestCase):
             services.preflight, "folder_paths", MagicMock(), create=True
         ) as mock_folder_paths:
             mock_folder_paths.folder_names_and_paths = {"checkpoints": [("/tmp", None)]}
-            services.preflight._CACHE[services.preflight._INVENTORY_SCAN_STATE_KEY] = "error"
+            services.preflight._CACHE[services.preflight._INVENTORY_SCAN_STATE_KEY] = (
+                "error"
+            )
             services.preflight._CACHE[services.preflight._INVENTORY_LAST_ERROR_KEY] = (
                 "scan boom"
             )
-            services.preflight._CACHE[services.preflight._INVENTORY_LAST_ATTEMPT_TS_KEY] = (
-                time.time()
-            )
+            services.preflight._CACHE[
+                services.preflight._INVENTORY_LAST_ATTEMPT_TS_KEY
+            ] = time.time()
 
             with patch.object(
                 services.preflight, "_schedule_inventory_refresh_locked"
@@ -174,7 +180,9 @@ class TestR141InventoryApi(AioHTTPTestCase):
                     "last_error": None,
                 },
             ),
-            patch("api.preflight_handler.get_model_inventory_snapshot") as mock_snapshot,
+            patch(
+                "api.preflight_handler.get_model_inventory_snapshot"
+            ) as mock_snapshot,
             patch("api.preflight_handler._get_node_class_mappings") as mock_nodes,
         ):
             mock_snapshot.return_value = {
@@ -218,7 +226,9 @@ class TestR141InventoryApi(AioHTTPTestCase):
             patch.object(
                 services.preflight, "folder_paths", MagicMock(), create=True
             ) as mock_folder_paths,
-            patch.object(services.preflight, "_scan_model_inventory", side_effect=slow_scan),
+            patch.object(
+                services.preflight, "_scan_model_inventory", side_effect=slow_scan
+            ),
             patch("api.preflight_handler._get_node_class_mappings", return_value={}),
         ):
             mock_folder_paths.folder_names_and_paths = {"checkpoints": [("/tmp", None)]}
