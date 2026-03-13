@@ -6,6 +6,7 @@ checking for missing node classes and models.
 """
 
 import logging
+import threading
 import time
 from typing import Any, Dict, List, Set, Tuple
 
@@ -28,6 +29,19 @@ except Exception:  # pragma: no cover
 
 _CACHE = {}
 _CACHE_TTL = 60  # seconds
+_INVENTORY_SCAN_STATE_IDLE = "idle"
+_INVENTORY_SCAN_STATE_REFRESHING = "refreshing"
+_INVENTORY_SCAN_STATE_ERROR = "error"
+_INVENTORY_SNAPSHOT_KEY = "inventory_snapshot"
+_INVENTORY_SNAPSHOT_TS_KEY = "inventory_snapshot_ts"
+_INVENTORY_LAST_ERROR_KEY = "inventory_last_error"
+_INVENTORY_SCAN_STATE_KEY = "inventory_scan_state"
+_INVENTORY_CHECKPOINT_KEY = "inventory_scan_checkpoint"
+_INVENTORY_LAST_ATTEMPT_TS_KEY = "inventory_last_attempt_ts"
+_LEGACY_INVENTORY_CACHE_KEY = "inventory"
+_INVENTORY_LOCK = threading.RLock()
+_INVENTORY_SCAN_THREAD: threading.Thread | None = None
+_INVENTORY_ERROR_RETRY_SEC = 5
 
 # Heuristic mapping: input_key -> folder_paths type
 _INPUT_KEY_MAP = {
@@ -51,28 +65,7 @@ def _get_node_class_mappings() -> Dict[str, Any]:
     return {}
 
 
-def _get_model_inventory() -> Dict[str, List[str]]:
-    """
-    Retrieve snapshot of available models using folder_paths.
-    Returns a dict mapping folder name (e.g., 'checkpoints') to list of filenames.
-    Cached for 60s to prevent IO spam.
-    """
-    global _CACHE
-    now = time.time()
-
-    cached = _CACHE.get("inventory")
-    if cached:
-        timestamp, data = cached
-        if now - timestamp < _CACHE_TTL:
-            return data
-
-    inventory = {}
-    if not folder_paths:
-        return inventory
-
-    # Common model types to check
-    # We use the keys from folder_paths.folder_names_and_paths if available,
-    # or a hardcoded list of common ones.
+def _resolve_inventory_model_types() -> List[str]:
     model_types = [
         "checkpoints",
         "loras",
@@ -88,23 +81,173 @@ def _get_model_inventory() -> Dict[str, List[str]]:
         "vae_approx",
         "photomaker",
     ]
-
-    # Add any dynamic ones
     if hasattr(folder_paths, "folder_names_and_paths"):
-        for k in folder_paths.folder_names_and_paths.keys():
-            if k not in model_types:
-                model_types.append(k)
+        for key in folder_paths.folder_names_and_paths.keys():
+            if key not in model_types:
+                model_types.append(key)
+    return model_types
 
-    for mtype in model_types:
+
+def _scan_model_inventory(checkpoint: List[str] | None = None) -> Dict[str, List[str]]:
+    """
+    Build a complete model inventory snapshot synchronously.
+
+    The caller decides whether this runs on-request or in a background worker.
+    """
+    inventory: Dict[str, List[str]] = {}
+    if not folder_paths:
+        return inventory
+
+    model_types = _resolve_inventory_model_types()
+    for index, model_type in enumerate(model_types):
+        if checkpoint is not None:
+            checkpoint[:] = [str(index), model_type]
         try:
-            files = folder_paths.get_filename_list(mtype)
+            files = folder_paths.get_filename_list(model_type)
             if files:
-                inventory[mtype] = list(files)
+                inventory[model_type] = list(files)
         except Exception:
-            # Some folders might not exist or raise error
+            # Some folders might not exist or raise error.
             continue
+    if checkpoint is not None:
+        checkpoint[:] = []
+    return inventory
 
-    _CACHE["inventory"] = (now, inventory)
+
+def _copy_inventory_snapshot(models: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    return {key: list(value) for key, value in (models or {}).items()}
+
+
+def _inventory_snapshot_stale_locked(now: float | None = None) -> bool:
+    snapshot_ts = _CACHE.get(_INVENTORY_SNAPSHOT_TS_KEY)
+    if not snapshot_ts:
+        return True
+    current = time.time() if now is None else now
+    return current - float(snapshot_ts) >= _CACHE_TTL
+
+
+def _inventory_scan_running_locked() -> bool:
+    global _INVENTORY_SCAN_THREAD
+    if _INVENTORY_SCAN_THREAD is not None and not _INVENTORY_SCAN_THREAD.is_alive():
+        _INVENTORY_SCAN_THREAD = None
+    return _INVENTORY_SCAN_THREAD is not None
+
+
+def _inventory_should_schedule_refresh_locked(now: float) -> bool:
+    if not folder_paths or not _inventory_snapshot_stale_locked(now):
+        return False
+    if _inventory_scan_running_locked():
+        return False
+    if _CACHE.get(_INVENTORY_SCAN_STATE_KEY) != _INVENTORY_SCAN_STATE_ERROR:
+        return True
+    last_attempt = float(_CACHE.get(_INVENTORY_LAST_ATTEMPT_TS_KEY) or 0.0)
+    return now - last_attempt >= _INVENTORY_ERROR_RETRY_SEC
+
+
+def _inventory_refresh_worker() -> None:
+    checkpoint: List[str] = []
+    try:
+        snapshot = _scan_model_inventory(checkpoint)
+        with _INVENTORY_LOCK:
+            _CACHE[_INVENTORY_SNAPSHOT_KEY] = snapshot
+            _CACHE[_INVENTORY_SNAPSHOT_TS_KEY] = time.time()
+            _CACHE[_INVENTORY_LAST_ERROR_KEY] = None
+            _CACHE[_INVENTORY_SCAN_STATE_KEY] = _INVENTORY_SCAN_STATE_IDLE
+            _CACHE[_INVENTORY_CHECKPOINT_KEY] = None
+    except Exception as exc:  # pragma: no cover - defensive outer guard
+        with _INVENTORY_LOCK:
+            _CACHE[_INVENTORY_LAST_ERROR_KEY] = str(exc)
+            _CACHE[_INVENTORY_SCAN_STATE_KEY] = _INVENTORY_SCAN_STATE_ERROR
+            _CACHE[_INVENTORY_CHECKPOINT_KEY] = (
+                checkpoint[1] if len(checkpoint) >= 2 else None
+            )
+            logger.exception("Inventory deep scan failed")
+    finally:
+        global _INVENTORY_SCAN_THREAD
+        with _INVENTORY_LOCK:
+            _INVENTORY_SCAN_THREAD = None
+
+
+def _schedule_inventory_refresh_locked() -> None:
+    global _INVENTORY_SCAN_THREAD
+    if _inventory_scan_running_locked() or not folder_paths:
+        return
+    _CACHE[_INVENTORY_SCAN_STATE_KEY] = _INVENTORY_SCAN_STATE_REFRESHING
+    _CACHE.setdefault(_INVENTORY_LAST_ERROR_KEY, None)
+    _CACHE[_INVENTORY_LAST_ATTEMPT_TS_KEY] = time.time()
+    worker = threading.Thread(
+        target=_inventory_refresh_worker,
+        name="openclaw-inventory-refresh",
+        daemon=True,
+    )
+    _INVENTORY_SCAN_THREAD = worker
+    worker.start()
+
+
+def get_model_inventory_snapshot(*, trigger_refresh: bool = True) -> Dict[str, Any]:
+    """
+    Return the latest served inventory snapshot plus scan metadata.
+
+    This powers `/openclaw/preflight/inventory` so requests can return quickly
+    while a background deep scan refreshes stale or missing snapshots.
+    """
+    now = time.time()
+    with _INVENTORY_LOCK:
+        if trigger_refresh and _inventory_should_schedule_refresh_locked(now):
+            _schedule_inventory_refresh_locked()
+
+        models = _copy_inventory_snapshot(_CACHE.get(_INVENTORY_SNAPSHOT_KEY, {}))
+        snapshot_ts = _CACHE.get(_INVENTORY_SNAPSHOT_TS_KEY)
+        scan_state = _CACHE.get(_INVENTORY_SCAN_STATE_KEY, _INVENTORY_SCAN_STATE_IDLE)
+        last_error = _CACHE.get(_INVENTORY_LAST_ERROR_KEY)
+        if not folder_paths:
+            scan_state = _INVENTORY_SCAN_STATE_IDLE
+            last_error = None
+        stale = bool(folder_paths) and _inventory_snapshot_stale_locked(now)
+        return {
+            "models": models,
+            "snapshot_ts": snapshot_ts,
+            "scan_state": scan_state,
+            "stale": stale,
+            "last_error": last_error,
+        }
+
+
+def _reset_inventory_state_for_tests() -> None:
+    global _INVENTORY_SCAN_THREAD
+    thread = _INVENTORY_SCAN_THREAD
+    if thread is not None and thread.is_alive():
+        thread.join(timeout=2.0)
+    with _INVENTORY_LOCK:
+        _INVENTORY_SCAN_THREAD = None
+        for key in (
+            _INVENTORY_SNAPSHOT_KEY,
+            _INVENTORY_SNAPSHOT_TS_KEY,
+            _INVENTORY_LAST_ERROR_KEY,
+            _INVENTORY_SCAN_STATE_KEY,
+            _INVENTORY_CHECKPOINT_KEY,
+            _INVENTORY_LAST_ATTEMPT_TS_KEY,
+            _LEGACY_INVENTORY_CACHE_KEY,
+        ):
+            _CACHE.pop(key, None)
+
+
+def _get_model_inventory() -> Dict[str, List[str]]:
+    """
+    Retrieve snapshot of available models using folder_paths.
+    Returns a dict mapping folder name (e.g., 'checkpoints') to list of filenames.
+    Cached for 60s to prevent IO spam.
+    """
+    global _CACHE
+    now = time.time()
+
+    cached = _CACHE.get(_LEGACY_INVENTORY_CACHE_KEY)
+    if cached:
+        timestamp, data = cached
+        if now - timestamp < _CACHE_TTL:
+            return data
+    inventory = _scan_model_inventory()
+    _CACHE[_LEGACY_INVENTORY_CACHE_KEY] = (now, inventory)
     return inventory
 
 

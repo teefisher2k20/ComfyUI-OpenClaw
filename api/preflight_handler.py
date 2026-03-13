@@ -20,8 +20,8 @@ if __package__ and "." in __package__:
     from ..models.schemas import MAX_BODY_SIZE
     from ..services.access_control import is_loopback, require_admin_token
     from ..services.preflight import (
-        _get_model_inventory,
         _get_node_class_mappings,
+        get_model_inventory_snapshot,
         run_preflight_check,
     )
     from ..services.rate_limit import check_rate_limit
@@ -30,8 +30,8 @@ else:  # pragma: no cover (test-only import mode)
     from models.schemas import MAX_BODY_SIZE  # type: ignore
     from services.access_control import is_loopback, require_admin_token  # type: ignore
     from services.preflight import (  # type: ignore
-        _get_model_inventory,
         _get_node_class_mappings,
+        get_model_inventory_snapshot,
         run_preflight_check,
     )
     from services.rate_limit import check_rate_limit  # type: ignore
@@ -195,11 +195,18 @@ async def inventory_handler(request: web.Request) -> web.Response:
         nodes_map = _get_node_class_mappings()
         node_classes = sorted(list(nodes_map.keys()))
 
-        # Models
-        models_map = _get_model_inventory()
+        inventory_snapshot = get_model_inventory_snapshot()
 
         return web.json_response(
-            {"ok": True, "nodes": node_classes, "models": models_map}
+            {
+                "ok": True,
+                "nodes": node_classes,
+                "models": inventory_snapshot["models"],
+                "snapshot_ts": inventory_snapshot["snapshot_ts"],
+                "scan_state": inventory_snapshot["scan_state"],
+                "stale": inventory_snapshot["stale"],
+                "last_error": inventory_snapshot["last_error"],
+            }
         )
     except Exception as e:
         logger.exception("Inventory fetch failed")

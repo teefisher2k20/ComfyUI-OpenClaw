@@ -86,7 +86,13 @@ export const ExplorerTab = {
         invList.style.border = "1px solid var(--border-color, #444)";
         invList.style.padding = "0.5rem";
 
+        const invStatus = makeEl("div", "openclaw-inventory-status openclaw-inventory-status moltbot-inventory-status");
+        invStatus.style.fontSize = "0.85em";
+        invStatus.style.opacity = "0.8";
+        invStatus.style.marginBottom = "8px";
+
         invContent.appendChild(searchInput);
+        invContent.appendChild(invStatus);
         invContent.appendChild(invList);
 
         // --- Snapshots Content ---
@@ -139,6 +145,7 @@ export const ExplorerTab = {
         // --- Logic ---
 
         let inventoryData = null;
+        let inventoryRefreshTimer = null;
 
         // Helper: Debounce
         function debounce(func, wait) {
@@ -152,14 +159,52 @@ export const ExplorerTab = {
 
         // Fetch Inventory
         async function loadInventory() {
+            if (inventoryRefreshTimer) {
+                clearTimeout(inventoryRefreshTimer);
+                inventoryRefreshTimer = null;
+            }
             invList.innerHTML = "Loading...";
+            invStatus.textContent = "";
             const res = await openclawApi.getInventory();
             if (res.ok) {
                 inventoryData = res.data;
+                renderInventoryStatus(res.data);
                 renderInventoryList(res.data, searchInput.value);
+                if (res.data?.scan_state === "refreshing" || (res.data?.stale && !res.data?.last_error)) {
+                    inventoryRefreshTimer = window.setTimeout(() => {
+                        loadInventory().catch(() => { });
+                    }, 1500);
+                }
             } else {
+                invStatus.textContent = "";
                 invList.innerHTML = `<div class="error">Failed to load inventory: ${res.error}</div>`;
             }
+        }
+
+        function renderInventoryStatus(data) {
+            if (!data) {
+                invStatus.textContent = "";
+                return;
+            }
+            const bits = [];
+            if (data.scan_state === "refreshing") {
+                bits.push("Refreshing inventory snapshot...");
+            } else if (data.scan_state === "error") {
+                bits.push("Inventory refresh failed.");
+            }
+            if (typeof data.snapshot_ts === "number" && Number.isFinite(data.snapshot_ts)) {
+                const stamp = new Date(data.snapshot_ts * 1000);
+                bits.push(`Snapshot: ${stamp.toLocaleString()}`);
+            } else {
+                bits.push("Snapshot: pending");
+            }
+            if (data.stale) {
+                bits.push("State: stale");
+            }
+            if (data.last_error) {
+                bits.push(`Last error: ${data.last_error}`);
+            }
+            invStatus.textContent = bits.join(" ");
         }
 
         async function loadSnapshots() {
