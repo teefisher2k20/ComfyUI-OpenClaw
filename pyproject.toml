@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-openclaw"
 description = "Your own personal AIGC Factory. Any picture. Any reel. The Comfy way.©️"
-version = "0.6.8"
+version = "0.7.0"
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
