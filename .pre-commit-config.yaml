@@ -29,6 +29,12 @@ repos:
         language: python
         pass_filenames: false
         always_run: true
+      - id: regen-openapi-spec
+        name: regenerate OpenAPI spec (staged)
+        entry: python -B scripts/regenerate_openapi_if_needed.py --staged
+        language: python
+        pass_filenames: false
+        always_run: true
       - id: guard-openapi-sync
         name: guard generated OpenAPI sync (staged)
         entry: python -B scripts/check_openapi_sync.py --staged
