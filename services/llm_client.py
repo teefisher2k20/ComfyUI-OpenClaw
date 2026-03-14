@@ -361,6 +361,13 @@ class LLMClient:
         # ad-hoc allowlists causes path drift and can reintroduce S65 regressions.
         return get_llm_egress_controls(provider, base_url or "")
 
+    def _allow_insecure_base_url(self) -> bool:
+        return (
+            os.environ.get("OPENCLAW_ALLOW_INSECURE_BASE_URL")
+            or os.environ.get("MOLTBOT_ALLOW_INSECURE_BASE_URL")
+            or ""
+        ).strip().lower() in ("1", "true", "yes", "y", "on")
+
     def _validate_candidate_url(self, provider: str, base_url: Optional[str]) -> bool:
         """
         Validate base_url against S16/S16.1 SSRF policy.
@@ -393,21 +400,11 @@ class LLMClient:
                 allow_hosts=controls.get("allow_hosts"),
                 allow_any_public_host=bool(controls.get("allow_any_public_host")),
                 allow_loopback_hosts=controls.get("allow_loopback_hosts"),
+                allow_insecure_base_url=self._allow_insecure_base_url(),
                 policy=STANDARD_OUTBOUND_POLICY,
             )
             return True
         except Exception as e:
-            # Allow override via explicit risk-acceptance flag (keeps behavior consistent with runtime_config validation).
-            if (
-                os.environ.get("OPENCLAW_ALLOW_INSECURE_BASE_URL")
-                or os.environ.get("MOLTBOT_ALLOW_INSECURE_BASE_URL")
-                or ""
-            ).strip().lower() in ("1", "true", "yes", "y", "on"):
-                logger.warning(
-                    f"Failover candidate {provider} with base_url={base_url} allowed by "
-                    f"OPENCLAW_ALLOW_INSECURE_BASE_URL despite SSRF policy: {e}"
-                )
-                return True
             logger.warning(
                 f"Failover candidate {provider} with base_url={base_url} "
                 f"blocked by SSRF policy: {e}"
@@ -908,6 +905,7 @@ class LLMClient:
             allow_hosts=egress_controls.get("allow_hosts"),
             allow_any_public_host=bool(egress_controls.get("allow_any_public_host")),
             allow_loopback_hosts=egress_controls.get("allow_loopback_hosts"),
+            allow_insecure_base_url=self._allow_insecure_base_url(),
         )
 
     def _complete_openai_compat(
@@ -954,6 +952,7 @@ class LLMClient:
                         egress_controls.get("allow_any_public_host")
                     ),
                     allow_loopback_hosts=egress_controls.get("allow_loopback_hosts"),
+                    allow_insecure_base_url=self._allow_insecure_base_url(),
                     on_text_delta=on_text_delta,
                 )
             except Exception as e:
@@ -975,6 +974,7 @@ class LLMClient:
             allow_hosts=egress_controls.get("allow_hosts"),
             allow_any_public_host=bool(egress_controls.get("allow_any_public_host")),
             allow_loopback_hosts=egress_controls.get("allow_loopback_hosts"),
+            allow_insecure_base_url=self._allow_insecure_base_url(),
         )
 
     def get_provider_summary(self) -> Dict[str, Any]:

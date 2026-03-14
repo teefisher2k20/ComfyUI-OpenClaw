@@ -100,6 +100,7 @@ def make_request(
     allow_hosts: Optional[set[str]] = None,
     allow_any_public_host: bool = False,
     allow_loopback_hosts: Optional[set[str]] = None,
+    allow_insecure_base_url: bool = False,
 ) -> Dict[str, Any]:
     """
     Make a request to an OpenAI-compatible /chat/completions endpoint.
@@ -134,6 +135,7 @@ def make_request(
             allow_hosts=allow_hosts,
             allow_any_public_host=allow_any_public_host,
             allow_loopback_hosts=allow_loopback_hosts,
+            allow_insecure_base_url=allow_insecure_base_url,
         )
 
         # Extract text from response
@@ -206,6 +208,7 @@ def make_request_stream(
     allow_hosts: Optional[set[str]] = None,
     allow_any_public_host: bool = False,
     allow_loopback_hosts: Optional[set[str]] = None,
+    allow_insecure_base_url: bool = False,
     on_text_delta: Optional[Callable[[str], None]] = None,
     max_preview_chars: int = 16000,
 ) -> Dict[str, Any]:
@@ -258,6 +261,7 @@ def make_request_stream(
             allow_hosts=allow_hosts,
             allow_any_public_host=allow_any_public_host,
             allow_loopback_hosts=allow_loopback_hosts,
+            allow_insecure_base_url=allow_insecure_base_url,
         ):
             line = line.rstrip("\r\n")
             if not line or line.startswith(":"):

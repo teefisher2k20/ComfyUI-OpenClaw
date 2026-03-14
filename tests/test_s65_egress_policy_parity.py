@@ -37,6 +37,7 @@ class TestS65EgressPolicyParity(unittest.TestCase):
             self.assertIn("allow_hosts", kwargs)
             self.assertIn("allow_any_public_host", kwargs)
             self.assertIn("allow_loopback_hosts", kwargs)
+            self.assertIn("allow_insecure_base_url", kwargs)
 
     def test_openai_compat_uses_safe_io(self):
         with patch("services.providers.openai_compat.safe_request_json") as mock_safe:
@@ -58,6 +59,7 @@ class TestS65EgressPolicyParity(unittest.TestCase):
             self.assertIn("allow_hosts", kwargs)
             self.assertIn("allow_any_public_host", kwargs)
             self.assertIn("allow_loopback_hosts", kwargs)
+            self.assertIn("allow_insecure_base_url", kwargs)
 
 
 class TestS65ModelListEgressConvergence(unittest.TestCase):

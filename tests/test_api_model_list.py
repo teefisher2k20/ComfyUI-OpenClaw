@@ -309,6 +309,41 @@ class TestModelListAPI(unittest.IsolatedAsyncioTestCase):
     @patch("services.providers.keys.get_api_key_for_provider")
     @patch("api.config.check_rate_limit")
     @patch("api.config.require_admin_token")
+    @patch("services.safe_io.safe_request_json")
+    @patch("services.safe_io.validate_outbound_url")
+    async def test_handler_insecure_override_reaches_request_time(
+        self,
+        mock_validate_url,
+        mock_safe_request,
+        mock_require_admin,
+        mock_rate_limit,
+        mock_get_key,
+        mock_get_config,
+    ):
+        mock_rate_limit.return_value = True
+        mock_require_admin.return_value = (True, None)
+        mock_get_config.return_value = (
+            {"provider": "openai", "base_url": "http://192.168.2.27:8000/v1"},
+            {},
+        )
+        mock_get_key.return_value = "sk-test"
+        mock_safe_request.return_value = {"data": [{"id": "model-a"}]}
+
+        request = MagicMock()
+        request.query = {}
+        request.remote = "127.0.0.1"
+
+        with patch.dict("os.environ", {"OPENCLAW_ALLOW_INSECURE_BASE_URL": "1"}):
+            resp = await llm_models_handler(request)
+
+        self.assertEqual(resp.status, 200)
+        self.assertTrue(mock_validate_url.call_args.kwargs["allow_insecure_base_url"])
+        self.assertTrue(mock_safe_request.call_args.kwargs["allow_insecure_base_url"])
+
+    @patch("api.config.get_effective_config")
+    @patch("services.providers.keys.get_api_key_for_provider")
+    @patch("api.config.check_rate_limit")
+    @patch("api.config.require_admin_token")
     async def test_handler_ssrf_blocked(
         self, mock_require_admin, mock_rate_limit, mock_get_key, mock_get_config
     ):

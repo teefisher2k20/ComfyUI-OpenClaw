@@ -353,6 +353,7 @@ def validate_outbound_url(
     allow_hosts: Optional[Set[str]] = None,
     allow_any_public_host: bool = False,
     allow_loopback_hosts: Optional[Set[str]] = None,
+    allow_insecure_base_url: bool = False,
     policy: Optional[OutboundPolicy] = None,
 ) -> Tuple[str, str, int, list[str]]:
     """
@@ -364,6 +365,9 @@ def validate_outbound_url(
         allow_any_public_host: If True, allow any host that resolves to a public IP.
         allow_loopback_hosts: Optional host allowlist for controlled loopback-only
             exceptions. This does not allow general private networks.
+        allow_insecure_base_url: Explicit risk-acceptance override for LLM-only
+            paths. Keeps URL syntax checks and IP pinning, but skips strict
+            allowlist/scheme/private-IP blocking.
         policy: S51 OutboundPolicy for scheme+port enforcement.
 
     Returns:
@@ -389,14 +393,20 @@ def validate_outbound_url(
 
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
+    # CRITICAL: this override is only for explicit LLM risk-acceptance paths.
+    # Do not enable it for callbacks/bridge/control-plane surfaces.
     # S51: enforce scheme+port policy if provided
-    if policy is not None:
+    if policy is not None and not allow_insecure_base_url:
         deny_reason = policy.validate(parsed.scheme, port)
         if deny_reason:
             raise SSRFError(deny_reason)
 
     # Deny-by-default logic
-    if not allow_any_public_host and allow_hosts is None:
+    if (
+        not allow_insecure_base_url
+        and not allow_any_public_host
+        and allow_hosts is None
+    ):
         raise SSRFError(
             "Outbound requests denied by default. Provide allow_hosts or allow_any_public_host."
         )
@@ -408,7 +418,7 @@ def validate_outbound_url(
     }
 
     # Check allowlist if provided or enforced
-    if not allow_any_public_host:
+    if not allow_insecure_base_url and not allow_any_public_host:
         if allow_hosts is None:
             raise SSRFError("No allow_hosts allowed")
 
@@ -424,7 +434,7 @@ def validate_outbound_url(
         )
         for _, _, _, _, sockaddr in addr_infos:
             ip = sockaddr[0]
-            if is_private_ip(ip):
+            if is_private_ip(ip) and not allow_insecure_base_url:
                 # CRITICAL:
                 # Only allow loopback IPs when the target host is explicitly listed in
                 # allow_loopback_hosts. Never relax this into blanket private-IP allow.
@@ -603,6 +613,7 @@ def safe_request_json(
     allow_hosts: Optional[Set[str]] = None,
     allow_any_public_host: bool = False,
     allow_loopback_hosts: Optional[Set[str]] = None,
+    allow_insecure_base_url: bool = False,
     headers: Optional[dict] = None,
     timeout_sec: int = 10,
     max_response_bytes: int = 1_000_000,
@@ -631,6 +642,7 @@ def safe_request_json(
             allow_hosts=allow_hosts,
             allow_any_public_host=allow_any_public_host,
             allow_loopback_hosts=allow_loopback_hosts,
+            allow_insecure_base_url=allow_insecure_base_url,
             policy=policy,
         )
 
@@ -718,6 +730,7 @@ def safe_request_text_stream(
     allow_hosts: Optional[Set[str]] = None,
     allow_any_public_host: bool = False,
     allow_loopback_hosts: Optional[Set[str]] = None,
+    allow_insecure_base_url: bool = False,
     headers: Optional[dict] = None,
     timeout_sec: int = 10,
     max_line_bytes: int = 64 * 1024,
@@ -744,6 +757,7 @@ def safe_request_text_stream(
             allow_hosts=allow_hosts,
             allow_any_public_host=allow_any_public_host,
             allow_loopback_hosts=allow_loopback_hosts,
+            allow_insecure_base_url=allow_insecure_base_url,
             policy=policy,
         )
 

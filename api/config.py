@@ -390,6 +390,14 @@ def _format_llm_ssrf_error(exc: Exception) -> str:
     )
 
 
+def _llm_insecure_override_enabled() -> bool:
+    return _env_flag(
+        "OPENCLAW_ALLOW_INSECURE_BASE_URL",
+        "MOLTBOT_ALLOW_INSECURE_BASE_URL",
+        default=False,
+    )
+
+
 def _extract_models_from_payload(payload: dict) -> list:
     """
     Extract model IDs from common provider responses.
@@ -592,6 +600,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                     allow_hosts=controls.get("allow_hosts"),
                     allow_any_public_host=bool(controls.get("allow_any_public_host")),
                     allow_loopback_hosts=controls.get("allow_loopback_hosts"),
+                    allow_insecure_base_url=_llm_insecure_override_enabled(),
                     policy=STANDARD_OUTBOUND_POLICY,
                 )
             except Exception as e:
@@ -634,6 +643,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                     allow_hosts=controls.get("allow_hosts"),
                     allow_any_public_host=bool(controls.get("allow_any_public_host")),
                     allow_loopback_hosts=controls.get("allow_loopback_hosts"),
+                    allow_insecure_base_url=_llm_insecure_override_enabled(),
                 )
 
                 models = _extract_models_from_payload(payload)
