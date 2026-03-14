@@ -393,7 +393,7 @@ paths:
   /models:
     get:
       operationId: "get_models"
-      summary: "List available models from configured provider."
+      summary: "List available models from configured provider. Request-time fetch uses the same SSRF contract as saved `base_url` validation, including the explicit insecure override for private-IP/HTTP targets."
       responses:
         200:
           description: "OK"
