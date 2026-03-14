@@ -64,6 +64,7 @@ Notes:
 - Local providers (`ollama`, `lmstudio`) are loopback-only by design and should use `localhost` / `127.0.0.1` / `::1`.
 - Local loopback provider targets do not require enabling insecure SSRF flags.
 - `OPENCLAW_LLM_ALLOWED_HOSTS` does not allow private/reserved IPs; those still require `OPENCLAW_ALLOW_INSECURE_BASE_URL=1`.
+- The same insecure override applies to config-save validation, `/openclaw/llm/models`, and outbound provider requests.
 - Wildcard entries such as `*` are not supported in `OPENCLAW_LLM_ALLOWED_HOSTS`.
 
 ### 2.2 Security & Authentication

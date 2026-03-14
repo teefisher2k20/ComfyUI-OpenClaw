@@ -953,6 +953,7 @@ Notes:
   - private/reserved IPs are still blocked even when present in `OPENCLAW_LLM_ALLOWED_HOSTS`
   - `OPENCLAW_ALLOW_INSECURE_BASE_URL=1` is the explicit risk-acceptance override for HTTP or private/reserved IP targets (not recommended)
   - wildcard entries such as `OPENCLAW_LLM_ALLOWED_HOSTS=*` are not supported
+  - the same contract applies at request time: `/openclaw/llm/models` refreshes and provider fetches honor the same explicit insecure override
 - Local providers (`ollama`, `lmstudio`) are loopback-only by design:
   - valid targets: `localhost` / `127.0.0.1` / `::1`
   - do **not** enable `OPENCLAW_ALLOW_INSECURE_BASE_URL` just to use local LLM
@@ -1446,6 +1447,7 @@ python_embeded\python.exe -c "import os; print(repr(os.environ.get('OPENCLAW_LLM
 Safer alternative:
 
 - keep the LLM behind a reviewed public HTTPS reverse proxy and allowlist that public host, instead of enabling `OPENCLAW_ALLOW_INSECURE_BASE_URL`.
+- on current builds, once that override is intentionally enabled and the process is restarted, both Remote Admin validation and `/openclaw/llm/models` should follow the same decision.
 
 ### Admin Token: server-side vs UI
 

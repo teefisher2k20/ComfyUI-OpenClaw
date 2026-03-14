@@ -107,7 +107,7 @@ Assist payload redaction contract:
 | :--- | :--- | :--- | :--- | :--- |
 | `POST` | `/chat` | `/moltbot/llm/chat` | Admin/Local | Unified chat interface for assistant interactions. |
 | `POST` | `/test` | `/moltbot/llm/test` | Admin | Test LLM connectivity and configuration. |
-| `GET` | `/models` | `/moltbot/llm/models` | Admin | List available models from configured provider. |
+| `GET` | `/models` | `/moltbot/llm/models` | Admin | List available models from configured provider. Request-time fetch uses the same SSRF contract as saved `base_url` validation, including the explicit insecure override for private-IP/HTTP targets. |
 
 ### 1.4 Templates & Assets
 

@@ -67,6 +67,7 @@ If Remote Admin is running on this Windows host, but your custom/OpenAI-compatib
 - `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1` still applies only to public hosts.
 - Private/reserved LAN IPs still require `OPENCLAW_ALLOW_INSECURE_BASE_URL=1`.
 - `OPENCLAW_LLM_ALLOWED_HOSTS=*` is not supported.
+- On current builds, that same override is honored by both Remote Admin validation and `/openclaw/llm/models` refresh requests after a full restart.
 
 Recommended verification in the same embedded runtime:
 

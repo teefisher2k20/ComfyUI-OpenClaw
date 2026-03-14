@@ -114,11 +114,12 @@ OPENCLAW_ADMIN_TOKEN=change-this-local-admin-token
 3. Keep external tools/registry sync/transforms disabled unless explicitly needed.
 4. For local LLM providers (Ollama/LM Studio), use loopback URLs only (`localhost`/`127.0.0.1`/`::1`); keep `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0` and `OPENCLAW_ALLOW_INSECURE_BASE_URL=0`.
 5. `OPENCLAW_LLM_ALLOWED_HOSTS` is only for additional exact public hosts; it does not permit RFC1918/private LAN targets.
-6. Keep `OPENCLAW_DEBUG_REASONING_REVEAL=0` unless you are doing short-lived local admin debugging and explicitly need privileged reasoning reveal.
-7. Keep `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0` unless you explicitly need local CLI/no-origin compatibility.
-8. Run:
+6. The same LLM SSRF contract applies consistently to config validation, `/openclaw/llm/models`, and outbound provider requests.
+7. Keep `OPENCLAW_DEBUG_REASONING_REVEAL=0` unless you are doing short-lived local admin debugging and explicitly need privileged reasoning reveal.
+8. Keep `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0` unless you explicitly need local CLI/no-origin compatibility.
+9. Run:
    - `python scripts/check_deployment_profile.py --profile local`
-9. If you enable optional high-risk features, document why and time-box the change.
+10. If you enable optional high-risk features, document why and time-box the change.
 
 ## 4. LAN (Trusted Subnet)
 
@@ -156,11 +157,12 @@ OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0
 3. Keep bridge/tools/registry/transforms disabled unless there is a reviewed requirement.
 4. Keep `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=0` for LAN deployments.
 5. If your LLM is on another LAN/private-IP host, that still counts as an insecure `base_url` target; `OPENCLAW_LLM_ALLOWED_HOSTS` alone is not sufficient.
-6. Run:
+6. The same LLM SSRF contract applies consistently to config validation, `/openclaw/llm/models`, and outbound provider requests.
+7. Run:
    - `python scripts/check_deployment_profile.py --profile lan`
-7. Run the security diagnostics endpoint before production use:
+8. Run the security diagnostics endpoint before production use:
    - `GET /openclaw/security/doctor` (admin boundary).
-8. If using mobile/remote admin UI, expose `/openclaw/admin` only inside trusted LAN/VPN boundaries.
+9. If using mobile/remote admin UI, expose `/openclaw/admin` only inside trusted LAN/VPN boundaries.
 
 ## 5. Public (Internet + Reverse Proxy)
 
