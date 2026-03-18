@@ -6,6 +6,32 @@ This document defines the **mandatory test workflow** for this repo. Run it **be
 
 Every implementation plan must include the **full test validation procedure** in its final stage. A plan is **not accepted** until all tests in this SOP pass **without errors** and the results are recorded (date + environment + command log reference).
 
+For bugfix and hotfix work, the final full gate is necessary but not sufficient. Acceptance must also prove the reported failure was reproduced and pinned with a targeted regression.
+
+## Bugfix / Hotfix Acceptance Model (Mandatory)
+
+Bugfix and hotfix acceptance follows `Reproduce -> Pin -> Sweep`.
+
+1. `Reproduce`
+   - Capture pre-fix failure evidence with the smallest credible seam: a failing targeted test, deterministic script, or live/runtime evidence if local reproduction is not feasible.
+   - If the bug is first observed in a deployed environment, record the concrete failing behavior before patching and map it to the repo seam that should have caught it.
+2. `Pin`
+   - Add or update a targeted regression that encodes the root cause.
+   - The regression must fail against the broken behavior and pass only after the fix; validating nearby copy or an unrelated happy path is not sufficient.
+3. `Sweep`
+   - Run the mandatory full workflow below after the targeted regression is green, so collateral regressions are still caught.
+
+Required guardrails:
+- Implementation plans for bugfix/hotfix work must explicitly describe the `Reproduce -> Pin -> Sweep` path in the test plan.
+- Implementation records for bugfix/hotfix work must separately record:
+  - pre-fix reproduction evidence
+  - post-fix targeted regression evidence
+  - final full-gate evidence
+- If a critical seam is usually mocked (`auth`, `webhook verification`, `connector callback`, `runtime/deploy env`, `provider/queue boundary`, or similar), acceptance must include at least one unmocked test or scripted probe through the real seam.
+- For stateful or production-facing transaction flows (`login`, `webhook ingress`, `connector callback`, `approval/admin actions`, `model download/import`, or similar), acceptance must verify the actual transaction outcome, not only page load, redirect presence, or route reachability.
+- If the original failure cannot be replayed locally after the fix is in progress, the record must explain why and preserve the best available pre-fix evidence instead of pretending the bug never had a failing state.
+- A change is not accepted if the record only says `full gate passed` without showing how the specific bug was reproduced and pinned.
+
 ## Prerequisites
 
 - Python 3.10+ (CI uses 3.10/3.11)

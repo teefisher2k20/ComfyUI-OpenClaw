@@ -77,3 +77,17 @@ TMPDIR=.tmp/playwright TMP=.tmp/playwright TEMP=.tmp/playwright \
 - If you see `404` / failed module imports for `scripts/app.js`, ensure tests are using the
   Playwright route mock (see `tests/e2e/utils/helpers.js`).
 - If tests fail only on WSL `/mnt/c`, use the temp-dir workaround above.
+
+## 5. Transaction-Sensitive Acceptance Addendum
+
+When a change touches a public/admin/webhook/connector or other stateful user-facing flow, the acceptance path must include at least one transaction-level assertion through the relevant surface.
+
+Examples of acceptable transaction-level evidence:
+- submit a webhook or connector callback payload and verify the resulting accepted/rejected outcome
+- perform an approval or admin action and verify the persisted or rendered result
+- submit a model import/download or other state-changing form/action and verify the resulting lifecycle state
+
+Non-examples:
+- loading the entry page only
+- verifying only that a route exists or returns a redirect
+- asserting only mocked backend behavior when the production seam is the failure point
