@@ -96,6 +96,18 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Slack multi-workspace installation flow completed, with final egress and notification-center hardening</strong></summary>
+
+- Added Slack multi-workspace OAuth install/callback handling with single-use state validation, workspace-scoped installation binding, encrypted token refs, and workspace-aware reply routing for inbound events and delayed result delivery.
+- Expanded connector diagnostics so Slack installation health now surfaces stable fail-closed states such as `ok`, `invalid_token`, `revoked`, `workspace_unbound`, and `degraded` without exposing token material.
+- Moved Slack OAuth token exchange onto the same SSRF-safe outbound layer used by other protected network paths, closing the late-stage egress policy regression found during the full acceptance sweep.
+- Fixed a notification-center persistence regression so dismissed model-manager failure alerts stay hidden after reload instead of being immediately re-created by repeated background refresh failures, while historical storage remains intact.
+- Re-validated the final implementation on WSL with the full SOP gate: detect-secrets, pre-commit, backend full suites, adaptive adversarial gate, and Playwright E2E.
+
+</details>
+
+<details>
+
 <summary><strong>Planning, startup/config hardening, compatibility governance, and frontend hotspot reduction batch</strong></summary>
 
 - Normalized the active planning surface onto `.planning/roadmap.md` and clarified the docs-only test-flow exemption in the project SOP guidance.

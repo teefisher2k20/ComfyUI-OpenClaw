@@ -40,8 +40,11 @@ Admin diagnostics APIs:
 Slack multi-workspace notes:
 
 - Slack OAuth installs bind one workspace per installation record and persist only encrypted token refs.
+- OAuth callback state is single-use and replay/invalid-state callbacks fail closed instead of reusing a prior install session.
 - `GET /openclaw/connector/installations/resolve?platform=slack&workspace_id=<team_id>` returns the fail-closed resolution view for a specific Slack workspace.
 - `GET /openclaw/connector/installations` diagnostics may include per-install health metadata plus aggregate `health_counts`.
+- Slack lifecycle events such as `tokens_revoked`, `app_uninstalled`, and rate-limit degradation update installation health so outbound replies fail closed or degrade predictably for the affected workspace.
+- In multi-workspace mode, outbound replies and delayed result deliveries resolve the bot token by workspace binding and keep Slack thread context when replying back to the originating conversation.
 
 ### Multi-tenant boundary behavior
 
@@ -413,6 +416,7 @@ Slack uses the Events API webhook mode in OpenClaw. You must expose the endpoint
    - Legacy single-workspace fallback can still set `OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN=xoxb-...`; F58 multi-workspace mode no longer requires that token at startup if OAuth install flow is configured.
    - `OPENCLAW_CONNECTOR_ADMIN_TOKEN` must match server `OPENCLAW_ADMIN_TOKEN` if server-side admin token is enabled.
    - Slack ingress is fail-closed: invalid/missing signature, stale timestamp, and replayed events are rejected.
+   - OAuth callbacks also fail closed on invalid or replayed `state` values.
 
 4. **Start connector and expose webhook endpoint**
    - Start connector: `python -m connector`
@@ -439,6 +443,7 @@ Slack uses the Events API webhook mode in OpenClaw. You must expose the endpoint
    - In DM: `/help`.
    - Verify connector logs show signed ingress accepted and replies delivered.
    - Verify `GET /openclaw/connector/installations` shows the Slack workspace binding and health state `ok`.
+   - If you test uninstall/token-revoke scenarios, verify the installation health flips to `revoked` or `invalid_token` and that subsequent replies for that workspace fail closed until reinstalled.
 
 7. **Security checklist before production**
    - Keep `OPENCLAW_CONNECTOR_SLACK_ALLOWED_USERS`/`OPENCLAW_CONNECTOR_SLACK_ALLOWED_CHANNELS` restricted.
