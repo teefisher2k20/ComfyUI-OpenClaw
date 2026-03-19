@@ -96,6 +96,18 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Planning, startup/config hardening, compatibility governance, and frontend hotspot reduction batch</strong></summary>
+
+- Normalized the active planning surface onto `.planning/roadmap.md` and clarified the docs-only test-flow exemption in the project SOP guidance.
+- Hardened route/bootstrap registration around a declarative manifest and centralized validation seam so startup wiring is less fragile under delayed readiness and import-order edge cases.
+- Completed the next config-unification pass around one effective-config read facade, reducing precedence drift across backend and frontend-facing config consumers.
+- Centralized legacy compatibility handling for backend headers and frontend API/storage fallbacks so deprecation behavior is explicit, shared, and regression-covered.
+- Split the frontend shell hotspot and LLM model-list helper logic into smaller seams, then fixed the timer-binding regression uncovered during full-gate Playwright validation.
+
+</details>
+
+<details>
+
 <summary><strong>Private-host LLM SSRF contract clarified across Remote Admin, docs, and deployment guidance</strong></summary>
 
 - Clarified that `OPENCLAW_LLM_ALLOWED_HOSTS` only extends the exact public-host allowlist for custom LLM `base_url` values and does not permit private/reserved LAN targets by itself.

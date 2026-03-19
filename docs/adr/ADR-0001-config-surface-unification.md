@@ -1,19 +1,19 @@
-# ADR-0001: Configuration Surface Unification (R139)
+# ADR-0001: Configuration Surface Unification
 
 - Status: Accepted
 - Date: 2026-03-07
 - Owners: OpenClaw maintainers
-- Related roadmap item: `R139`
+- Related roadmap items: `R139`, phase-2 follow-up completed 2026-03-19
 
 ## Context
 
 OpenClaw currently has distributed configuration logic across `config.py`, `services/runtime_config.py`, and selected call sites that still read env vars directly. This increases precedence drift risk and makes behavior harder to reason about.
 
-`R139` requires a phased, backward-compatible unification, not a single destructive rewrite.
+The unification work required a phased, backward-compatible rollout rather than a single destructive rewrite.
 
 ## Decision
 
-Adopt one authoritative layered model for runtime LLM config resolution, exposed through a unified resolver and consumed by `services/runtime_config.py` compatibility APIs.
+Adopt one authoritative layered model for runtime LLM config resolution, exposed through a unified resolver and then through a single effective-config facade consumed by compatibility APIs and downstream readers.
 
 Layer precedence (highest to lowest):
 1. `env` (`OPENCLAW_*` first, `MOLTBOT_*` fallback)
@@ -32,6 +32,7 @@ Positive:
 - Deterministic precedence and source attribution.
 - Reduced duplicated merge logic in primary runtime paths.
 - Safer phased migration with compatibility facade intact.
+- Shared read seams make parity testing and future deprecation work narrower.
 
 Trade-offs:
 - Temporary coexistence of migrated and non-migrated call sites during phased rollout.
@@ -45,8 +46,13 @@ Phase 1 (`R139`):
 - Migrate core LLM call sites to stop duplicating env precedence.
 - Add precedence/compatibility regression tests.
 
-Phase 2+ (future follow-ups):
-- Continue migrating remaining direct env readers where they overlap with runtime config contract.
+Phase 2 (completed 2026-03-19):
+- Introduced `services/effective_config.py` as the supported effective-config read facade.
+- Migrated remaining mixed-path readers touched by the phase onto the shared facade/compatibility shims.
+- Added parity coverage so env/runtime/persisted/default precedence is asserted once at the shared seam instead of at each consumer.
+
+Future follow-ups:
+- Continue migrating any remaining direct env readers that still overlap with the runtime config contract.
 - Remove obsolete adapter/shim code once migration reaches stable completion.
 
 ## Rejected Alternatives

@@ -11,6 +11,8 @@
 - Entry/shell/tabs architecture:
   - `web/openclaw.js`
   - `web/openclaw_ui.js`
+  - `web/openclaw_actions.js`
+  - `web/openclaw_queue_monitor.js`
   - `web/openclaw_tabs.js`
 - Runtime model:
   - Loaded as a ComfyUI extension in the host page (no standalone SPA bootstrap).
@@ -63,6 +65,7 @@ Scored 1-5 (higher is better), weighted by current risk profile:
 
 1. OpenClaw frontend is host-coupled to ComfyUI extension lifecycle and remount behavior; framework migration introduces significant integration and lifecycle risk with limited near-term operator value.
 2. Current architecture already has critical stability controls (`ErrorBoundary`, tab remount safety, capability-gated registration, compatibility aliases, Vitest + Playwright lanes).
+   Recent decomposition work also reduced shell hotspot size without introducing a framework dependency.
 3. Most remaining roadmap priorities are functionality/security features (`F53/F54/F58/F59`), not frontend rendering abstraction gaps; migration now would consume high-risk bandwidth with weak ROI.
 
 ## Decision

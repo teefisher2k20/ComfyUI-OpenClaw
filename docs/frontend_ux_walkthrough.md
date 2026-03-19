@@ -5,11 +5,17 @@ This document summarizes the current OpenClaw sidebar UI structure and how to ve
 ## UI Structure
 
 - Entry: `web/openclaw.js` registers the extension and sidebar tab.
-- Shell: `web/openclaw_ui.js` renders the header, tab bar, and tab panes.
+- Shell: `web/openclaw_ui.js` now acts as the composition root for the sidebar shell and public singleton exports.
+- Actions: `web/openclaw_actions.js` owns submit/cancel/retry wiring and guarded action routing for the shell.
+- Queue monitor: `web/openclaw_queue_monitor.js` owns queue polling lifecycle and transient banner/status updates used by the shell.
 - Tabs: `web/openclaw_tabs.js` manages tab registration, rendering, and remount safety.
 - API: `web/openclaw_api.js` provides a normalized fetch wrapper and OpenClaw endpoints (legacy Moltbot endpoints still work).
 - Styles: `web/openclaw.css` provides shared design tokens and component classes.
 - Errors: `web/openclaw_utils.js` provides `showError()` / `clearError()` helpers.
+
+Refactor note:
+- `web/openclaw_ui.js` should stay focused on shell composition, shared singleton ownership, and exports.
+- New shell behaviors should prefer the extracted action/queue modules unless they truly belong to top-level shell assembly.
 
 ## Feature Gating (Capabilities)
 
