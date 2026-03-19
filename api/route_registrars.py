@@ -18,12 +18,16 @@ class RouteSpec:
     handler: Any
 
 
-def register_route_family(server, register_route_fn, specs: Iterable[RouteSpec]) -> None:
+def register_route_family(
+    server, register_route_fn, specs: Iterable[RouteSpec]
+) -> None:
     for spec in specs:
         register_route_fn(server, spec.method, spec.path, spec.handler)
 
 
-def build_core_route_specs(prefix: str, handlers: dict[str, Any]) -> tuple[RouteSpec, ...]:
+def build_core_route_specs(
+    prefix: str, handlers: dict[str, Any]
+) -> tuple[RouteSpec, ...]:
     return (
         RouteSpec("GET", f"{prefix}/admin", handlers["remote_admin_page_handler"]),
         RouteSpec("GET", f"{prefix}/health", handlers["health_handler"]),

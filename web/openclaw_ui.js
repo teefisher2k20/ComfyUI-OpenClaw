@@ -314,8 +314,9 @@ export class OpenClawUI {
         }
 
         list.innerHTML = activeEntries.map((entry) => {
+            const escapedMessage = String(entry.message || "").replace(/"/g, "&quot;");
             const actionHtml = entry.action?.type && entry.action?.payload
-                ? `<button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="open" data-notification-id="${entry.id}">${entry.action.label || "Open"}</button>`
+                ? `<button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="open" data-notification-id="${entry.id}" aria-label="Open notification action for ${escapedMessage}">${entry.action.label || "Open"}</button>`
                 : "";
             const countHtml = entry.count > 1
                 ? `<span class="openclaw-notification-count">x${entry.count}</span>`
@@ -336,8 +337,8 @@ export class OpenClawUI {
                         </div>
                         <div class="openclaw-notification-actions">
                             ${actionHtml}
-                            <button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="ack" data-notification-id="${entry.id}" ${ackDisabled}>${ackLabel}</button>
-                            <button type="button" class="openclaw-btn openclaw-btn-sm openclaw-btn-danger" data-notification-action="dismiss" data-notification-id="${entry.id}">Dismiss</button>
+                            <button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="ack" data-notification-id="${entry.id}" aria-label="Acknowledge notification: ${escapedMessage}" ${ackDisabled}>${ackLabel}</button>
+                            <button type="button" class="openclaw-btn openclaw-btn-sm openclaw-btn-danger" data-notification-action="dismiss" data-notification-id="${entry.id}" aria-label="Dismiss notification: ${escapedMessage}">Dismiss</button>
                         </div>
                     </div>
                 </div>

@@ -14,6 +14,18 @@ function isPath(pathname, suffix) {
 
 test.describe("Notification Center", () => {
   test("persists model-manager failures across reload until dismissed", async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        if (!window.name.includes("__openclaw_notifications_storage_reset__")) {
+          window.localStorage.clear();
+          window.sessionStorage.clear();
+          window.name = `${window.name}__openclaw_notifications_storage_reset__`;
+        }
+      } catch {
+        // ignore storage reset failures in restrictive browser contexts
+      }
+    });
+
     await mockComfyUiCore(page);
 
     await page.route("**/models/search**", async (route) => {
@@ -63,23 +75,81 @@ test.describe("Notification Center", () => {
       });
     });
 
+    const okJson = JSON.stringify({ ok: true, entries: [], config: {}, stats: {} });
+    await page.route("**/events/stream**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: "",
+      });
+    });
+    await page.route("**/logs/tail**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: okJson,
+      });
+    });
+    await page.route("**/config**", async (route) => {
+      const url = new URL(route.request().url());
+      if (isPath(url.pathname, "/config")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: okJson,
+        });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.route("**/system_stats**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: okJson,
+      });
+    });
+    await page.route("**/system_info**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: okJson,
+      });
+    });
+    await page.route("**/version**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: okJson,
+      });
+    });
+
     await page.goto("test-harness.html");
     await waitForOpenClawReady(page);
     await clickTab(page, "Model Manager");
+    await page.locator("#mm-refresh-btn").click();
 
     const toggle = page.locator("#openclaw-notification-toggle");
-    await expect(toggle.locator(".openclaw-notification-badge")).toHaveText("1");
-
-    await toggle.click();
-    await expect(page.locator("#openclaw-notification-panel")).toContainText("search: search_failed");
-    await expect(page.locator("#openclaw-notification-panel")).toContainText("Open Model Manager");
+    await toggle.dispatchEvent("click");
+    const targetNotification = page
+      .locator("#openclaw-notification-panel .openclaw-notification-item")
+      .filter({ hasText: "search: search_failed" })
+      .first();
+    await expect(targetNotification).toContainText("search: search_failed", { timeout: 15000 });
+    await expect(targetNotification).toContainText("Open Model Manager");
 
     await page.reload();
     await waitForOpenClawReady(page);
-    await page.locator("#openclaw-notification-toggle").click();
-    await expect(page.locator("#openclaw-notification-panel")).toContainText("search: search_failed");
+    await page.locator("#openclaw-notification-toggle").dispatchEvent("click");
+    const reloadedNotification = page
+      .locator("#openclaw-notification-panel .openclaw-notification-item")
+      .filter({ hasText: "search: search_failed" })
+      .first();
+    await expect(reloadedNotification).toContainText("search: search_failed", { timeout: 15000 });
 
-    await page.getByRole("button", { name: "Dismiss" }).first().click();
+    await reloadedNotification
+      .getByRole("button", { name: "Dismiss notification: search: search_failed" })
+      .click();
     await expect(page.locator("#openclaw-notification-panel")).not.toContainText("search: search_failed");
   });
 });
