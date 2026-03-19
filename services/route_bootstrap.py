@@ -82,48 +82,19 @@ def _initialize_registries_and_security_gate() -> None:
 def _do_full_registration(server) -> None:
     """Register all OpenClaw routes including bridge/scheduler bindings."""
     from .access_control import require_admin_token
-    from .import_fallback import import_attrs_dual
     from .plugins.async_bridge import run_async_in_sync_context
     from .queue_submit import submit_prompt
+    from .route_bootstrap_contract import load_route_bootstrap_contract
     from .scheduler.runner import get_scheduler_runner, start_scheduler
     from .templates import get_template_service
 
-    (register_approval_routes,) = import_attrs_dual(
-        __package__,
-        "..api.approvals",
-        "api.approvals",
-        ("register_approval_routes",),
-    )
-    (BridgeHandlers,) = import_attrs_dual(
-        __package__,
-        "..api.bridge",
-        "api.bridge",
-        ("BridgeHandlers",),
-    )
-    (register_preset_routes,) = import_attrs_dual(
-        __package__,
-        "..api.presets",
-        "api.presets",
-        ("register_preset_routes",),
-    )
-    (register_routes,) = import_attrs_dual(
-        __package__,
-        "..api.routes",
-        "api.routes",
-        ("register_routes",),
-    )
-    (register_schedule_routes,) = import_attrs_dual(
-        __package__,
-        "..api.schedules",
-        "api.schedules",
-        ("register_schedule_routes",),
-    )
-    (register_trigger_routes,) = import_attrs_dual(
-        __package__,
-        "..api.triggers",
-        "api.triggers",
-        ("register_trigger_routes",),
-    )
+    contract = load_route_bootstrap_contract(__package__)
+    register_approval_routes = contract["register_approval_routes"]
+    BridgeHandlers = contract["BridgeHandlers"]
+    register_preset_routes = contract["register_preset_routes"]
+    register_routes = contract["register_routes"]
+    register_schedule_routes = contract["register_schedule_routes"]
+    register_trigger_routes = contract["register_trigger_routes"]
 
     register_routes(server)
     register_preset_routes(server.app)
@@ -150,46 +121,7 @@ def _do_full_registration(server) -> None:
             return run_async_in_sync_context(_do_submit())
 
     bridge_handlers = BridgeHandlers(submit_service=QueueSubmitService())
-    if hasattr(server.app.router, "add_post"):
-        server.app.router.add_post(
-            "/moltbot/bridge/submit", bridge_handlers.submit_handler
-        )
-        server.app.router.add_post(
-            "/moltbot/bridge/deliver", bridge_handlers.deliver_handler
-        )
-        server.app.router.add_get(
-            "/moltbot/bridge/health", bridge_handlers.health_handler
-        )
-        server.app.router.add_post(
-            "/openclaw/bridge/submit", bridge_handlers.submit_handler
-        )
-        server.app.router.add_post(
-            "/openclaw/bridge/deliver", bridge_handlers.deliver_handler
-        )
-        server.app.router.add_get(
-            "/openclaw/bridge/health", bridge_handlers.health_handler
-        )
-        try:
-            server.app.router.add_post(
-                "/api/moltbot/bridge/submit", bridge_handlers.submit_handler
-            )
-            server.app.router.add_post(
-                "/api/moltbot/bridge/deliver", bridge_handlers.deliver_handler
-            )
-            server.app.router.add_get(
-                "/api/moltbot/bridge/health", bridge_handlers.health_handler
-            )
-            server.app.router.add_post(
-                "/api/openclaw/bridge/submit", bridge_handlers.submit_handler
-            )
-            server.app.router.add_post(
-                "/api/openclaw/bridge/deliver", bridge_handlers.deliver_handler
-            )
-            server.app.router.add_get(
-                "/api/openclaw/bridge/health", bridge_handlers.health_handler
-            )
-        except RuntimeError:
-            pass
+    _register_bridge_routes(server.app.router, bridge_handlers)
 
     async def unified_submit_fn(
         template_id,
@@ -242,6 +174,38 @@ def _do_full_registration(server) -> None:
         require_admin_token_fn=require_admin_token,
         submit_fn=unified_submit_fn,
     )
+
+
+_BRIDGE_ROUTE_SPECS = (
+    ("add_post", "/moltbot/bridge/submit", "submit_handler"),
+    ("add_post", "/moltbot/bridge/deliver", "deliver_handler"),
+    ("add_get", "/moltbot/bridge/health", "health_handler"),
+    ("add_post", "/openclaw/bridge/submit", "submit_handler"),
+    ("add_post", "/openclaw/bridge/deliver", "deliver_handler"),
+    ("add_get", "/openclaw/bridge/health", "health_handler"),
+    ("add_post", "/api/moltbot/bridge/submit", "submit_handler"),
+    ("add_post", "/api/moltbot/bridge/deliver", "deliver_handler"),
+    ("add_get", "/api/moltbot/bridge/health", "health_handler"),
+    ("add_post", "/api/openclaw/bridge/submit", "submit_handler"),
+    ("add_post", "/api/openclaw/bridge/deliver", "deliver_handler"),
+    ("add_get", "/api/openclaw/bridge/health", "health_handler"),
+)
+
+
+def _register_bridge_routes(router, bridge_handlers) -> None:
+    # IMPORTANT: keep bridge route registration table-driven.
+    # Missing one alias path here silently breaks one control-plane surface while
+    # leaving the rest apparently healthy, which is hard to diagnose during startup.
+    for method_name, path, handler_name in _BRIDGE_ROUTE_SPECS:
+        registrar = getattr(router, method_name, None)
+        if registrar is None:
+            continue
+        try:
+            registrar(path, getattr(bridge_handlers, handler_name))
+        except RuntimeError:
+            if path.startswith("/api/"):
+                continue
+            raise
 
 
 def _start_registration_retry_loop() -> None:
