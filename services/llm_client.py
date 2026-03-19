@@ -14,6 +14,21 @@ try:
 except ImportError:
     from config import setup_logger
 
+try:
+    from .effective_config import (
+        get_effective_llm_base_url,
+        get_effective_llm_config,
+        get_effective_llm_model,
+        get_effective_llm_provider,
+    )
+except ImportError:
+    from services.effective_config import (  # type: ignore
+        get_effective_llm_base_url,
+        get_effective_llm_config,
+        get_effective_llm_model,
+        get_effective_llm_provider,
+    )
+
 from .providers import anthropic, openai_compat
 from .providers.catalog import (
     DEFAULT_MODEL_BY_PROVIDER,
@@ -45,49 +60,18 @@ except ImportError:
 
 
 def get_configured_provider() -> str:
-    """Get configured provider from the unified runtime-config surface."""
-    try:
-        from ..services.runtime_config import get_effective_config
-    except ImportError:
-        from services.runtime_config import get_effective_config
-
-    effective, _sources = get_effective_config()
-    return str(effective.get("provider") or DEFAULT_PROVIDER).lower()
+    """Get configured provider from the unified effective-config facade."""
+    return get_effective_llm_provider()
 
 
 def get_configured_model(provider: str) -> str:
-    """Get configured model for a provider via unified runtime-config snapshot."""
-    try:
-        from ..services.runtime_config import get_effective_config
-    except ImportError:
-        from services.runtime_config import get_effective_config
-
-    effective, _sources = get_effective_config()
-    current_provider = str(effective.get("provider") or "").lower()
-    configured_model = effective.get("model")
-    if configured_model and str(provider).lower() == current_provider:
-        return str(configured_model)
-    return DEFAULT_MODEL_BY_PROVIDER.get(provider, "default")
+    """Get configured model for a provider via unified effective-config facade."""
+    return get_effective_llm_model(provider)
 
 
 def get_configured_base_url(provider: str) -> str:
-    """Get configured base URL via unified runtime-config snapshot."""
-    try:
-        from ..services.runtime_config import get_effective_config
-    except ImportError:
-        from services.runtime_config import get_effective_config
-
-    effective, _sources = get_effective_config()
-    current_provider = str(effective.get("provider") or "").lower()
-    configured_base_url = str(effective.get("base_url") or "").strip()
-    if configured_base_url and str(provider).lower() == current_provider:
-        return configured_base_url
-
-    info = get_provider_info(provider)
-    if info:
-        return info.base_url
-
-    raise ValueError(f"Unknown provider: {provider}")
+    """Get configured base URL via unified effective-config facade."""
+    return get_effective_llm_base_url(provider)
 
 
 class LLMClient:
@@ -125,13 +109,9 @@ class LLMClient:
             timeout: Request timeout in seconds
             max_retries: Max retry attempts for transient errors
         """
-        # Load effective config (S13/R21)
-        try:
-            from ..services.runtime_config import get_effective_config
-        except ImportError:
-            from services.runtime_config import get_effective_config
-
-        eff_config, _ = get_effective_config()
+        # Load effective config through the R148 facade to keep all high-frequency
+        # readers on one supported surface.
+        eff_config, _ = get_effective_llm_config()
 
         self.provider = provider or eff_config.get("provider") or DEFAULT_PROVIDER
 
@@ -231,12 +211,7 @@ class LLMClient:
 
         Returns empty if no fallbacks configured (preserves existing behavior).
         """
-        try:
-            from ..services.runtime_config import get_effective_config
-        except ImportError:
-            from services.runtime_config import get_effective_config
-
-        eff_config, _ = get_effective_config()
+        eff_config, _ = get_effective_llm_config()
 
         # Get failover config
         fallback_models = eff_config.get("fallback_models", [])

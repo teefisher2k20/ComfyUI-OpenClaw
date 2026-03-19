@@ -11,12 +11,14 @@ try:
         GENERIC_LLM_API_KEY_ENV_KEYS,
         get_first_present_env,
     )
+    from .services.effective_config import get_effective_llm_api_key
 except Exception:
     try:
         from services.config_layers import (  # type: ignore
             GENERIC_LLM_API_KEY_ENV_KEYS,
             get_first_present_env,
         )
+        from services.effective_config import get_effective_llm_api_key  # type: ignore
     except Exception:
         GENERIC_LLM_API_KEY_ENV_KEYS = (
             "OPENCLAW_LLM_API_KEY",
@@ -30,6 +32,9 @@ except Exception:
                 if key in env_map:
                     return env_map.get(key)
             return None
+
+        def get_effective_llm_api_key(provider=None, tenant_id=None):  # type: ignore
+            return get_first_present_env(GENERIC_LLM_API_KEY_ENV_KEYS)
 
 
 # Pack metadata
@@ -165,14 +170,12 @@ class RedactedFormatter(logging.Formatter):
 
 def get_api_key() -> Optional[str]:
     """
-    Retrieves the LLM API key from environment variables.
+    Retrieves the effective LLM API key via the unified config facade.
 
-    Preference order:
-    1) OPENCLAW_LLM_API_KEY
-    2) (legacy) MOLTBOT_LLM_API_KEY
-    3) (legacy) CLAWDBOT_LLM_API_KEY
+    This keeps logger redaction aligned with the same provider/key resolution
+    path used by runtime consumers.
     """
-    value = get_first_present_env(GENERIC_LLM_API_KEY_ENV_KEYS)
+    value = get_effective_llm_api_key()
     return value or None
 
 
