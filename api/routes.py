@@ -17,6 +17,28 @@ if __package__ and "." in __package__:
 else:
     from services.import_fallback import import_attrs_dual  # type: ignore
 
+# IMPORTANT: route-family helpers must stay one-way imported from here.
+# Do not make api.route_registrars import api.routes back, or bootstrap can
+# regress into circular import failures before PromptServer registration.
+(
+    build_assist_route_specs,
+    build_connector_installation_route_specs,
+    build_core_route_specs,
+    build_pack_route_specs,
+    register_route_family,
+) = import_attrs_dual(
+    __package__,
+    "..api.route_registrars",
+    "api.route_registrars",
+    (
+        "build_assist_route_specs",
+        "build_connector_installation_route_specs",
+        "build_core_route_specs",
+        "build_pack_route_specs",
+        "register_route_family",
+    ),
+)
+
 # R98 / R64: Endpoint Metadata import via shared helper
 (
     AuthTier,
@@ -815,231 +837,91 @@ def register_routes(server) -> None:
 
     print("[OpenClaw] Registering routes (Shim Alignment R26)...")
     prefixes = ["/openclaw", "/moltbot"]  # new, legacy
+    core_handlers = {
+        "remote_admin_page_handler": remote_admin_page_handler,
+        "health_handler": health_handler,
+        "logs_tail_handler": logs_tail_handler,
+        "jobs_handler": jobs_handler,
+        "trace_handler": trace_handler,
+        "webhook_handler": webhook_handler,
+        "webhook_submit_handler": webhook_submit_handler,
+        "webhook_validate_handler": webhook_validate_handler,
+        "capabilities_handler": capabilities_handler,
+        "config_get_handler": config_get_handler,
+        "config_put_handler": config_put_handler,
+        "llm_test_handler": llm_test_handler,
+        "llm_chat_handler": llm_chat_handler,
+        "llm_models_handler": llm_models_handler,
+        "templates_list_handler": templates_list_handler,
+        "preflight_handler": preflight_handler,
+        "inventory_handler": inventory_handler,
+        "list_checkpoints_handler": list_checkpoints_handler,
+        "create_checkpoint_handler": create_checkpoint_handler,
+        "get_checkpoint_handler": get_checkpoint_handler,
+        "delete_checkpoint_handler": delete_checkpoint_handler,
+        "rewrite_recipes_list_handler": rewrite_recipes_list_handler,
+        "rewrite_recipe_create_handler": rewrite_recipe_create_handler,
+        "rewrite_recipe_get_handler": rewrite_recipe_get_handler,
+        "rewrite_recipe_update_handler": rewrite_recipe_update_handler,
+        "rewrite_recipe_delete_handler": rewrite_recipe_delete_handler,
+        "rewrite_recipe_dry_run_handler": rewrite_recipe_dry_run_handler,
+        "rewrite_recipe_apply_handler": rewrite_recipe_apply_handler,
+        "model_search_handler": model_search_handler,
+        "model_download_create_handler": model_download_create_handler,
+        "model_download_list_handler": model_download_list_handler,
+        "model_download_get_handler": model_download_get_handler,
+        "model_download_cancel_handler": model_download_cancel_handler,
+        "model_import_handler": model_import_handler,
+        "model_installations_list_handler": model_installations_list_handler,
+        "secrets_status_handler": secrets_status_handler,
+        "secrets_put_handler": secrets_put_handler,
+        "events_stream_handler": events_stream_handler,
+        "events_poll_handler": events_poll_handler,
+        "secrets_delete_handler": secrets_delete_handler,
+        "security_doctor_handler": security_doctor_handler,
+        "tools_list_handler": tools_list_handler,
+        "tools_run_handler": tools_run_handler,
+        "create_sweep_handler": create_sweep_handler,
+        "create_compare_handler": create_compare_handler,
+        "list_experiments_handler": list_experiments_handler,
+        "get_experiment_handler": get_experiment_handler,
+        "update_experiment_handler": update_experiment_handler,
+        "select_apply_winner_handler": select_apply_winner_handler,
+    }
 
     # Core Observability & Config
     for prefix in prefixes:
-        core_routes = [
-            ("GET", f"{prefix}/admin", remote_admin_page_handler),  # F61
-            ("GET", f"{prefix}/health", health_handler),
-            ("GET", f"{prefix}/logs/tail", logs_tail_handler),
-            ("GET", f"{prefix}/jobs", jobs_handler),
-            ("GET", f"{prefix}/trace/{{prompt_id}}", trace_handler),
-            ("POST", f"{prefix}/webhook", webhook_handler),
-            ("POST", f"{prefix}/webhook/submit", webhook_submit_handler),
-            (
-                "POST",
-                f"{prefix}/webhook/validate",
-                webhook_validate_handler,
-            ),  # R32: Validation endpoint
-            ("GET", f"{prefix}/capabilities", capabilities_handler),
-            ("GET", f"{prefix}/config", config_get_handler),
-            ("PUT", f"{prefix}/config", config_put_handler),
-            ("POST", f"{prefix}/llm/test", llm_test_handler),
-            # NOTE: Connector uses this endpoint to avoid missing UI-stored keys.
-            ("POST", f"{prefix}/llm/chat", llm_chat_handler),
-            (
-                "GET",
-                f"{prefix}/llm/models",
-                llm_models_handler,
-            ),  # F20+: Remote model list (best-effort)
-            (
-                "GET",
-                f"{prefix}/templates",
-                templates_list_handler,
-            ),  # F29: Template quick list for chat connectors
-            (
-                "POST",
-                f"{prefix}/preflight",
-                preflight_handler,
-            ),  # R42: Preflight diagnostics
-            (
-                "GET",
-                f"{prefix}/preflight/inventory",
-                inventory_handler,
-            ),  # F28: Explorer Inventory
-            (
-                "GET",
-                f"{prefix}/checkpoints",
-                list_checkpoints_handler,
-            ),  # R47: Checkpoints
-            (
-                "POST",
-                f"{prefix}/checkpoints",
-                create_checkpoint_handler,
-            ),
-            (
-                "GET",
-                f"{prefix}/checkpoints/{{id}}",
-                get_checkpoint_handler,
-            ),
-            (
-                "DELETE",
-                f"{prefix}/checkpoints/{{id}}",
-                delete_checkpoint_handler,
-            ),
-            ("GET", f"{prefix}/rewrite/recipes", rewrite_recipes_list_handler),
-            ("POST", f"{prefix}/rewrite/recipes", rewrite_recipe_create_handler),
-            (
-                "GET",
-                f"{prefix}/rewrite/recipes/{{recipe_id}}",
-                rewrite_recipe_get_handler,
-            ),
-            (
-                "PUT",
-                f"{prefix}/rewrite/recipes/{{recipe_id}}",
-                rewrite_recipe_update_handler,
-            ),
-            (
-                "DELETE",
-                f"{prefix}/rewrite/recipes/{{recipe_id}}",
-                rewrite_recipe_delete_handler,
-            ),
-            (
-                "POST",
-                f"{prefix}/rewrite/recipes/{{recipe_id}}/dry-run",
-                rewrite_recipe_dry_run_handler,
-            ),
-            (
-                "POST",
-                f"{prefix}/rewrite/recipes/{{recipe_id}}/apply",
-                rewrite_recipe_apply_handler,
-            ),
-            ("GET", f"{prefix}/models/search", model_search_handler),
-            ("POST", f"{prefix}/models/downloads", model_download_create_handler),
-            ("GET", f"{prefix}/models/downloads", model_download_list_handler),
-            (
-                "GET",
-                f"{prefix}/models/downloads/{{task_id}}",
-                model_download_get_handler,
-            ),
-            (
-                "POST",
-                f"{prefix}/models/downloads/{{task_id}}/cancel",
-                model_download_cancel_handler,
-            ),
-            ("POST", f"{prefix}/models/import", model_import_handler),
-            (
-                "GET",
-                f"{prefix}/models/installations",
-                model_installations_list_handler,
-            ),
-            (
-                "GET",
-                f"{prefix}/secrets/status",
-                secrets_status_handler,
-            ),  # S25: Secret status (no values)
-            ("PUT", f"{prefix}/secrets", secrets_put_handler),  # S25: Save secret
-            (
-                "GET",
-                f"{prefix}/events/stream",
-                events_stream_handler,
-            ),  # R71: SSE event stream
-            (
-                "GET",
-                f"{prefix}/events",
-                events_poll_handler,
-            ),  # R71: JSON polling fallback
-            (
-                "DELETE",
-                f"{prefix}/secrets/{{provider}}",
-                secrets_delete_handler,
-            ),  # S25: Clear secret
-            (
-                "GET",
-                f"{prefix}/security/doctor",
-                security_doctor_handler,
-            ),  # S30: Security Doctor diagnostics
-            (
-                "GET",
-                f"{prefix}/tools",
-                tools_list_handler,
-            ),  # S12: List allowed tools
-            (
-                "POST",
-                f"{prefix}/tools/{{name}}/run",
-                tools_run_handler,
-            ),  # S12: Execute tool (admin only)
-            # F52: Parameter Lab
-            ("POST", f"{prefix}/lab/sweep", create_sweep_handler),
-            ("POST", f"{prefix}/lab/compare", create_compare_handler),
-            ("GET", f"{prefix}/lab/experiments", list_experiments_handler),
-            ("GET", f"{prefix}/lab/experiments/{{exp_id}}", get_experiment_handler),
-            (
-                "POST",
-                f"{prefix}/lab/experiments/{{exp_id}}/runs/{{run_id}}",
-                update_experiment_handler,
-            ),
-            (
-                "POST",
-                f"{prefix}/lab/experiments/{{exp_id}}/winner",
-                select_apply_winner_handler,
-            ),
-        ]
-
-        for method, path, handler in core_routes:
-            register_dual_route(server, method, path, handler)
+        register_route_family(
+            server,
+            register_dual_route,
+            build_core_route_specs(prefix, core_handlers),
+        )
 
     # F8/F21 Assist Routes
     # R84 Boot Boundary: CORE (Planner/Refiner part of core/assist)
     if assist:
         for prefix in prefixes:
-            register_dual_route(
+            register_route_family(
                 server,
-                "GET",
-                f"{prefix}/assist/planner/profiles",
-                assist.planner_profiles_handler,
-            )
-            register_dual_route(
-                server, "POST", f"{prefix}/assist/planner", assist.planner_handler
-            )
-            register_dual_route(
-                server,
-                "POST",
-                f"{prefix}/assist/planner/stream",
-                assist.planner_stream_handler,
-            )
-            register_dual_route(
-                server, "POST", f"{prefix}/assist/refiner", assist.refiner_handler
-            )
-            register_dual_route(
-                server,
-                "POST",
-                f"{prefix}/assist/refiner/stream",
-                assist.refiner_stream_handler,
-            )
-            register_dual_route(
-                server,
-                "POST",
-                f"{prefix}/assist/automation/compose",
-                assist.compose_handler,
+                register_dual_route,
+                build_assist_route_specs(prefix, assist),
             )
 
     # R126: Connector installation diagnostics/read APIs
     if connector_installations_list_handler:
+        connector_installation_handlers = {
+            "connector_installations_list_handler": connector_installations_list_handler,
+            "connector_installation_resolve_handler": connector_installation_resolve_handler,
+            "connector_installation_audit_handler": connector_installation_audit_handler,
+            "connector_installation_get_handler": connector_installation_get_handler,
+        }
         for prefix in prefixes:
-            register_dual_route(
+            register_route_family(
                 server,
-                "GET",
-                f"{prefix}/connector/installations",
-                connector_installations_list_handler,
-            )
-            register_dual_route(
-                server,
-                "GET",
-                f"{prefix}/connector/installations/resolve",
-                connector_installation_resolve_handler,
-            )
-            register_dual_route(
-                server,
-                "GET",
-                f"{prefix}/connector/installations/audit",
-                connector_installation_audit_handler,
-            )
-            register_dual_route(
-                server,
-                "GET",
-                f"{prefix}/connector/installations/{{installation_id}}",
-                connector_installation_get_handler,
+                register_dual_route,
+                build_connector_installation_route_specs(
+                    prefix, connector_installation_handlers
+                ),
             )
 
     # F10 Bridge Routes (Sidecar)
@@ -1090,23 +972,11 @@ def register_routes(server) -> None:
         packs = PacksHandlers(DATA_DIR)
 
         for prefix in prefixes:
-            pack_routes = [
-                ("GET", f"{prefix}/packs", packs.list_packs_handler),
-                ("POST", f"{prefix}/packs/import", packs.import_pack_handler),
-                (
-                    "GET",
-                    f"{prefix}/packs/export/{{name}}/{{version}}",
-                    packs.export_pack_handler,
-                ),
-                (
-                    "DELETE",
-                    f"{prefix}/packs/{{name}}/{{version}}",
-                    packs.delete_pack_handler,
-                ),
-            ]
-
-            for method, path, handler in pack_routes:
-                register_dual_route(server, method, path, handler)
+            register_route_family(
+                server,
+                register_dual_route,
+                build_pack_route_specs(prefix, packs),
+            )
 
     except ImportError:
         pass
