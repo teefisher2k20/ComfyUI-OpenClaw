@@ -11,6 +11,7 @@ from services.failover import (
     CooldownEntry,
     ErrorCategory,
     FailoverState,
+    classify_cooldown,
     classify_error,
     get_cooldown_duration,
     get_failover_candidates,
@@ -54,6 +55,25 @@ class TestErrorClassification(unittest.TestCase):
             classify_error(Exception("Rate limit exceeded"))[0],
             ErrorCategory.RATE_LIMIT,
         )
+
+    def test_retry_after_reason_code_is_preserved(self):
+        """429 + retry-after should surface explicit cooldown diagnostics."""
+
+        class RetryAfterError(Exception):
+            retry_after = 42
+
+        decision = classify_cooldown(RetryAfterError("Too many requests"), 429)
+        self.assertEqual(decision.category, ErrorCategory.RATE_LIMIT)
+        self.assertEqual(decision.reason_code, "provider_retry_after")
+        self.assertEqual(decision.bucket, "provider_cooldown")
+        self.assertEqual(decision.retry_after_sec, 42)
+
+    def test_quota_reason_code_is_preserved(self):
+        """Quota/billing style errors should map to provider_quota diagnostics."""
+        decision = classify_cooldown(Exception("Insufficient quota"), 429)
+        self.assertEqual(decision.category, ErrorCategory.BILLING)
+        self.assertEqual(decision.reason_code, "provider_quota_exceeded")
+        self.assertEqual(decision.bucket, "provider_quota")
 
     def test_timeout_errors(self):
         """Should classify timeout errors."""
@@ -145,7 +165,14 @@ class TestCooldownManagement(unittest.TestCase):
         state = FailoverState(self.state_file)
 
         # Set cooldown
-        state.set_cooldown("openai", "gpt-4", "rate_limit", 60)
+        state.set_cooldown(
+            "openai",
+            "gpt-4",
+            "rate_limit",
+            60,
+            reason_code="provider_rate_limited",
+            bucket="provider_cooldown",
+        )
 
         # Should be in cooldown
         self.assertTrue(state.is_cooling_down("openai", "gpt-4"))
@@ -156,7 +183,14 @@ class TestCooldownManagement(unittest.TestCase):
     def test_cooldown_persistence(self):
         """Should persist cooldown state to disk."""
         state1 = FailoverState(self.state_file)
-        state1.set_cooldown("openai", "gpt-4", "auth", 3600)
+        state1.set_cooldown(
+            "openai",
+            "gpt-4",
+            "auth",
+            3600,
+            reason_code="provider_auth_failed",
+            bucket="provider_auth",
+        )
 
         # Create new instance (simulates restart)
         state2 = FailoverState(self.state_file)
@@ -194,7 +228,14 @@ class TestCooldownManagement(unittest.TestCase):
     def test_no_secrets_in_state(self):
         """Should not persist secrets in state file."""
         state = FailoverState(self.state_file)
-        state.set_cooldown("openai", "gpt-4", "auth_failed", 60)
+        state.set_cooldown(
+            "openai",
+            "gpt-4",
+            "auth_failed",
+            60,
+            reason_code="provider_auth_failed",
+            bucket="provider_auth",
+        )
 
         # Read raw file
         with open(self.state_file, "r") as f:

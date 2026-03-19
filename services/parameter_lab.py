@@ -21,10 +21,13 @@ except ImportError:
 
 if __package__ and "." in __package__:
     from ..services.access_control import require_admin_token
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
 else:  # pragma: no cover (test-only import mode)
     from services.access_control import require_admin_token  # type: ignore
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
 
 # R98: Endpoint Metadata
 if __package__ and "." in __package__:
@@ -374,8 +377,12 @@ def _require_admin(request: web.Request) -> Optional[web.Response]:
     auth + rate limit gates to avoid remote abuse and queue-flood vectors.
     """
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "rate_limit_exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="rate_limit_exceeded",
+            include_ok=True,
         )
 
     allowed, err = require_admin_token(request)

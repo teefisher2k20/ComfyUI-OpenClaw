@@ -43,10 +43,21 @@ class CooldownEntry:
     model: Optional[str]
     reason: str
     until: float  # Unix timestamp when cooldown expires
+    reason_code: str = "provider_unknown"
+    bucket: str = "provider_unknown"
+    retry_after_sec: Optional[int] = None
 
     def is_active(self) -> bool:
         """Check if cooldown is still active."""
         return time.time() < self.until
+
+
+@dataclass(frozen=True)
+class CooldownDecision:
+    category: "ErrorCategory"
+    retry_after_sec: Optional[int]
+    reason_code: str
+    bucket: str
 
 
 class FailoverState:
@@ -158,7 +169,15 @@ class FailoverState:
         return provider
 
     def set_cooldown(
-        self, provider: str, model: Optional[str], reason: str, duration_sec: float
+        self,
+        provider: str,
+        model: Optional[str],
+        reason: str,
+        duration_sec: float,
+        *,
+        reason_code: Optional[str] = None,
+        bucket: Optional[str] = None,
+        retry_after_sec: Optional[int] = None,
     ) -> None:
         """
         Set a cooldown for a provider/model.
@@ -173,7 +192,13 @@ class FailoverState:
         until = time.time() + duration_sec
 
         self.cooldowns[key] = CooldownEntry(
-            provider=provider, model=model, reason=reason, until=until
+            provider=provider,
+            model=model,
+            reason=reason,
+            until=until,
+            reason_code=reason_code or reason,
+            bucket=bucket or "provider_unknown",
+            retry_after_sec=retry_after_sec,
         )
         self._save()
         logger.info(f"Set cooldown for {key}: {reason} (until {until})")
@@ -317,9 +342,9 @@ def reset_failover_state(*, flush: bool = False) -> None:
     _failover_state = None
 
 
-def classify_error(
+def classify_cooldown(
     error: Exception, status_code: Optional[int] = None
-) -> Tuple[ErrorCategory, Optional[int]]:
+) -> CooldownDecision:
     """
     Classify an error into a failover category and extract retry-after.
 
@@ -328,7 +353,7 @@ def classify_error(
         status_code: Optional HTTP status code (may be in exception).
 
     Returns:
-        Tuple of (ErrorCategory, retry_after_seconds or None)
+        Structured cooldown classification.
     """
     # R14/R37: Check if error is ProviderHTTPError
     try:
@@ -338,42 +363,90 @@ def classify_error(
             status_code = error.status_code
             retry_after = error.retry_after
         else:
-            retry_after = None
+            retry_after = getattr(error, "retry_after", None)
     except ImportError:
-        retry_after = None
+        retry_after = getattr(error, "retry_after", None)
 
     error_str = str(error).lower()
+    reason_code = "provider_unknown"
+    bucket = "provider_unknown"
 
     # Status code-based classification
     if status_code:
         if status_code == 401 or status_code == 403:
             category = ErrorCategory.AUTH
+            reason_code = "provider_auth_failed"
+            bucket = "provider_auth"
         elif status_code == 402:
             category = ErrorCategory.BILLING
+            reason_code = "provider_billing_required"
+            bucket = "provider_quota"
         elif status_code == 429:
             # Distinguish rate limit vs billing
-            if "quota" in error_str or "billing" in error_str:
+            if (
+                "quota" in error_str
+                or "billing" in error_str
+                or "insufficient_quota" in error_str
+                or "insufficient quota" in error_str
+            ):
                 category = ErrorCategory.BILLING
+                reason_code = "provider_quota_exceeded"
+                bucket = "provider_quota"
             else:
                 category = ErrorCategory.RATE_LIMIT
+                if retry_after is not None:
+                    reason_code = "provider_retry_after"
+                else:
+                    reason_code = "provider_rate_limited"
+                bucket = "provider_cooldown"
         elif status_code == 400 or status_code == 422:
             category = ErrorCategory.INVALID_REQUEST
+            reason_code = "provider_invalid_request"
+            bucket = "provider_invalid_request"
         else:
             category = ErrorCategory.UNKNOWN
+            reason_code = f"provider_http_{status_code}"
+            bucket = "provider_unknown"
     else:
         # Exception type-based classification
         if "timeout" in error_str or "timed out" in error_str:
             category = ErrorCategory.TIMEOUT
+            reason_code = "provider_timeout"
+            bucket = "provider_cooldown"
         elif "unauthorized" in error_str or "forbidden" in error_str:
             category = ErrorCategory.AUTH
+            reason_code = "provider_auth_failed"
+            bucket = "provider_auth"
         elif "rate limit" in error_str or "too many requests" in error_str:
             category = ErrorCategory.RATE_LIMIT
+            reason_code = (
+                "provider_retry_after"
+                if retry_after is not None
+                else "provider_rate_limited"
+            )
+            bucket = "provider_cooldown"
         elif "quota" in error_str or "insufficient" in error_str:
             category = ErrorCategory.BILLING
+            reason_code = "provider_quota_exceeded"
+            bucket = "provider_quota"
         else:
             category = ErrorCategory.UNKNOWN
+            reason_code = "provider_unknown"
+            bucket = "provider_unknown"
 
-    return category, retry_after
+    return CooldownDecision(
+        category=category,
+        retry_after_sec=retry_after,
+        reason_code=reason_code,
+        bucket=bucket,
+    )
+
+
+def classify_error(
+    error: Exception, status_code: Optional[int] = None
+) -> Tuple[ErrorCategory, Optional[int]]:
+    decision = classify_cooldown(error, status_code)
+    return decision.category, decision.retry_after_sec
 
 
 def should_retry(category: ErrorCategory) -> bool:

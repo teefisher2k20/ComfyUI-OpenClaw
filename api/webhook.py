@@ -23,13 +23,13 @@ except ImportError:
 try:
     from ..models.schemas import MAX_BODY_SIZE, WebhookJobRequest
     from ..services.metrics import metrics
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.trace import get_effective_trace_id
     from ..services.webhook_auth import get_auth_summary, require_auth
 except ImportError:
     from models.schemas import MAX_BODY_SIZE, WebhookJobRequest
     from services.metrics import metrics
-    from services.rate_limit import check_rate_limit
+    from services.rate_limit import build_rate_limit_response, check_rate_limit
     from services.trace import get_effective_trace_id
     from services.webhook_auth import get_auth_summary, require_auth
 
@@ -71,11 +71,12 @@ async def webhook_handler(request: web.Request) -> web.Response:
     # S17: Rate Limit
     if not check_rate_limit(request, "webhook"):
         metrics.inc("webhook_denied")
-        return create_error_response(
-            message="Rate limit exceeded",
-            code=ErrorCode.RATE_LIMIT_EXCEEDED,
-            status=429,
-            detail={"retry_after": "60"},
+        return build_rate_limit_response(
+            request,
+            "webhook",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     try:

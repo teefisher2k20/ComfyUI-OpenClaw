@@ -22,7 +22,7 @@ if __package__ and "." in __package__:
         require_observability_access,
         resolve_token_info,
     )
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.templates import get_template_service
     from ..services.tenant_context import TenantBoundaryError, request_tenant_scope
 else:  # pragma: no cover (test-only import mode)
@@ -30,7 +30,10 @@ else:  # pragma: no cover (test-only import mode)
         require_observability_access,
         resolve_token_info,
     )
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
     from services.templates import get_template_service  # type: ignore
     from services.tenant_context import (  # type: ignore
         TenantBoundaryError,
@@ -108,10 +111,12 @@ async def templates_list_handler(request: web.Request) -> web.Response:
 
     # Reuse the admin bucket to avoid unbounded enumeration from remote callers.
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"},
-            status=429,
-            headers={"Retry-After": "60"},
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     try:

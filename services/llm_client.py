@@ -278,6 +278,7 @@ class LLMClient:
         try:
             from ..services.failover import (
                 ErrorCategory,
+                classify_cooldown,
                 classify_error,
                 get_cooldown_duration,
                 get_failover_state,
@@ -287,6 +288,7 @@ class LLMClient:
         except ImportError:
             from services.failover import (
                 ErrorCategory,
+                classify_cooldown,
                 classify_error,
                 get_cooldown_duration,
                 get_failover_state,
@@ -314,6 +316,7 @@ class LLMClient:
 
         return {
             "ErrorCategory": ErrorCategory,
+            "classify_cooldown": classify_cooldown,
             "classify_error": classify_error,
             "get_cooldown_duration": get_cooldown_duration,
             "should_failover": should_failover,
@@ -454,6 +457,7 @@ class LLMClient:
     ) -> Dict[str, Any]:
         """R130 phase 2: execute failover/retry loop against prepared candidates."""
         ErrorCategory = phase["ErrorCategory"]
+        classify_cooldown = phase["classify_cooldown"]
         classify_error = phase["classify_error"]
         get_cooldown_duration = phase["get_cooldown_duration"]
         should_failover = phase["should_failover"]
@@ -620,6 +624,7 @@ class LLMClient:
                     except Exception as e:
                         candidate_last_error = e
                         status_code = self._extract_status_code(e)
+                        cooldown_decision = classify_cooldown(e, status_code)
                         error_category, retry_after = classify_error(e, status_code)
                         logger.error(
                             f"Request failed for {provider}/{self.model}: {e} "
@@ -634,6 +639,8 @@ class LLMClient:
                                 "model": self.model,
                                 "candidate_index": candidate_idx,
                                 "category": error_category.value,
+                                "cooldown_bucket": cooldown_decision.bucket,
+                                "reason_code": cooldown_decision.reason_code,
                                 "status_code": status_code,
                                 "error_type": type(e).__name__,
                                 "trace_id": trace_id,
@@ -666,11 +673,17 @@ class LLMClient:
                                     error_category, retry_after_override=retry_after
                                 )
                                 failover_state.set_cooldown(
-                                    provider, model, error_category.value, duration
+                                    provider,
+                                    model,
+                                    cooldown_decision.reason_code,
+                                    duration,
+                                    reason_code=cooldown_decision.reason_code,
+                                    bucket=cooldown_decision.bucket,
+                                    retry_after_sec=retry_after,
                                 )
                                 logger.warning(
                                     f"Failover triggered for {provider}/{model}: "
-                                    f"{error_category.value} (cooldown: {duration}s)"
+                                    f"{cooldown_decision.reason_code} (cooldown: {duration}s)"
                                 )
                                 emit_structured_log(
                                     logger,
@@ -680,7 +693,10 @@ class LLMClient:
                                         "provider": provider,
                                         "model": model,
                                         "category": error_category.value,
+                                        "cooldown_bucket": cooldown_decision.bucket,
+                                        "reason_code": cooldown_decision.reason_code,
                                         "cooldown_sec": duration,
+                                        "retry_after_sec": retry_after,
                                         "trace_id": trace_id,
                                     },
                                 )

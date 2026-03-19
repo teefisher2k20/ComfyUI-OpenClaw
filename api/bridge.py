@@ -25,7 +25,7 @@ try:
     from ..services.bridge_handshake import verify_handshake
     from ..services.execution_budgets import BudgetExceededError
     from ..services.idempotency_store import IdempotencyStore
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.sidecar.auth import is_bridge_enabled, require_bridge_auth
     from ..services.sidecar.bridge_contract import (
         BRIDGE_ENDPOINTS,
@@ -43,7 +43,7 @@ except ImportError:
     from services.bridge_handshake import verify_handshake
     from services.execution_budgets import BudgetExceededError
     from services.idempotency_store import IdempotencyStore
-    from services.rate_limit import check_rate_limit
+    from services.rate_limit import build_rate_limit_response, check_rate_limit
     from services.sidecar.auth import is_bridge_enabled, require_bridge_auth
     from services.sidecar.bridge_contract import (
         BRIDGE_ENDPOINTS,
@@ -255,7 +255,13 @@ class BridgeHandlers:
                 scope=BridgeScope.JOB_SUBMIT.value,
                 details={"reason": "rate_limit"},
             )
-            return web.json_response({"error": "Rate limit exceeded"}, status=429)
+            return build_rate_limit_response(
+                request,
+                "bridge",
+                web_module=web,
+                error="Rate limit exceeded",
+                include_ok=False,
+            )
 
         # Parse payload
         try:
@@ -484,7 +490,13 @@ class BridgeHandlers:
                 scope=BridgeScope.DELIVERY.value,
                 details={"reason": "rate_limit"},
             )
-            return web.json_response({"error": "Rate limit exceeded"}, status=429)
+            return build_rate_limit_response(
+                request,
+                "bridge",
+                web_module=web,
+                error="Rate limit exceeded",
+                include_ok=False,
+            )
 
         # Parse payload
         try:

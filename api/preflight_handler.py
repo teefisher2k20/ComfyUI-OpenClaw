@@ -24,7 +24,7 @@ if __package__ and "." in __package__:
         get_model_inventory_snapshot,
         run_preflight_check,
     )
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.request_ip import get_client_ip
 else:  # pragma: no cover (test-only import mode)
     from models.schemas import MAX_BODY_SIZE  # type: ignore
@@ -34,7 +34,10 @@ else:  # pragma: no cover (test-only import mode)
         get_model_inventory_snapshot,
         run_preflight_check,
     )
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
     from services.request_ip import get_client_ip  # type: ignore
 
 # R98: Endpoint Metadata
@@ -102,8 +105,12 @@ async def preflight_handler(request: web.Request) -> web.Response:
 
     # Rate limit: admin-grade endpoint (inventory leak + CPU cost)
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "rate_limit_exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="rate_limit_exceeded",
+            include_ok=True,
         )
 
     # Body Size Check
@@ -176,8 +183,12 @@ async def inventory_handler(request: web.Request) -> web.Response:
 
     # Rate Limit
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "rate_limit_exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="rate_limit_exceeded",
+            include_ok=True,
         )
 
     # Admin boundary (localhost convenience mode if no token configured)

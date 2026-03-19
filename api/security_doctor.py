@@ -41,11 +41,14 @@ except ImportError:  # pragma: no cover
 
 if __package__ and "." in __package__:
     from ..services.access_control import require_admin_token
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.security_doctor import run_security_doctor
 else:  # pragma: no cover (test-only)
     from services.access_control import require_admin_token  # type: ignore
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
     from services.security_doctor import run_security_doctor  # type: ignore
 
 # R98: Endpoint Metadata
@@ -90,8 +93,12 @@ async def security_doctor_handler(request: web.Request) -> web.Response:
 
     # S17: Rate limit
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     # Admin boundary

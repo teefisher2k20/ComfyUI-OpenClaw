@@ -28,7 +28,7 @@ if __package__ and "." in __package__:
     from ..services.connector_installation_registry import (
         get_connector_installation_registry,
     )
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.tenant_context import TenantBoundaryError, request_tenant_scope
 else:  # pragma: no cover
     from services.access_control import require_admin_token  # type: ignore
@@ -36,7 +36,10 @@ else:  # pragma: no cover
     from services.connector_installation_registry import (  # type: ignore
         get_connector_installation_registry,
     )
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
     from services.tenant_context import (  # type: ignore
         TenantBoundaryError,
         request_tenant_scope,
@@ -62,8 +65,12 @@ logger = logging.getLogger("ComfyUI-OpenClaw.api.connector_contracts")
 
 def _require_admin(request) -> Optional[web.Response]:
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
     allowed, err = require_admin_token(request)
     if not allowed:

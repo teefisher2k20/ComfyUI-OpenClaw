@@ -30,7 +30,7 @@ if __package__ and "." in __package__:
     from ..services.job_events import get_job_event_store
     from ..services.management_query import normalize_cursor_limit
     from ..services.metrics import metrics
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.reasoning_redaction import (
         audit_reasoning_reveal,
         resolve_reasoning_reveal,
@@ -43,7 +43,10 @@ else:  # pragma: no cover
     from services.job_events import get_job_event_store  # type: ignore
     from services.management_query import normalize_cursor_limit  # type: ignore
     from services.metrics import metrics  # type: ignore
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
     from services.reasoning_redaction import (  # type: ignore
         audit_reasoning_reveal,
         resolve_reasoning_reveal,
@@ -112,10 +115,12 @@ async def events_stream_handler(request: web.Request) -> web.StreamResponse:
 
     # Rate limit
     if not check_rate_limit(request, "events"):
-        return web.json_response(
-            {"ok": False, "error": "rate_limit_exceeded"},
-            status=429,
-            headers={"Retry-After": "60"},
+        return build_rate_limit_response(
+            request,
+            "events",
+            web_module=web,
+            error="rate_limit_exceeded",
+            include_ok=True,
         )
 
     # Access control (same as logs/tail)
@@ -223,10 +228,12 @@ async def events_poll_handler(request: web.Request) -> web.Response:
 
     # Rate limit
     if not check_rate_limit(request, "events"):
-        return web.json_response(
-            {"ok": False, "error": "rate_limit_exceeded"},
-            status=429,
-            headers={"Retry-After": "60"},
+        return build_rate_limit_response(
+            request,
+            "events",
+            web_module=web,
+            error="rate_limit_exceeded",
+            include_ok=True,
         )
 
     # Access control

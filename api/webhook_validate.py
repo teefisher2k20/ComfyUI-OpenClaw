@@ -39,7 +39,7 @@ if __package__ and "." in __package__:
     from ..models.schemas import MAX_BODY_SIZE, WebhookJobRequest
     from ..services.execution_budgets import BudgetExceededError, check_render_size
     from ..services.metrics import metrics
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.templates import get_template_service
     from ..services.trace import get_effective_trace_id
     from ..services.webhook_auth import require_auth
@@ -51,7 +51,10 @@ else:  # pragma: no cover (test-only import mode)
         check_render_size,
     )
     from services.metrics import metrics  # type: ignore
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
     from services.templates import get_template_service  # type: ignore
     from services.trace import get_effective_trace_id  # type: ignore
     from services.webhook_auth import require_auth  # type: ignore
@@ -106,10 +109,12 @@ async def webhook_validate_handler(request: web.Request) -> web.Response:
     # S17: Rate limit (same bucket as submit)
     if not check_rate_limit(request, "webhook"):
         metrics.inc("webhook_denied")
-        return web.json_response(
-            {"ok": False, "error": "rate_limit_exceeded"},
-            status=429,
-            headers={"Retry-After": "60"},
+        return build_rate_limit_response(
+            request,
+            "webhook",
+            web_module=web,
+            error="rate_limit_exceeded",
+            include_ok=True,
         )
 
     # S2: Content-Type + body size

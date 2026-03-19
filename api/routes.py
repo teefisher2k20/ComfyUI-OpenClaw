@@ -281,11 +281,11 @@ if web is not None:
             "update_experiment_handler",
         ),
     )
-    (check_rate_limit,) = import_attrs_dual(
+    (check_rate_limit, build_rate_limit_response) = import_attrs_dual(
         __package__,
         "..services.rate_limit",
         "services.rate_limit",
-        ("check_rate_limit",),
+        ("check_rate_limit", "build_rate_limit_response"),
     )
     (redact_text,) = import_attrs_dual(
         __package__,
@@ -502,10 +502,12 @@ async def logs_tail_handler(request: web.Request) -> web.Response:
 
     # S17: Rate Limit
     if not check_rate_limit(request, "logs"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"},
-            status=429,
-            headers={"Retry-After": "60"},
+        return build_rate_limit_response(
+            request,
+            "logs",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     try:

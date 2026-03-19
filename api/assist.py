@@ -12,7 +12,7 @@ try:
     from ..services.automation_composer import AutomationComposerService
     from ..services.planner import PlannerService
     from ..services.planner_registry import get_planner_registry
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.reasoning_redaction import (
         audit_reasoning_reveal,
         resolve_reasoning_reveal,
@@ -26,7 +26,7 @@ except ImportError:
     from services.automation_composer import AutomationComposerService
     from services.planner import PlannerService
     from services.planner_registry import get_planner_registry
-    from services.rate_limit import check_rate_limit
+    from services.rate_limit import build_rate_limit_response, check_rate_limit
     from services.reasoning_redaction import (
         audit_reasoning_reveal,
         resolve_reasoning_reveal,
@@ -90,7 +90,13 @@ class AssistHandlers:
         if not authorized:
             return web.json_response({"error": "Unauthorized"}, status=401)
         if not check_rate_limit(request, "admin"):
-            return web.json_response({"error": "Rate limit exceeded"}, status=429)
+            return build_rate_limit_response(
+                request,
+                "admin",
+                web_module=web,
+                error="Rate limit exceeded",
+                include_ok=False,
+            )
         return None
 
     async def _parse_json_body(
@@ -557,7 +563,13 @@ class AssistHandlers:
             return web.json_response({"error": "Unauthorized"}, status=401)
 
         if not check_rate_limit(request, "admin"):
-            return web.json_response({"error": "Rate limit exceeded"}, status=429)
+            return build_rate_limit_response(
+                request,
+                "admin",
+                web_module=web,
+                error="Rate limit exceeded",
+                include_ok=False,
+            )
 
         try:
             data = await request.json()

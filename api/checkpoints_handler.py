@@ -24,7 +24,7 @@ if __package__ and "." in __package__:
         get_checkpoint,
         list_checkpoints,
     )
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_payload, check_rate_limit
     from ..services.request_ip import get_client_ip
 else:  # pragma: no cover (test-only import mode)
     from models.schemas import MAX_BODY_SIZE  # type: ignore
@@ -35,7 +35,10 @@ else:  # pragma: no cover (test-only import mode)
         get_checkpoint,
         list_checkpoints,
     )
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_payload,
+        check_rate_limit,
+    )
     from services.request_ip import get_client_ip  # type: ignore
 
 
@@ -105,7 +108,15 @@ async def list_checkpoints_handler(request: web.Request) -> web.Response:
         raise RuntimeError("aiohttp not available")
 
     if not check_rate_limit(request, "admin"):
-        return _json_resp({"ok": False, "error": "rate_limit_exceeded"}, 429)
+        return _json_resp(
+            build_rate_limit_payload(
+                request,
+                "admin",
+                error="rate_limit_exceeded",
+                include_ok=True,
+            ),
+            429,
+        )
 
     allowed, error = require_admin_token(request)
     if not allowed:
@@ -136,7 +147,15 @@ async def create_checkpoint_handler(request: web.Request) -> web.Response:
         raise RuntimeError("aiohttp not available")
 
     if not check_rate_limit(request, "admin"):
-        return _json_resp({"ok": False, "error": "rate_limit_exceeded"}, 429)
+        return _json_resp(
+            build_rate_limit_payload(
+                request,
+                "admin",
+                error="rate_limit_exceeded",
+                include_ok=True,
+            ),
+            429,
+        )
 
     # Body Size Check
     if request.content_length and request.content_length > MAX_BODY_SIZE:

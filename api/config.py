@@ -107,11 +107,11 @@ except Exception:
     "services.llm_client",
     ("LLMClient",),
 )
-(check_rate_limit,) = import_attrs_dual(
+(check_rate_limit, build_rate_limit_response) = import_attrs_dual(
     __package__,
     "..services.rate_limit",
     "services.rate_limit",
-    ("check_rate_limit",),
+    ("check_rate_limit", "build_rate_limit_response"),
 )
 (get_client_ip,) = import_attrs_dual(
     __package__,
@@ -281,8 +281,12 @@ async def config_get_handler(request: web.Request) -> web.Response:
 
     # S17: Rate Limit
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     token_info = resolve_token_info(request)
@@ -359,8 +363,12 @@ async def llm_models_handler(request: web.Request) -> web.Response:
         raise RuntimeError("aiohttp not available")
     # S17: Rate Limit
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     token_info = resolve_token_info(request)
@@ -578,8 +586,12 @@ async def config_put_handler(request: web.Request) -> web.Response:
 
     # S17: Rate Limit
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     # R99/S46: resolve identity context for non-repudiation audits.
@@ -776,8 +788,12 @@ async def llm_test_handler(request: web.Request) -> web.Response:
 
     # S17: Rate Limit
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     token_info = resolve_token_info(request)
@@ -997,8 +1013,12 @@ async def llm_chat_handler(request: web.Request) -> web.Response:
 
     # S17: Rate Limit
     if not check_rate_limit(request, "admin"):
-        return web.json_response(
-            {"ok": False, "error": "Rate limit exceeded"}, status=429
+        return build_rate_limit_response(
+            request,
+            "admin",
+            web_module=web,
+            error="Rate limit exceeded",
+            include_ok=True,
         )
 
     # NOTE: Keep this server-side. Connector cannot access UI-stored secrets directly.

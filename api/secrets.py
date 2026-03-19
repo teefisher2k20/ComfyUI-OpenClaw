@@ -30,7 +30,7 @@ if __package__ and "." in __package__:
     from ..services.audit import emit_audit_event
     from ..services.csrf_protection import require_same_origin_if_no_token
     from ..services.metrics import metrics
-    from ..services.rate_limit import check_rate_limit
+    from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.request_ip import get_client_ip
     from ..services.runtime_config import get_admin_token, is_loopback_client
     from ..services.secret_store import get_secret_store
@@ -41,7 +41,10 @@ else:  # pragma: no cover (test-only import mode)
     from services.audit import emit_audit_event  # type: ignore
     from services.csrf_protection import require_same_origin_if_no_token  # type: ignore
     from services.metrics import metrics  # type: ignore
-    from services.rate_limit import check_rate_limit  # type: ignore
+    from services.rate_limit import (  # type: ignore
+        build_rate_limit_response,
+        check_rate_limit,
+    )
     from services.request_ip import get_client_ip  # type: ignore
     from services.runtime_config import get_admin_token  # type: ignore
     from services.runtime_config import is_loopback_client
@@ -120,10 +123,12 @@ def _rate_limit_admin(request: web.Request) -> Optional[web.Response]:
     if check_rate_limit(request, "admin"):
         return None
     metrics.increment("rate_limit_exceeded")
-    return web.json_response(
-        {"ok": False, "error": "rate_limit_exceeded"},
-        status=429,
-        headers={"Retry-After": "60"},
+    return build_rate_limit_response(
+        request,
+        "admin",
+        web_module=web,
+        error="rate_limit_exceeded",
+        include_ok=True,
     )
 
 
