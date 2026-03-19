@@ -680,7 +680,12 @@ class WeChatWebhookServer:
     # Outbound: Text (Customer Service Message API)
     # ------------------------------------------------------------------
 
-    async def send_message(self, recipient_openid: str, text: str):
+    async def send_message(
+        self,
+        recipient_openid: str,
+        text: str,
+        delivery_context: Optional[dict] = None,
+    ):
         """
         Send text via WeChat Customer Service Message API.
 
@@ -736,6 +741,7 @@ class WeChatWebhookServer:
         image_data: bytes,
         filename: str = "image.png",
         caption: Optional[str] = None,
+        delivery_context: Optional[dict] = None,
     ):
         """
         Send image via WeChat.

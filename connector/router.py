@@ -184,6 +184,14 @@ class CommandRouter:
     def _is_admin(self, user_id: str) -> bool:
         return str(user_id) in self.config.admin_users
 
+    def _delivery_context(self, req: CommandRequest) -> Dict[str, Any]:
+        context: Dict[str, Any] = {}
+        if getattr(req, "workspace_id", ""):
+            context["workspace_id"] = str(req.workspace_id)
+        if getattr(req, "thread_id", ""):
+            context["thread_id"] = str(req.thread_id)
+        return context
+
     def _check_command_authz(
         self, cmd: str, req: CommandRequest, default_class: CommandClass
     ) -> Optional[CommandResponse]:
@@ -415,14 +423,22 @@ class CommandRouter:
                     # We must start tracking the approval_id so we can map
                     # approval_id -> executed_prompt_id later and auto-deliver images.
                     self.poller.track_approval(
-                        approval_id, req.platform, req.channel_id, req.sender_id
+                        approval_id,
+                        req.platform,
+                        req.channel_id,
+                        req.sender_id,
+                        delivery_context=self._delivery_context(req),
                     )
                 return CommandResponse(text=msg)
             else:
                 prompt_id = data.get("prompt_id", "unknown")
                 if self.poller:
                     self.poller.track_job(
-                        prompt_id, req.platform, req.channel_id, req.sender_id
+                        prompt_id,
+                        req.platform,
+                        req.channel_id,
+                        req.sender_id,
+                        delivery_context=self._delivery_context(req),
                     )
 
                 return CommandResponse(
@@ -547,7 +563,13 @@ class CommandRouter:
             if self.poller:
                 # Approval request might have come from different flow, but usually user invoking /approve
                 # wants the result. Using current req context is safest assumption for "ChatOps".
-                self.poller.track_job(pid, req.platform, req.channel_id, req.sender_id)
+                self.poller.track_job(
+                    pid,
+                    req.platform,
+                    req.channel_id,
+                    req.sender_id,
+                    delivery_context=self._delivery_context(req),
+                )
         elif data.get("executed") is False:
             msg += "\n(Not Executed)"
             if err := data.get("execution_error"):

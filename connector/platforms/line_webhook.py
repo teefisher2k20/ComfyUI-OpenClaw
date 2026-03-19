@@ -286,6 +286,7 @@ class LINEWebhookServer:
         image_data: bytes,
         filename: str = "image.png",
         caption: Optional[str] = None,
+        delivery_context: Optional[dict] = None,
     ):
         """
         Send image via LINE using public URL.
@@ -368,7 +369,12 @@ class LINEWebhookServer:
                 err = await resp.text()
                 logger.error(f"LINE image push failed: {resp.status} {err}")
 
-    async def send_message(self, channel_id: str, text: str):
+    async def send_message(
+        self,
+        channel_id: str,
+        text: str,
+        delivery_context: Optional[dict] = None,
+    ):
         """Send push message."""
         if self._session_invalid:
             logger.warning("R93: Connector session invalid - blocking outbound message")

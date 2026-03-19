@@ -230,6 +230,7 @@ class DiscordGateway:
         image_data: bytes,
         filename: str = "image.png",
         caption: Optional[str] = None,
+        delivery_context: Optional[dict] = None,
     ):
         """Send image via Discord API."""
         if not self.session:
@@ -279,7 +280,12 @@ class DiscordGateway:
             logger.error(f"Discord send_image error: {e}")
             raise
 
-    async def send_message(self, channel_id: str, text: str):
+    async def send_message(
+        self,
+        channel_id: str,
+        text: str,
+        delivery_context: Optional[dict] = None,
+    ):
         """Send text message."""
         if not self.session:
             return

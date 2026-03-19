@@ -67,6 +67,7 @@ class TestConnectorInstallationRegistry(unittest.TestCase):
         res = self.registry.resolve_installation("slack", "missing")
         self.assertFalse(res.ok)
         self.assertEqual(res.reject_reason, "missing_binding")
+        self.assertEqual(res.health_code, "workspace_unbound")
 
     def test_resolution_duplicate_binding_fails_closed(self):
         self.registry.upsert_installation(
@@ -113,6 +114,27 @@ class TestConnectorInstallationRegistry(unittest.TestCase):
         res = self.registry.resolve_installation("slack", "T3")
         self.assertFalse(res.ok)
         self.assertEqual(res.reject_reason, "inactive_binding")
+        self.assertEqual(res.health_code, "revoked")
+
+    def test_invalid_token_health_fails_closed(self):
+        self.registry.upsert_installation(
+            platform="slack",
+            workspace_id="T4",
+            installation_id="inst-invalid",
+            token_values={"bot_token": "xoxb-invalid"},
+            status=InstallationStatus.ACTIVE.value,
+        )
+        self.registry.update_installation_health(
+            "inst-invalid",
+            health_code="invalid_token",
+            reason="provider_401",
+            details={"source": "slack_api"},
+        )
+
+        res = self.registry.resolve_installation("slack", "T4")
+        self.assertFalse(res.ok)
+        self.assertEqual(res.reject_reason, "inactive_binding")
+        self.assertEqual(res.health_code, "invalid_token")
 
     def test_persistence_reload_and_redaction(self):
         self.registry.upsert_installation(
@@ -131,11 +153,12 @@ class TestConnectorInstallationRegistry(unittest.TestCase):
         self.assertEqual(len(listed), 1)
         self.assertEqual(listed[0].installation_id, "inst-persist")
 
-        raw = open(
+        with open(
             os.path.join(self.state_dir, "connector_installations.json"),
             "r",
             encoding="utf-8",
-        ).read()
+        ) as fh:
+            raw = fh.read()
         self.assertNotIn("xoxb-secret", raw)
 
     def test_multi_tenant_resolve_mismatch_fail_closed(self):

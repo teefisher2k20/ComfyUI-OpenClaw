@@ -182,6 +182,7 @@ class TelegramPolling:
         image_data: bytes,
         filename: str = "image.png",
         caption: Optional[str] = None,
+        delivery_context: Optional[dict] = None,
     ):
         """Send photo via Telegram sendPhoto."""
         if not self.session:
@@ -205,7 +206,12 @@ class TelegramPolling:
         except Exception as e:
             logger.error(f"Telegram send_image error: {e}")
 
-    async def send_message(self, channel_id: str, text: str):
+    async def send_message(
+        self,
+        channel_id: str,
+        text: str,
+        delivery_context: Optional[dict] = None,
+    ):
         """Send text message."""
         if not self.session:
             return

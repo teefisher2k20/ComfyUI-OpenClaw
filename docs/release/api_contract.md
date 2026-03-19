@@ -99,6 +99,11 @@ Assist payload redaction contract:
 | `GET` | `/connector/installations/resolve` | `/moltbot/connector/installations/resolve` | Admin | Run fail-closed workspace resolution diagnostics (`platform`, `workspace_id`). |
 | `GET` | `/connector/installations/audit` | `/moltbot/connector/installations/audit` | Admin | List installation lifecycle audit evidence (redacted). |
 
+Connector diagnostics contract notes:
+- installation records may expose operator-safe health metadata under `installation.metadata.health` (for example `ok`, `invalid_token`, `revoked`, `degraded`) without exposing token material
+- `/connector/installations` diagnostics may include aggregate `health_counts` in addition to lifecycle `status_counts`
+- `/connector/installations/resolve` may expose a stable `health_code` alongside the legacy `reject_reason` so clients can distinguish `workspace_unbound` vs token-health failures without parsing status text
+
 ### 1.3C LLM Management & Chat
 
 **LLM Base Path**: `/openclaw/llm/`

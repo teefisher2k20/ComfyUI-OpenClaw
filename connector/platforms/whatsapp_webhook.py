@@ -296,7 +296,12 @@ class WhatsAppWebhookServer:
     # Outbound: Text
     # ------------------------------------------------------------------
 
-    async def send_message(self, recipient_id: str, text: str):
+    async def send_message(
+        self,
+        recipient_id: str,
+        text: str,
+        delivery_context: Optional[dict] = None,
+    ):
         """Send text message via WhatsApp Cloud API."""
         if self._session_invalid:
             logger.warning("R93: Connector session invalid - blocking outbound")
@@ -350,6 +355,7 @@ class WhatsAppWebhookServer:
         image_data: bytes,
         filename: str = "image.png",
         caption: Optional[str] = None,
+        delivery_context: Optional[dict] = None,
     ):
         """
         Send image via WhatsApp using public media URL.

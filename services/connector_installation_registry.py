@@ -49,6 +49,7 @@ class InstallationStatus(str, Enum):
 _RESOLVABLE_STATUSES = frozenset(
     {InstallationStatus.ACTIVE.value, InstallationStatus.ROTATING.value}
 )
+_UNRESOLVABLE_HEALTH_CODES = frozenset({"invalid_token", "revoked"})
 
 
 @dataclass
@@ -109,12 +110,14 @@ class InstallationResolution:
     installation: Optional[ConnectorInstallation] = None
     reject_reason: str = ""
     audit_code: str = ""
+    health_code: str = ""
 
     def to_public_dict(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "ok": self.ok,
             "reject_reason": self.reject_reason,
             "audit_code": self.audit_code,
+            "health_code": self.health_code,
         }
         if self.installation is not None:
             payload["installation"] = self.installation.to_public_dict()
@@ -146,6 +149,15 @@ class ConnectorInstallationRegistry:
 
     def _normalize_platform(self, platform: str) -> str:
         return self._normalize_identifier(platform, "platform").lower()
+
+    def _health_code_for_installation(self, inst: ConnectorInstallation) -> str:
+        health = dict(inst.metadata.get("health", {}) or {})
+        health_code = str(health.get("state", "")).strip().lower()
+        if health_code:
+            return health_code
+        if inst.status == InstallationStatus.REVOKED.value:
+            return "revoked"
+        return ""
 
     def _store_token_refs(
         self, installation_id: str, token_values: Dict[str, str], tenant_id: str
@@ -369,11 +381,17 @@ class ConnectorInstallationRegistry:
     def activate_installation(
         self, installation_id: str, reason: str = ""
     ) -> ConnectorInstallation:
-        return self._transition(
+        inst = self._transition(
             installation_id,
             InstallationStatus.ACTIVE.value,
             reason=reason,
             action="activate",
+        )
+        return self.update_installation_health(
+            installation_id,
+            health_code="ok",
+            reason=reason or "activated",
+            details={"status": inst.status},
         )
 
     def rotate_installation_tokens(
@@ -410,11 +428,17 @@ class ConnectorInstallationRegistry:
     def revoke_installation(
         self, installation_id: str, reason: str = ""
     ) -> ConnectorInstallation:
-        return self._transition(
+        self._transition(
             installation_id,
             InstallationStatus.REVOKED.value,
             reason=reason,
             action="revoke",
+        )
+        return self.update_installation_health(
+            installation_id,
+            health_code="revoked",
+            reason=reason or "revoked",
+            details={"status": InstallationStatus.REVOKED.value},
         )
 
     def deactivate_installation(
@@ -444,6 +468,37 @@ class ConnectorInstallationRegistry:
             self._save()
             return ConnectorInstallation(**asdict(inst))
 
+    def update_installation_health(
+        self,
+        installation_id: str,
+        *,
+        health_code: str,
+        reason: str = "",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> ConnectorInstallation:
+        with self._lock:
+            inst = self._installations.get(str(installation_id).strip())
+            if inst is None:
+                raise ValueError(f"Installation not found: {installation_id}")
+            metadata = dict(inst.metadata or {})
+            metadata["health"] = {
+                "state": str(health_code or "ok").strip().lower() or "ok",
+                "reason": str(reason or "").strip(),
+                "updated_at": time.time(),
+                "details": dict(details or {}),
+            }
+            inst.metadata = metadata
+            inst.updated_at = time.time()
+            self._installations[inst.installation_id] = inst
+            self._audit(
+                "health_update",
+                inst,
+                health_code=metadata["health"]["state"],
+                reason=metadata["health"]["reason"],
+            )
+            self._save()
+            return ConnectorInstallation(**asdict(inst))
+
     def resolve_installation(
         self, platform: str, workspace_id: str, tenant_id: Optional[str] = None
     ) -> InstallationResolution:
@@ -470,6 +525,7 @@ class ConnectorInstallationRegistry:
                         ok=False,
                         reject_reason="tenant_mismatch",
                         audit_code="conn_install.resolve_tenant_mismatch",
+                        health_code="degraded",
                     )
                 matches = tenant_matches
             eligible = [inst for inst in matches if inst.status in _RESOLVABLE_STATUSES]
@@ -478,6 +534,7 @@ class ConnectorInstallationRegistry:
                     ok=False,
                     reject_reason="ambiguous_binding",
                     audit_code="conn_install.resolve_ambiguous",
+                    health_code="degraded",
                 )
             if not eligible:
                 if not matches:
@@ -485,24 +542,39 @@ class ConnectorInstallationRegistry:
                         ok=False,
                         reject_reason="missing_binding",
                         audit_code="conn_install.resolve_missing",
+                        health_code="workspace_unbound",
                     )
+                health_code = (
+                    self._health_code_for_installation(matches[0]) or "degraded"
+                )
                 return InstallationResolution(
                     ok=False,
                     reject_reason="inactive_binding",
                     audit_code="conn_install.resolve_inactive",
+                    health_code=health_code,
                 )
             inst = eligible[0]
+            health_code = self._health_code_for_installation(inst)
+            if health_code in _UNRESOLVABLE_HEALTH_CODES:
+                return InstallationResolution(
+                    ok=False,
+                    reject_reason="inactive_binding",
+                    audit_code="conn_install.resolve_unhealthy",
+                    health_code=health_code,
+                )
             for token_name, ref in inst.token_refs.items():
                 if not self._secret_store.get_secret(ref, tenant_id=inst.tenant_id):
                     return InstallationResolution(
                         ok=False,
                         reject_reason=f"stale_token_ref:{token_name}",
                         audit_code="conn_install.resolve_stale_ref",
+                        health_code="degraded",
                     )
             return InstallationResolution(
                 ok=True,
                 installation=ConnectorInstallation(**asdict(inst)),
                 audit_code="conn_install.resolve_ok",
+                health_code=health_code or "ok",
             )
 
     def get_audit_trail(
@@ -530,15 +602,19 @@ class ConnectorInstallationRegistry:
     def diagnostics(self, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         with self._lock:
             counts: Dict[str, int] = {}
+            health_counts: Dict[str, int] = {}
             items = list(self._installations.values())
             if tenant_id:
                 normalized_tenant = normalize_tenant_id(tenant_id)
                 items = [inst for inst in items if inst.tenant_id == normalized_tenant]
             for inst in items:
                 counts[inst.status] = counts.get(inst.status, 0) + 1
+                health_code = self._health_code_for_installation(inst) or "ok"
+                health_counts[health_code] = health_counts.get(health_code, 0) + 1
             return {
                 "installation_count": len(items),
                 "status_counts": counts,
+                "health_counts": health_counts,
                 "audit_events": len(self._audit_trail),
             }
 

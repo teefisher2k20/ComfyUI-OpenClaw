@@ -4,7 +4,7 @@ Shared data models for request/response.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -16,6 +16,9 @@ class CommandRequest:
     message_id: str
     text: str
     timestamp: float
+    workspace_id: str = ""
+    thread_id: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -42,10 +45,16 @@ class Platform:
         image_data: bytes,
         filename: str = "image.png",
         caption: Optional[str] = None,
+        delivery_context: Optional[Dict[str, Any]] = None,
     ):
         """Send an image to the channel."""
         pass
 
-    async def send_message(self, channel_id: str, text: str):
+    async def send_message(
+        self,
+        channel_id: str,
+        text: str,
+        delivery_context: Optional[Dict[str, Any]] = None,
+    ):
         """Send a text message to the channel."""
         pass

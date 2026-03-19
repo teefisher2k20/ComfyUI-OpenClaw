@@ -27,6 +27,7 @@ OpenClaw now includes a platform-agnostic baseline for multi-workspace connector
   - `platform`, `workspace_id`, `installation_id`, `token_refs`, `status`, `updated_at`
 - token material is kept in encrypted server-side secret storage; registry and diagnostics expose token references only
 - workspace resolution is fail-closed on missing/ambiguous/inactive/stale bindings
+- installation diagnostics can also surface stable health states such as `ok`, `invalid_token`, `revoked`, `workspace_unbound`, and `degraded`
 - interactive callback contract enforces signed envelope checks, timestamp window, payload-hash validation, replay/idempotency guardrails, and command-policy mapping (`public`/`run`/`admin`) with explicit force-approval outcomes for untrusted `run` callbacks
 
 Admin diagnostics APIs:
@@ -35,6 +36,12 @@ Admin diagnostics APIs:
 - `GET /openclaw/connector/installations/{installation_id}`
 - `GET /openclaw/connector/installations/resolve?platform=<platform>&workspace_id=<workspace_id>`
 - `GET /openclaw/connector/installations/audit`
+
+Slack multi-workspace notes:
+
+- Slack OAuth installs bind one workspace per installation record and persist only encrypted token refs.
+- `GET /openclaw/connector/installations/resolve?platform=slack&workspace_id=<team_id>` returns the fail-closed resolution view for a specific Slack workspace.
+- `GET /openclaw/connector/installations` diagnostics may include per-install health metadata plus aggregate `health_counts`.
 
 ### Multi-tenant boundary behavior
 
@@ -145,8 +152,15 @@ Set the following environment variables (or put them in a `.env` file if you use
 
 *(Requires Inbound Connectivity - see below)*
 
-- `OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN`: Bot User OAuth Token (`xoxb-...`).
+- `OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN`: Optional legacy single-workspace Bot User OAuth Token (`xoxb-...`). When Slack OAuth is configured, per-workspace tokens are resolved from the installation registry instead.
 - `OPENCLAW_CONNECTOR_SLACK_SIGNING_SECRET`: Signing Secret (from App Credentials).
+- `OPENCLAW_CONNECTOR_SLACK_CLIENT_ID`: OAuth client ID for multi-workspace installation flow.
+- `OPENCLAW_CONNECTOR_SLACK_CLIENT_SECRET`: OAuth client secret for multi-workspace installation flow.
+- `OPENCLAW_CONNECTOR_SLACK_OAUTH_REDIRECT_URI`: Explicit OAuth callback URL. If omitted, connector derives it from `OPENCLAW_CONNECTOR_PUBLIC_BASE_URL` + callback path.
+- `OPENCLAW_CONNECTOR_SLACK_OAUTH_INSTALL_PATH`: Local install route (default `/slack/install`).
+- `OPENCLAW_CONNECTOR_SLACK_OAUTH_CALLBACK_PATH`: Local callback route (default `/slack/oauth/callback`).
+- `OPENCLAW_CONNECTOR_SLACK_OAUTH_SCOPES`: Comma-separated bot scopes used for install URL generation.
+- `OPENCLAW_CONNECTOR_SLACK_OAUTH_STATE_TTL_SEC`: TTL in seconds for single-use OAuth state tokens (default `600`).
 - `OPENCLAW_CONNECTOR_SLACK_ALLOWED_USERS`: Comma-separated user IDs (e.g. `U12345, U67890`).
 - `OPENCLAW_CONNECTOR_SLACK_ALLOWED_CHANNELS`: Comma-separated channel IDs (e.g. `C12345`).
 - `OPENCLAW_CONNECTOR_SLACK_BIND`: Host to bind (default `127.0.0.1`).
@@ -373,14 +387,18 @@ Slack uses the Events API webhook mode in OpenClaw. You must expose the endpoint
      - `im:history` (DM support)
      - `channels:history` (public channel messages)
      - `groups:history` (private channel messages)
-   - Click **Install to Workspace**.
-   - Copy the **Bot User OAuth Token** (`xoxb-...`).
+   - For legacy single-workspace mode, click **Install to Workspace** and copy the **Bot User OAuth Token** (`xoxb-...`).
+   - For F58 multi-workspace mode, configure a redirect URL and let OpenClaw handle installs through its OAuth routes.
 
 3. **Configure connector environment variables**
 
    ```bash
-   OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN=xoxb-your-token
    OPENCLAW_CONNECTOR_SLACK_SIGNING_SECRET=your-signing-secret
+   OPENCLAW_CONNECTOR_SLACK_CLIENT_ID=1234567890.1234567890
+   OPENCLAW_CONNECTOR_SLACK_CLIENT_SECRET=replace-with-client-secret
+   OPENCLAW_CONNECTOR_PUBLIC_BASE_URL=https://your-public-host
+   OPENCLAW_CONNECTOR_SLACK_OAUTH_INSTALL_PATH=/slack/install
+   OPENCLAW_CONNECTOR_SLACK_OAUTH_CALLBACK_PATH=/slack/oauth/callback
    OPENCLAW_CONNECTOR_SLACK_ALLOWED_USERS=U12345,U67890
    OPENCLAW_CONNECTOR_SLACK_ALLOWED_CHANNELS=C12345
    OPENCLAW_CONNECTOR_SLACK_BIND=127.0.0.1
@@ -392,6 +410,7 @@ Slack uses the Events API webhook mode in OpenClaw. You must expose the endpoint
    ```
 
    Notes:
+   - Legacy single-workspace fallback can still set `OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN=xoxb-...`; F58 multi-workspace mode no longer requires that token at startup if OAuth install flow is configured.
    - `OPENCLAW_CONNECTOR_ADMIN_TOKEN` must match server `OPENCLAW_ADMIN_TOKEN` if server-side admin token is enabled.
    - Slack ingress is fail-closed: invalid/missing signature, stale timestamp, and replayed events are rejected.
 
@@ -400,6 +419,8 @@ Slack uses the Events API webhook mode in OpenClaw. You must expose the endpoint
    - Expose local endpoint to public HTTPS (Cloudflare Tunnel/ngrok/reverse proxy):
      - local upstream: `http://127.0.0.1:8095`
      - public URL: `https://<public-host>/slack/events`
+     - install URL: `https://<public-host>/slack/install`
+     - callback URL: `https://<public-host>/slack/oauth/callback`
 
 5. **Enable Event Subscriptions**
    - Go to **Event Subscriptions** and enable events.
@@ -412,15 +433,17 @@ Slack uses the Events API webhook mode in OpenClaw. You must expose the endpoint
      - `message.im`
 
 6. **Invite and validate**
+   - Open `https://<public-host>/slack/install` and complete the workspace install.
    - Invite the app to target channels: `/invite @YourBot`.
    - In channel: `@YourBot /status` (when `OPENCLAW_CONNECTOR_SLACK_REQUIRE_MENTION=true`).
    - In DM: `/help`.
    - Verify connector logs show signed ingress accepted and replies delivered.
+   - Verify `GET /openclaw/connector/installations` shows the Slack workspace binding and health state `ok`.
 
 7. **Security checklist before production**
    - Keep `OPENCLAW_CONNECTOR_SLACK_ALLOWED_USERS`/`OPENCLAW_CONNECTOR_SLACK_ALLOWED_CHANNELS` restricted.
    - Keep `OPENCLAW_CONNECTOR_SLACK_REQUIRE_MENTION=true` unless intentionally running command-style channels.
-   - Rotate Slack bot token/signing secret on incident response.
+   - Rotate Slack signing secret and OAuth client secret on incident response.
    - Do not expose connector without HTTPS termination.
 
 #### Slack Socket Mode Setup (Optional)
@@ -437,9 +460,13 @@ Use Socket Mode when you cannot expose a public HTTPS webhook endpoint.
    ```bash
    OPENCLAW_CONNECTOR_SLACK_MODE=socket
    OPENCLAW_CONNECTOR_SLACK_APP_TOKEN=xapp-your-token
-   # Bot token + signing secret are still required for parity and safety checks
-   OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN=xoxb-your-token
+   # Signing secret remains required for parity/security checks.
    OPENCLAW_CONNECTOR_SLACK_SIGNING_SECRET=your-signing-secret
+   # Either configure legacy single-workspace token...
+   OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN=xoxb-your-token
+   # ...or configure multi-workspace OAuth install flow:
+   OPENCLAW_CONNECTOR_SLACK_CLIENT_ID=1234567890.1234567890
+   OPENCLAW_CONNECTOR_SLACK_CLIENT_SECRET=replace-with-client-secret
    ```
 
 3. **Start connector**
@@ -449,6 +476,7 @@ Use Socket Mode when you cannot expose a public HTTPS webhook endpoint.
 Notes:
 - Socket Mode uses outbound WebSocket, so `OPENCLAW_CONNECTOR_SLACK_BIND`, `OPENCLAW_CONNECTOR_SLACK_PORT`, and `OPENCLAW_CONNECTOR_SLACK_PATH` are ignored in this mode.
 - Startup is fail-closed if `OPENCLAW_CONNECTOR_SLACK_APP_TOKEN` is missing or does not start with `xapp-`.
+- In multi-workspace mode, outbound replies still resolve the workspace-specific bot token from the installation registry even though the WebSocket connection itself uses the app-level token.
 
 ## Commands
 

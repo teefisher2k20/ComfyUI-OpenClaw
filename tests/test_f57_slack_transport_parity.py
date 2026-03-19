@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from connector.config import ConnectorConfig
+from connector.contract import CommandResponse
 from connector.platforms.slack_socket_mode import SlackSocketModeClient
 
 
@@ -21,7 +22,7 @@ class TestF57SlackTransportParity(unittest.IsolatedAsyncioTestCase):
         self.config.slack_signing_secret = "secret"
 
         self.router = MagicMock()
-        self.router.handle = AsyncMock()
+        self.router.handle = AsyncMock(return_value=CommandResponse(text=""))
         self.client = SlackSocketModeClient(self.config, self.router)
 
     async def test_socket_mode_routes_message(self):

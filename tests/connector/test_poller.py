@@ -9,11 +9,16 @@ from connector.results_poller import ResultsPoller
 
 class MockPlatform(Platform):
     async def send_image(
-        self, channel_id, image_data, filename="image.png", caption=None
+        self,
+        channel_id,
+        image_data,
+        filename="image.png",
+        caption=None,
+        delivery_context=None,
     ):
         pass
 
-    async def send_message(self, channel_id, text):
+    async def send_message(self, channel_id, text, delivery_context=None):
         pass
 
 
@@ -37,7 +42,7 @@ class TestResultsPoller(unittest.TestCase):
         self.poller.track_job("p-1", "test_plat", "c-1", "u-1")
         self.assertEqual(self.poller.queue.qsize(), 1)
         item = self.poller.queue.get_nowait()
-        self.assertEqual(item, ("p-1", "test_plat", "c-1", "u-1"))
+        self.assertEqual(item, ("p-1", "test_plat", "c-1", "u-1", {}))
 
     @patch("connector.results_poller.time")
     @patch("connector.results_poller.asyncio.sleep", new_callable=AsyncMock)
@@ -62,12 +67,23 @@ class TestResultsPoller(unittest.TestCase):
 
         self.client.get_view.return_value = b"image_bytes"
 
-        asyncio.run(self.poller._poll_job("p-1", "test_plat", "c-1", "u-1"))
+        asyncio.run(
+            self.poller._poll_job(
+                "p-1",
+                "test_plat",
+                "c-1",
+                "u-1",
+                {"workspace_id": "T1", "thread_id": "123.456"},
+            )
+        )
 
         self.assertEqual(self.client.get_history.call_count, 2)
         self.client.get_view.assert_called_with("f.png", "", "output")
         self.mock_platform.send_image.assert_called_with(
-            "c-1", b"image_bytes", filename="f.png"
+            "c-1",
+            b"image_bytes",
+            filename="f.png",
+            delivery_context={"workspace_id": "T1", "thread_id": "123.456"},
         )
 
     @patch("connector.results_poller.time")

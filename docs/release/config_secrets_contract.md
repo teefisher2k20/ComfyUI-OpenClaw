@@ -131,12 +131,20 @@ Controls the `connector` sidecar process and outbound delivery.
 | `OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN` | Slack | Bot OAuth token (`xoxb-*`). |
 | `OPENCLAW_CONNECTOR_SLACK_SIGNING_SECRET` | Slack | Ingress signature secret. |
 | `OPENCLAW_CONNECTOR_SLACK_APP_TOKEN` | Slack | Optional Socket Mode app token (`xapp-*`). |
+| `OPENCLAW_CONNECTOR_SLACK_CLIENT_ID` | Slack | OAuth client ID for multi-workspace installation flow. |
+| `OPENCLAW_CONNECTOR_SLACK_CLIENT_SECRET` | Slack | OAuth client secret for multi-workspace installation flow. |
+| `OPENCLAW_CONNECTOR_SLACK_OAUTH_REDIRECT_URI` | Slack | Explicit OAuth callback URL. Falls back to `OPENCLAW_CONNECTOR_PUBLIC_BASE_URL + OPENCLAW_CONNECTOR_SLACK_OAUTH_CALLBACK_PATH` when omitted. |
+| `OPENCLAW_CONNECTOR_SLACK_OAUTH_INSTALL_PATH` | Slack | Local install route path (default `/slack/install`). |
+| `OPENCLAW_CONNECTOR_SLACK_OAUTH_CALLBACK_PATH` | Slack | Local OAuth callback route path (default `/slack/oauth/callback`). |
+| `OPENCLAW_CONNECTOR_SLACK_OAUTH_SCOPES` | Slack | Comma-separated bot scopes for install URL generation. |
+| `OPENCLAW_CONNECTOR_SLACK_OAUTH_STATE_TTL_SEC` | Slack | TTL for single-use OAuth state tokens (default `600`). |
 | `OPENCLAW_CONNECTOR_SLACK_ALLOWED_USERS` | Slack | Comma-separated trusted user IDs. |
 | `OPENCLAW_CONNECTOR_SLACK_ALLOWED_CHANNELS` | Slack | Comma-separated trusted channel IDs. |
 
 Connector posture rules:
 - In strict posture (`OPENCLAW_DEPLOYMENT_PROFILE=public` or `OPENCLAW_RUNTIME_PROFILE=hardened`), active connector platforms without allowlist coverage are fail-closed.
 - Public deployment profile check surfaces this as `DP-PUBLIC-009`.
+- Slack multi-workspace installs persist only encrypted token refs in `connector_installations.json`; raw bot/app tokens remain in encrypted secret storage and must not appear in diagnostics or exported config surfaces.
 
 **Delivery & Media:**
 

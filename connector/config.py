@@ -102,6 +102,23 @@ class ConnectorConfig:
     slack_reply_in_thread: bool = True
     slack_mode: str = "events"  # F57: events | socket
     slack_app_token: Optional[str] = None  # F57: required in socket mode (xapp-...)
+    slack_client_id: Optional[str] = None
+    slack_client_secret: Optional[str] = None
+    slack_oauth_redirect_uri: Optional[str] = None
+    slack_oauth_install_path: str = "/slack/install"
+    slack_oauth_callback_path: str = "/slack/oauth/callback"
+    slack_oauth_scopes: List[str] = field(
+        default_factory=lambda: [
+            "app_mentions:read",
+            "channels:history",
+            "chat:write",
+            "files:write",
+            "groups:history",
+            "im:history",
+            "mpim:history",
+        ]
+    )
+    slack_oauth_state_ttl_sec: int = 600
 
     # Privileged Access (ID match across platforms; Telegram Int vs Discord Str handled by router)
     admin_users: List[str] = field(default_factory=list)
@@ -280,6 +297,28 @@ def load_config() -> ConnectorConfig:
         cfg.slack_reply_in_thread = False
     cfg.slack_mode = os.environ.get("OPENCLAW_CONNECTOR_SLACK_MODE", "events").lower()
     cfg.slack_app_token = os.environ.get("OPENCLAW_CONNECTOR_SLACK_APP_TOKEN")
+    cfg.slack_client_id = os.environ.get("OPENCLAW_CONNECTOR_SLACK_CLIENT_ID")
+    cfg.slack_client_secret = os.environ.get("OPENCLAW_CONNECTOR_SLACK_CLIENT_SECRET")
+    cfg.slack_oauth_redirect_uri = os.environ.get(
+        "OPENCLAW_CONNECTOR_SLACK_OAUTH_REDIRECT_URI"
+    )
+    cfg.slack_oauth_install_path = os.environ.get(
+        "OPENCLAW_CONNECTOR_SLACK_OAUTH_INSTALL_PATH", "/slack/install"
+    )
+    cfg.slack_oauth_callback_path = os.environ.get(
+        "OPENCLAW_CONNECTOR_SLACK_OAUTH_CALLBACK_PATH", "/slack/oauth/callback"
+    )
+    if slack_scopes := os.environ.get("OPENCLAW_CONNECTOR_SLACK_OAUTH_SCOPES"):
+        parsed_scopes = [
+            scope.strip() for scope in slack_scopes.split(",") if scope.strip()
+        ]
+        if parsed_scopes:
+            cfg.slack_oauth_scopes = parsed_scopes
+    if slack_oauth_ttl := os.environ.get(
+        "OPENCLAW_CONNECTOR_SLACK_OAUTH_STATE_TTL_SEC"
+    ):
+        if slack_oauth_ttl.isdigit():
+            cfg.slack_oauth_state_ttl_sec = max(60, int(slack_oauth_ttl))
 
     # Admin
     if admins := os.environ.get("OPENCLAW_CONNECTOR_ADMIN_USERS"):

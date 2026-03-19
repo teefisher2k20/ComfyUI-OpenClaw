@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from .config import ConnectorConfig
 from .contract import Platform
@@ -26,10 +26,10 @@ class ResultsPoller:
         self.platforms = platforms  # map "telegram" -> TelegramPolling, etc.
         self.queue = (
             asyncio.Queue()
-        )  # (prompt_id, platform_name, channel_id, sender_id)
+        )  # (prompt_id, platform_name, channel_id, sender_id, delivery_context)
         self.approval_queue = (
             asyncio.Queue()
-        )  # (approval_id, platform_name, channel_id, sender_id)
+        )  # (approval_id, platform_name, channel_id, sender_id, delivery_context)
         self.active_polls = {}  # prompt_id -> task
         self.active_approval_polls = {}  # approval_id -> task
 
@@ -55,17 +55,35 @@ class ResultsPoller:
         logger.info("ResultsPoller stopped.")
 
     def track_job(
-        self, prompt_id: str, platform_name: str, channel_id: str, sender_id: str
+        self,
+        prompt_id: str,
+        platform_name: str,
+        channel_id: str,
+        sender_id: str,
+        delivery_context: Optional[Dict[str, Any]] = None,
     ):
         """Enqueue a job for result monitoring."""
         if not prompt_id:
             return
 
         logger.info(f"Tracking job {prompt_id} for {platform_name} in {channel_id}")
-        self.queue.put_nowait((prompt_id, platform_name, channel_id, sender_id))
+        self.queue.put_nowait(
+            (
+                prompt_id,
+                platform_name,
+                channel_id,
+                sender_id,
+                dict(delivery_context or {}),
+            )
+        )
 
     def track_approval(
-        self, approval_id: str, platform_name: str, channel_id: str, sender_id: str
+        self,
+        approval_id: str,
+        platform_name: str,
+        channel_id: str,
+        sender_id: str,
+        delivery_context: Optional[Dict[str, Any]] = None,
     ):
         if not approval_id:
             return
@@ -85,16 +103,28 @@ class ResultsPoller:
             f"Tracking approval {approval_id} for {platform_name} in {channel_id}"
         )
         self.approval_queue.put_nowait(
-            (approval_id, platform_name, channel_id, sender_id)
+            (
+                approval_id,
+                platform_name,
+                channel_id,
+                sender_id,
+                dict(delivery_context or {}),
+            )
         )
 
     async def _job_consumer(self):
         while True:
             item = await self.queue.get()
             try:
-                prompt_id, platform_name, channel_id, sender_id = item
+                prompt_id, platform_name, channel_id, sender_id, delivery_context = item
                 task = asyncio.create_task(
-                    self._poll_job(prompt_id, platform_name, channel_id, sender_id)
+                    self._poll_job(
+                        prompt_id,
+                        platform_name,
+                        channel_id,
+                        sender_id,
+                        delivery_context,
+                    )
                 )
                 self.active_polls[prompt_id] = task
                 task.add_done_callback(
@@ -107,10 +137,20 @@ class ResultsPoller:
         while True:
             item = await self.approval_queue.get()
             try:
-                approval_id, platform_name, channel_id, sender_id = item
+                (
+                    approval_id,
+                    platform_name,
+                    channel_id,
+                    sender_id,
+                    delivery_context,
+                ) = item
                 task = asyncio.create_task(
                     self._poll_approval(
-                        approval_id, platform_name, channel_id, sender_id
+                        approval_id,
+                        platform_name,
+                        channel_id,
+                        sender_id,
+                        delivery_context,
                     )
                 )
                 self.active_approval_polls[approval_id] = task
@@ -121,7 +161,12 @@ class ResultsPoller:
                 self.approval_queue.task_done()
 
     async def _poll_approval(
-        self, approval_id: str, platform_name: str, channel_id: str, sender_id: str
+        self,
+        approval_id: str,
+        platform_name: str,
+        channel_id: str,
+        sender_id: str,
+        delivery_context: Optional[Dict[str, Any]] = None,
     ):
         start_time = time.time()
         delay = 2.0
@@ -137,6 +182,7 @@ class ResultsPoller:
                             platform_name,
                             channel_id,
                             f"❌ Approval {approval_id} {status}.",
+                            delivery_context=delivery_context,
                         )
                         return
                     if status == "approved":
@@ -150,7 +196,11 @@ class ResultsPoller:
                         )
                         if prompt_id:
                             self.track_job(
-                                prompt_id, platform_name, channel_id, sender_id
+                                prompt_id,
+                                platform_name,
+                                channel_id,
+                                sender_id,
+                                delivery_context=delivery_context,
                             )
                             return
             except Exception as e:
@@ -166,10 +216,16 @@ class ResultsPoller:
             platform_name,
             channel_id,
             f"⚠️ Approval {approval_id} timed out waiting for execution.",
+            delivery_context=delivery_context,
         )
 
     async def _poll_job(
-        self, prompt_id: str, platform_name: str, channel_id: str, sender_id: str
+        self,
+        prompt_id: str,
+        platform_name: str,
+        channel_id: str,
+        sender_id: str,
+        delivery_context: Optional[Dict[str, Any]] = None,
     ):
         """Poll history with backoff until complete or timeout."""
         start_time = time.time()
@@ -185,7 +241,11 @@ class ResultsPoller:
                     if prompt_id in data:
                         job_data = data[prompt_id]
                         await self._deliver_results(
-                            prompt_id, job_data, platform_name, channel_id
+                            prompt_id,
+                            job_data,
+                            platform_name,
+                            channel_id,
+                            delivery_context=delivery_context,
                         )
                         return
             except Exception as e:
@@ -203,10 +263,16 @@ class ResultsPoller:
             platform_name,
             channel_id,
             f"⚠️ Job {prompt_id} timed out waiting for results.",
+            delivery_context=delivery_context,
         )
 
     async def _deliver_results(
-        self, prompt_id: str, job_data: dict, platform_name: str, channel_id: str
+        self,
+        prompt_id: str,
+        job_data: dict,
+        platform_name: str,
+        channel_id: str,
+        delivery_context: Optional[Dict[str, Any]] = None,
     ):
         """Download images and send to platform."""
         outputs = job_data.get("outputs", {})
@@ -216,6 +282,7 @@ class ResultsPoller:
                 platform_name,
                 channel_id,
                 f"✅ Job {prompt_id} finished (No output images).",
+                delivery_context=delivery_context,
             )
             return
 
@@ -231,7 +298,10 @@ class ResultsPoller:
         if not images_to_send:
             logger.info(f"Job {prompt_id} finished but no images found.")
             await self._send_text(
-                platform_name, channel_id, f"✅ Job {prompt_id} finished (No images)."
+                platform_name,
+                channel_id,
+                f"✅ Job {prompt_id} finished (No images).",
+                delivery_context=delivery_context,
             )
             return
 
@@ -263,23 +333,43 @@ class ResultsPoller:
                     platform_name,
                     channel_id,
                     f"⚠️ Image {filename} skipped (too large).",
+                    delivery_context=delivery_context,
                 )
                 continue
 
             # Send with error handling
             try:
-                await platform.send_image(channel_id, content, filename=filename)
+                await platform.send_image(
+                    channel_id,
+                    content,
+                    filename=filename,
+                    delivery_context=delivery_context,
+                )
             except Exception as e:
                 logger.error(f"Failed to deliver image to {platform_name}: {e}")
                 # Fallback text
                 await self._send_text(
-                    platform_name, channel_id, f"⚠️ Failed to send image: {filename}"
+                    platform_name,
+                    channel_id,
+                    f"⚠️ Failed to send image: {filename}",
+                    delivery_context=delivery_context,
                 )
 
-    async def _send_text(self, platform_name: str, channel_id: str, text: str):
+    async def _send_text(
+        self,
+        platform_name: str,
+        channel_id: str,
+        text: str,
+        *,
+        delivery_context: Optional[Dict[str, Any]] = None,
+    ):
         platform = self.platforms.get(platform_name)
         if platform:
             try:
-                await platform.send_message(channel_id, text)
+                await platform.send_message(
+                    channel_id,
+                    text,
+                    delivery_context=dict(delivery_context or {}),
+                )
             except Exception as e:
                 logger.error(f"Failed to send text to {platform_name}: {e}")

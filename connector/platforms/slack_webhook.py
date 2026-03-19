@@ -33,12 +33,13 @@ import hmac
 import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from ..config import ConnectorConfig
 from ..contract import CommandRequest, CommandResponse
 from ..router import CommandRouter
 from ..security_profile import AllowlistPolicy, ReplayGuard
+from .slack_installation_manager import SlackInstallationManager
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,12 @@ def _make_json_response(web_mod, data: dict, *, status: int = 200):
         content_type="application/json",
         body=body,
     )
+
+
+def _make_redirect_response(web_mod, url: str):
+    if web_mod is not None:
+        raise web_mod.HTTPFound(location=url)
+    return _CompatResponse(status=302, text=url)
 
 
 # -- Slack signature verification -------------------------------------------
@@ -172,9 +179,11 @@ class SlackWebhookServer:
         self._channel_allowlist = AllowlistPolicy(
             config.slack_allowed_channels, strict=False
         )
+        self._installation_manager = SlackInstallationManager(config)
 
         # Bot user ID (resolved on first event or set from config)
         self._bot_user_id: Optional[str] = None
+        self._bot_user_ids: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -186,11 +195,19 @@ class SlackWebhookServer:
             logger.warning("aiohttp not installed. Skipping Slack adapter.")
             return
 
-        if not self.config.slack_bot_token or not self.config.slack_signing_secret:
+        if not self.config.slack_signing_secret:
             logger.info(
                 "Slack adapter disabled "
-                "(OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN or "
-                "OPENCLAW_CONNECTOR_SLACK_SIGNING_SECRET missing)"
+                "(OPENCLAW_CONNECTOR_SLACK_SIGNING_SECRET missing)"
+            )
+            return
+        if (
+            not self.config.slack_bot_token
+            and not self._installation_manager.can_handle_oauth()
+        ):
+            logger.info(
+                "Slack adapter disabled "
+                "(legacy bot token missing and Slack OAuth flow not configured)"
             )
             return
 
@@ -202,6 +219,13 @@ class SlackWebhookServer:
 
         self.app = web.Application()
         self.app.router.add_post(self.config.slack_webhook_path, self.handle_event)
+        if self._installation_manager.can_handle_oauth():
+            self.app.router.add_get(
+                self.config.slack_oauth_install_path, self.handle_oauth_install
+            )
+            self.app.router.add_get(
+                self.config.slack_oauth_callback_path, self.handle_oauth_callback
+            )
 
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
@@ -219,6 +243,155 @@ class SlackWebhookServer:
     # ------------------------------------------------------------------
     # Event handler
     # ------------------------------------------------------------------
+
+    async def handle_oauth_install(self, request):
+        _, web = _import_aiohttp_web()
+        if not self._installation_manager.can_handle_oauth():
+            return _make_response(web, status=503, text="Slack OAuth not configured")
+        state = self._installation_manager.issue_install_state()
+        return _make_redirect_response(
+            web, self._installation_manager.build_install_url(state)
+        )
+
+    async def handle_oauth_callback(self, request):
+        _, web = _import_aiohttp_web()
+        if not self._installation_manager.can_handle_oauth():
+            return _make_response(web, status=503, text="Slack OAuth not configured")
+        query = getattr(request, "query", {}) or {}
+        if query.get("error"):
+            return _make_response(
+                web,
+                status=400,
+                text=f"Slack OAuth rejected: {query.get('error')}",
+            )
+        state = str(query.get("state", "") or "").strip()
+        code = str(query.get("code", "") or "").strip()
+        if not state or not code:
+            return _make_response(web, status=400, text="Missing OAuth callback fields")
+        if not self._installation_manager.consume_install_state(state):
+            return _make_response(
+                web, status=400, text="Invalid or replayed OAuth state"
+            )
+        try:
+            payload = await self._installation_manager.exchange_code(code)
+            installation = self._installation_manager.upsert_from_oauth_payload(payload)
+            return _make_response(
+                web,
+                status=200,
+                text=(
+                    "Slack installation complete for "
+                    f"{installation.workspace_id} ({installation.installation_id})."
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Slack OAuth callback failed: %s", exc)
+            return _make_response(web, status=502, text=str(exc))
+
+    def _get_bot_user_id(self, payload: Dict[str, Any], workspace_id: str) -> str:
+        candidate = ""
+        if workspace_id and workspace_id in self._bot_user_ids:
+            return self._bot_user_ids[workspace_id]
+        if self._bot_user_id:
+            return self._bot_user_id
+        authorizations = payload.get("authorizations", [])
+        if authorizations and isinstance(authorizations, list):
+            candidate = str((authorizations[0] or {}).get("user_id", "") or "").strip()
+            if candidate:
+                self._bot_user_id = candidate
+                if workspace_id:
+                    self._bot_user_ids[workspace_id] = candidate
+                return candidate
+        if workspace_id:
+            workspace_resolution, _ = (
+                self._installation_manager.resolve_workspace_tokens(workspace_id)
+            )
+            candidate = self._installation_manager.bot_user_id_for_installation(
+                workspace_resolution.installation if workspace_resolution.ok else None
+            )
+            if candidate:
+                self._bot_user_ids[workspace_id] = candidate
+                if self._bot_user_id is None:
+                    self._bot_user_id = candidate
+        return candidate
+
+    def _resolve_workspace_credentials(
+        self, workspace_id: str
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        workspace_id = str(workspace_id or "").strip()
+        if workspace_id:
+            resolution, tokens = self._installation_manager.resolve_workspace_tokens(
+                workspace_id
+            )
+            if resolution.ok and resolution.installation is not None:
+                bot_token = tokens.get("bot_token")
+                if bot_token:
+                    self._installation_manager.mark_resolution_success(
+                        resolution.installation.installation_id, workspace_id
+                    )
+                    return (
+                        resolution.installation.installation_id,
+                        bot_token,
+                        workspace_id,
+                    )
+                logger.warning(
+                    "Slack workspace %s resolved without bot token secret", workspace_id
+                )
+                return (
+                    resolution.installation.installation_id,
+                    None,
+                    workspace_id,
+                )
+            if (
+                not self._installation_manager.oauth_enabled
+                and self.config.slack_bot_token
+            ):
+                return (None, self.config.slack_bot_token, workspace_id)
+            logger.warning(
+                "Slack workspace resolution failed for %s: %s (%s)",
+                workspace_id,
+                resolution.reject_reason,
+                resolution.health_code,
+            )
+            return (None, None, workspace_id)
+        if self.config.slack_bot_token:
+            return (None, self.config.slack_bot_token, "")
+        return (None, None, workspace_id)
+
+    def _handle_lifecycle_event(self, workspace_id: str, event_type: str) -> None:
+        installation_id = self._installation_manager.installation_id_for_workspace(
+            workspace_id
+        )
+        try:
+            if event_type == "app_uninstalled":
+                self._installation_manager.mark_installation_health(
+                    installation_id,
+                    health_code="revoked",
+                    reason="slack_app_uninstalled",
+                    details={"workspace_id": workspace_id},
+                )
+                self._installation_manager.uninstall_installation(
+                    installation_id, reason="slack_app_uninstalled"
+                )
+            elif event_type == "tokens_revoked":
+                self._installation_manager.mark_installation_health(
+                    installation_id,
+                    health_code="invalid_token",
+                    reason="slack_tokens_revoked",
+                    details={"workspace_id": workspace_id},
+                )
+            elif event_type == "app_rate_limited":
+                self._installation_manager.mark_installation_health(
+                    installation_id,
+                    health_code="degraded",
+                    reason="slack_app_rate_limited",
+                    details={"workspace_id": workspace_id},
+                )
+        except ValueError:
+            logger.warning(
+                "Slack lifecycle event for unbound workspace %s (%s)",
+                workspace_id,
+                event_type,
+            )
 
     async def handle_event(self, request):
         """POST handler for Slack Events API."""
@@ -273,6 +446,12 @@ class SlackWebhookServer:
         event = payload.get("event", {})
         event_id = payload.get("event_id", "")
         event_type = event.get("type", "")
+        workspace_id = self._installation_manager.extract_workspace_id(payload)
+
+        if event_type in ("app_uninstalled", "tokens_revoked", "app_rate_limited"):
+            if workspace_id:
+                self._handle_lifecycle_event(workspace_id, event_type)
+            return
 
         # -- Step 5: Replay / dedupe guard --
         if not event_id:
@@ -285,13 +464,10 @@ class SlackWebhookServer:
 
         # -- Step 6: Bot-loop prevention --
         # Resolve bot user ID from authorizations or cache.
-        if self._bot_user_id is None:
-            auths = payload.get("authorizations", [])
-            if auths and isinstance(auths, list):
-                self._bot_user_id = auths[0].get("user_id", "")
+        bot_user_id = self._get_bot_user_id(payload, workspace_id)
 
         sender_id = event.get("user", "")
-        if sender_id and sender_id == self._bot_user_id:
+        if sender_id and bot_user_id and sender_id == bot_user_id:
             return
 
         if event.get("bot_id"):
@@ -317,11 +493,11 @@ class SlackWebhookServer:
         is_dm = channel_id.startswith("D")
         if not is_dm and self.config.slack_require_mention:
             if event_type != "app_mention":
-                if self._bot_user_id and f"<@{self._bot_user_id}>" not in text:
+                if bot_user_id and f"<@{bot_user_id}>" not in text:
                     return
 
-        if self._bot_user_id:
-            text = text.replace(f"<@{self._bot_user_id}>", "").strip()
+        if bot_user_id:
+            text = text.replace(f"<@{bot_user_id}>", "").strip()
 
         # -- Step 8: Allowlist checks (S67) --
         if self._user_allowlist.entries:
@@ -345,6 +521,9 @@ class SlackWebhookServer:
             message_id=event_id,
             text=text,
             timestamp=float(message_ts) if message_ts else time.time(),
+            workspace_id=workspace_id,
+            thread_id=thread_ts
+            or (message_ts if self.config.slack_reply_in_thread else ""),
         )
 
         try:
@@ -357,8 +536,11 @@ class SlackWebhookServer:
                 await self._send_reply(
                     channel_id=channel_id,
                     text=resp_text,
-                    thread_ts=thread_ts
-                    or (message_ts if self.config.slack_reply_in_thread else ""),
+                    thread_ts=req.thread_id,
+                    delivery_context={
+                        "workspace_id": workspace_id,
+                        "thread_id": req.thread_id,
+                    },
                 )
         except Exception as e:
             logger.exception(f"Error handling Slack event: {e}")
@@ -372,6 +554,7 @@ class SlackWebhookServer:
         channel_id: str,
         text: str,
         thread_ts: str = "",
+        delivery_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Send a message via Slack Web API (chat.postMessage)."""
         try:
@@ -380,9 +563,22 @@ class SlackWebhookServer:
             logger.warning("aiohttp not available; cannot send Slack reply")
             return
 
+        ctx = dict(delivery_context or {})
+        if not thread_ts:
+            thread_ts = str(ctx.get("thread_id", "") or "").strip()
+        installation_id, bot_token, workspace_id = self._resolve_workspace_credentials(
+            str(ctx.get("workspace_id", "") or "").strip()
+        )
+        if not bot_token:
+            logger.warning(
+                "Slack reply dropped: no workspace token available (workspace=%s)",
+                workspace_id or "legacy",
+            )
+            return
+
         url = "https://slack.com/api/chat.postMessage"
         headers = {
-            "Authorization": f"Bearer {self.config.slack_bot_token}",
+            "Authorization": f"Bearer {bot_token}",
             "Content-Type": "application/json; charset=utf-8",
         }
         payload: Dict[str, Any] = {
@@ -402,14 +598,40 @@ class SlackWebhookServer:
                 ) as resp:
                     if resp.status != 200:
                         body = await resp.text()
+                        if installation_id:
+                            self._installation_manager.mark_api_error(
+                                installation_id,
+                                error_code=f"http_{resp.status}",
+                                status_code=resp.status,
+                                details={
+                                    "workspace_id": workspace_id,
+                                    "path": "chat.postMessage",
+                                },
+                            )
                         logger.warning(
                             f"Slack API error: status={resp.status} body={body[:200]}"
                         )
                     else:
                         data = await resp.json()
                         if not data.get("ok"):
+                            if installation_id:
+                                self._installation_manager.mark_api_error(
+                                    installation_id,
+                                    error_code=str(data.get("error", "unknown")),
+                                    details={
+                                        "workspace_id": workspace_id,
+                                        "path": "chat.postMessage",
+                                    },
+                                )
                             logger.warning(
                                 f"Slack API error: {data.get('error', 'unknown')}"
+                            )
+                        elif installation_id:
+                            self._installation_manager.mark_installation_health(
+                                installation_id,
+                                health_code="ok",
+                                reason="chat_post_message_ok",
+                                details={"workspace_id": workspace_id},
                             )
         except Exception as e:
             logger.warning(f"Slack reply failed: {e}")
@@ -418,9 +640,18 @@ class SlackWebhookServer:
     # Platform contract: send_message / send_image
     # ------------------------------------------------------------------
 
-    async def send_message(self, channel_id: str, text: str):
+    async def send_message(
+        self,
+        channel_id: str,
+        text: str,
+        delivery_context: Optional[Dict[str, Any]] = None,
+    ):
         """Platform contract: send text message."""
-        await self._send_reply(channel_id=channel_id, text=text)
+        await self._send_reply(
+            channel_id=channel_id,
+            text=text,
+            delivery_context=delivery_context,
+        )
 
     async def send_image(
         self,
@@ -428,6 +659,7 @@ class SlackWebhookServer:
         image_data: bytes,
         filename: str = "image.png",
         caption: Optional[str] = None,
+        delivery_context: Optional[Dict[str, Any]] = None,
     ):
         """Platform contract: send image (Slack files.upload)."""
         try:
@@ -436,15 +668,29 @@ class SlackWebhookServer:
             logger.warning("aiohttp not available; cannot upload Slack image")
             return
 
+        ctx = dict(delivery_context or {})
+        thread_ts = str(ctx.get("thread_id", "") or "").strip()
+        installation_id, bot_token, workspace_id = self._resolve_workspace_credentials(
+            str(ctx.get("workspace_id", "") or "").strip()
+        )
+        if not bot_token:
+            logger.warning(
+                "Slack image dropped: no workspace token available (workspace=%s)",
+                workspace_id or "legacy",
+            )
+            return
+
         url = "https://slack.com/api/files.upload"
         headers = {
-            "Authorization": f"Bearer {self.config.slack_bot_token}",
+            "Authorization": f"Bearer {bot_token}",
         }
         data = _aiohttp.FormData()
         data.add_field("file", image_data, filename=filename, content_type="image/png")
         data.add_field("channels", channel_id)
         if caption:
             data.add_field("initial_comment", caption)
+        if thread_ts:
+            data.add_field("thread_ts", thread_ts)
 
         try:
             async with _aiohttp.ClientSession() as session:
@@ -455,12 +701,38 @@ class SlackWebhookServer:
                     timeout=_aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     if resp.status != 200:
+                        if installation_id:
+                            self._installation_manager.mark_api_error(
+                                installation_id,
+                                error_code=f"http_{resp.status}",
+                                status_code=resp.status,
+                                details={
+                                    "workspace_id": workspace_id,
+                                    "path": "files.upload",
+                                },
+                            )
                         logger.warning(f"Slack file upload error: status={resp.status}")
                     else:
                         resp_data = await resp.json()
                         if not resp_data.get("ok"):
+                            if installation_id:
+                                self._installation_manager.mark_api_error(
+                                    installation_id,
+                                    error_code=str(resp_data.get("error", "unknown")),
+                                    details={
+                                        "workspace_id": workspace_id,
+                                        "path": "files.upload",
+                                    },
+                                )
                             logger.warning(
                                 f"Slack file upload error: {resp_data.get('error')}"
+                            )
+                        elif installation_id:
+                            self._installation_manager.mark_installation_health(
+                                installation_id,
+                                health_code="ok",
+                                reason="files_upload_ok",
+                                details={"workspace_id": workspace_id},
                             )
         except Exception as e:
             logger.warning(f"Slack image upload failed: {e}")
