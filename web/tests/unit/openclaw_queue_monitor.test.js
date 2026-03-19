@@ -57,4 +57,29 @@ describe("QueueMonitor", () => {
             })
         );
     });
+
+    it("emits persistent failed-job notifications with a job-monitor jump action", () => {
+        const ui = { showBanner: vi.fn() };
+        const monitor = new QueueMonitor(ui, {
+            api: {},
+            now: () => 1000,
+            setIntervalRef: vi.fn(),
+        });
+
+        monitor.handleEvent({
+            event_type: "failed",
+            prompt_id: "prompt-12345678",
+        });
+
+        expect(ui.showBanner).toHaveBeenCalledWith(
+            expect.objectContaining({
+                severity: "error",
+                persist: true,
+                action: expect.objectContaining({
+                    type: "tab",
+                    payload: "job-monitor",
+                }),
+            })
+        );
+    });
 });

@@ -212,6 +212,22 @@ export const ModelManagerTab = {
             installations: [],
             pollingTimer: null,
         };
+        const modelManagerAction = {
+            label: "Open Model Manager",
+            type: "tab",
+            payload: "model-manager",
+        };
+
+        const reportIssue = (message, dedupeKey) => {
+            const text = String(message || "request_failed");
+            showError(container, text);
+            showToast(text, "error", {
+                persist: true,
+                source: "model-manager",
+                dedupeKey,
+                action: modelManagerAction,
+            });
+        };
 
         const renderResults = () => {
             if (!Array.isArray(state.items) || state.items.length === 0) {
@@ -312,7 +328,7 @@ export const ModelManagerTab = {
             await runOne(loadTasks, "tasks");
             await runOne(loadInstallations, "installations");
             if (failures.length) {
-                showError(container, failures.join(" | "));
+                reportIssue(failures.join(" | "), "model-manager:refresh");
             }
         };
 
@@ -333,10 +349,15 @@ export const ModelManagerTab = {
             clearError(container);
             const res = await openclawApi.createModelDownloadTask(payload);
             if (!res.ok) {
-                showError(container, `queue failed: ${res.error || "request_failed"}`);
+                reportIssue(`queue failed: ${res.error || "request_failed"}`, "model-manager:queue");
                 return;
             }
-            showToast("Model download queued", "success");
+            showToast("Model download queued", "success", {
+                persist: true,
+                source: "model-manager",
+                dedupeKey: "model-manager:queue-success",
+                action: modelManagerAction,
+            });
             await loadTasks();
         };
 
@@ -344,7 +365,7 @@ export const ModelManagerTab = {
             clearError(container);
             const res = await openclawApi.cancelModelDownloadTask(taskId);
             if (!res.ok) {
-                showError(container, `cancel failed: ${res.error || "request_failed"}`);
+                reportIssue(`cancel failed: ${res.error || "request_failed"}`, "model-manager:cancel");
                 return;
             }
             await loadTasks();
@@ -358,27 +379,32 @@ export const ModelManagerTab = {
             };
             const res = await openclawApi.importDownloadedModel(payload);
             if (!res.ok) {
-                showError(container, `import failed: ${res.error || "request_failed"}`);
+                reportIssue(`import failed: ${res.error || "request_failed"}`, "model-manager:import");
                 return;
             }
-            showToast("Model imported", "success");
+            showToast("Model imported", "success", {
+                persist: true,
+                source: "model-manager",
+                dedupeKey: "model-manager:import-success",
+                action: modelManagerAction,
+            });
             await loadTasks();
             await loadInstallations();
             await loadSearch();
         };
 
         ui.searchBtn.onclick = () => {
-            loadSearch().catch((error) => showError(container, `search failed: ${error?.message || String(error)}`));
+            loadSearch().catch((error) => reportIssue(`search failed: ${error?.message || String(error)}`, "model-manager:search"));
         };
         ui.refreshBtn.onclick = () => {
-            refreshAll().catch((error) => showError(container, `refresh failed: ${error?.message || String(error)}`));
+            refreshAll().catch((error) => reportIssue(`refresh failed: ${error?.message || String(error)}`, "model-manager:refresh"));
         };
         ui.results.onclick = (event) => {
             const btn = event.target.closest("button[data-action='queue']");
             if (!btn) return;
             const index = Number(btn.getAttribute("data-index"));
             if (!Number.isFinite(index)) return;
-            queueModelFromIndex(index).catch((error) => showError(container, `queue failed: ${error?.message || String(error)}`));
+            queueModelFromIndex(index).catch((error) => reportIssue(`queue failed: ${error?.message || String(error)}`, "model-manager:queue"));
         };
         ui.tasks.onclick = (event) => {
             const btn = event.target.closest("button[data-action]");
@@ -387,9 +413,9 @@ export const ModelManagerTab = {
             const taskId = normalizeString(btn.getAttribute("data-task-id"));
             if (!taskId) return;
             if (action === "cancel-task") {
-                cancelTask(taskId).catch((error) => showError(container, `cancel failed: ${error?.message || String(error)}`));
+                cancelTask(taskId).catch((error) => reportIssue(`cancel failed: ${error?.message || String(error)}`, "model-manager:cancel"));
             } else if (action === "import-task") {
-                importTask(taskId).catch((error) => showError(container, `import failed: ${error?.message || String(error)}`));
+                importTask(taskId).catch((error) => reportIssue(`import failed: ${error?.message || String(error)}`, "model-manager:import"));
             }
         };
 
@@ -408,6 +434,6 @@ export const ModelManagerTab = {
             });
         }, 3000);
 
-        refreshAll().catch((error) => showError(container, `initial load failed: ${error?.message || String(error)}`));
+        refreshAll().catch((error) => reportIssue(`initial load failed: ${error?.message || String(error)}`, "model-manager:initial-load"));
     },
 };

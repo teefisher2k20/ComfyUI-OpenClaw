@@ -52,6 +52,40 @@ interface BannerStatus {
 - **Display**: Simple DOM injection of `.moltbot-banner`.
 - **Limitations**: No connectivity state handling, no 'info'/'success' states, simplistic dedupe.
 
+## 1.1 Notification Center (F66)
+
+Persistent operator notifications are the durable counterpart to transient banners and toasts.
+
+### Schema (TypeScript)
+
+```typescript
+interface NotificationEntry {
+  id: string;
+  severity: BannerSeverity;
+  message: string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+  count: number;
+  acknowledged_at?: string | null;
+  dismissed_at?: string | null;
+  action?: {
+    label: string;
+    type: 'url' | 'tab' | 'action';
+    payload: string;
+  };
+  metadata?: Record<string, unknown>;
+}
+```
+
+### F66 Baseline
+
+- Warning/error banners and selected operator toasts are mirrored into the in-app notification center.
+- Entries are deduplicated by source-specific keys and persisted in local storage across reloads.
+- `Dismiss` hides an entry from the active list without deleting the historical record from storage.
+- `Acknowledge` clears unread state while keeping the entry visible.
+- Sources with jump targets should attach a tab/action deep link so operators can navigate directly to the affected surface.
+
 ## 2. Context Actions (F51)
 
 Defines quick actions available in the node context menu (via ComfyUI extension hooks).

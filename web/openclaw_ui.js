@@ -8,6 +8,7 @@ import { openclawApi } from "./openclaw_api.js";
 import { normalizeLegacyClassNames } from "./openclaw_utils.js";
 import { OpenClawActions } from "./openclaw_actions.js";
 import { QueueMonitor } from "./openclaw_queue_monitor.js";
+import { openclawNotifications } from "./openclaw_notifications.js";
 
 export class OpenClawUI {
     constructor() {
@@ -17,6 +18,13 @@ export class OpenClawUI {
             panel: null,
             content: null,
         };
+        this.notificationsOpen = false;
+        this.notificationNodes = null;
+        this._notificationSnapshot = [];
+        this._unsubscribeNotifications = openclawNotifications.subscribe((entries) => {
+            this._notificationSnapshot = entries;
+            this._renderNotificationSnapshot();
+        });
     }
 
     /**
@@ -130,6 +138,7 @@ export class OpenClawUI {
         repoLink.textContent = "View on GitHub";
         badges.appendChild(versionSpan);
         badges.appendChild(repoLink);
+        badges.appendChild(this._buildNotificationToggle());
 
         // Fetch version from health endpoint
         openclawApi.getHealth().then(res => {
@@ -183,6 +192,7 @@ export class OpenClawUI {
         header.appendChild(title);
         header.appendChild(badges);
         container.appendChild(header);
+        container.appendChild(this._buildNotificationPanel());
 
         // 2. Tab Bar
         const tabBar = document.createElement("div");
@@ -199,6 +209,140 @@ export class OpenClawUI {
         // Initialize Tabs
         tabManager.init(tabBar, contentArea);
         normalizeLegacyClassNames(container);
+        this._renderNotificationSnapshot();
+    }
+
+    _buildNotificationToggle() {
+        const button = document.createElement("button");
+        button.className = "openclaw-notification-toggle";
+        button.id = "openclaw-notification-toggle";
+        button.type = "button";
+        button.innerHTML = `
+            <span class="openclaw-notification-toggle-label">Alerts</span>
+            <span class="openclaw-notification-badge" hidden>0</span>
+        `;
+        button.addEventListener("click", () => this.toggleNotifications());
+        this.notificationNodes = this.notificationNodes || {};
+        this.notificationNodes.toggle = button;
+        this.notificationNodes.badge = button.querySelector(".openclaw-notification-badge");
+        return button;
+    }
+
+    _buildNotificationPanel() {
+        const panel = document.createElement("div");
+        panel.className = "openclaw-notification-panel";
+        panel.id = "openclaw-notification-panel";
+        panel.hidden = true;
+
+        panel.innerHTML = `
+            <div class="openclaw-notification-panel-header">
+                <div>
+                    <div class="openclaw-notification-panel-title">Notification Center</div>
+                    <div class="openclaw-notification-panel-subtitle">Persistent operator alerts and actions</div>
+                </div>
+                <button type="button" class="openclaw-notification-close" aria-label="Close notification center">x</button>
+            </div>
+            <div class="openclaw-notification-list"></div>
+        `;
+
+        panel.querySelector(".openclaw-notification-close").addEventListener("click", () => {
+            this.notificationsOpen = false;
+            this._renderNotificationSnapshot();
+        });
+
+        panel.querySelector(".openclaw-notification-list").addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-notification-action]");
+            if (!button) return;
+            const action = button.getAttribute("data-notification-action");
+            const id = button.getAttribute("data-notification-id");
+            if (!id) return;
+
+            if (action === "ack") {
+                openclawNotifications.acknowledge(id);
+                return;
+            }
+            if (action === "dismiss") {
+                openclawNotifications.dismiss(id);
+                return;
+            }
+            if (action === "open") {
+                const entry = this._notificationSnapshot.find((item) => item.id === id);
+                if (!entry?.action) return;
+                openclawNotifications.acknowledge(id);
+                this.handleAction(entry.action);
+            }
+        });
+
+        this.notificationNodes = this.notificationNodes || {};
+        this.notificationNodes.panel = panel;
+        this.notificationNodes.list = panel.querySelector(".openclaw-notification-list");
+        return panel;
+    }
+
+    toggleNotifications() {
+        this.notificationsOpen = !this.notificationsOpen;
+        this._renderNotificationSnapshot();
+    }
+
+    _formatNotificationTime(value) {
+        if (!value) return "";
+        try {
+            return new Date(value).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+            });
+        } catch {
+            return "";
+        }
+    }
+
+    _renderNotificationSnapshot() {
+        const badge = this.notificationNodes?.badge;
+        const panel = this.notificationNodes?.panel;
+        const list = this.notificationNodes?.list;
+        if (!badge || !panel || !list) return;
+
+        const activeEntries = this._notificationSnapshot.filter((entry) => !entry.dismissed_at);
+        const unreadCount = activeEntries.filter((entry) => !entry.acknowledged_at).length;
+        badge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+        badge.hidden = unreadCount <= 0;
+        panel.hidden = !this.notificationsOpen;
+
+        if (activeEntries.length === 0) {
+            list.innerHTML = '<div class="openclaw-notification-empty">No active operator notifications.</div>';
+            return;
+        }
+
+        list.innerHTML = activeEntries.map((entry) => {
+            const actionHtml = entry.action?.type && entry.action?.payload
+                ? `<button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="open" data-notification-id="${entry.id}">${entry.action.label || "Open"}</button>`
+                : "";
+            const countHtml = entry.count > 1
+                ? `<span class="openclaw-notification-count">x${entry.count}</span>`
+                : "";
+            const ackLabel = entry.acknowledged_at ? "Acknowledged" : "Acknowledge";
+            const ackDisabled = entry.acknowledged_at ? "disabled" : "";
+            return `
+                <div class="openclaw-notification-item openclaw-notification-${entry.severity}">
+                    <div class="openclaw-notification-meta">
+                        <span class="openclaw-notification-source">${entry.source}</span>
+                        <span class="openclaw-notification-time">${this._formatNotificationTime(entry.updated_at)}</span>
+                    </div>
+                    <div class="openclaw-notification-message">${entry.message}</div>
+                    <div class="openclaw-notification-footer">
+                        <div class="openclaw-notification-state">
+                            <span class="openclaw-notification-severity">${entry.severity}</span>
+                            ${countHtml}
+                        </div>
+                        <div class="openclaw-notification-actions">
+                            ${actionHtml}
+                            <button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="ack" data-notification-id="${entry.id}" ${ackDisabled}>${ackLabel}</button>
+                            <button type="button" class="openclaw-btn openclaw-btn-sm openclaw-btn-danger" data-notification-action="dismiss" data-notification-id="${entry.id}">Dismiss</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join("");
     }
 
     /**
@@ -308,6 +452,23 @@ export class OpenClawUI {
             this._bannerTimer = setTimeout(() => {
                 if (bannerEl.isConnected) bannerEl.remove();
             }, ttl_ms);
+        }
+
+        const shouldPersist = banner.persist != null
+            ? Boolean(banner.persist)
+            : severity === "warning" || severity === "error";
+        if (shouldPersist) {
+            openclawNotifications.notify({
+                id: `banner_${id || severity}`,
+                severity,
+                message,
+                source: banner.source || "banner",
+                dedupeKey: `banner:${id || `${severity}:${message}`}`,
+                action,
+                metadata: {
+                    ttl_ms: ttl_ms || 0,
+                },
+            });
         }
     }
 

@@ -26,6 +26,10 @@ export const STORAGE_KEYS = Object.freeze({
             primary: "openclaw-active-tab",
             legacy: "moltbot-active-tab",
         }),
+        notifications: Object.freeze({
+            primary: "openclaw_notifications",
+            legacy: null,
+        }),
         remoteAdminToken: Object.freeze({
             primary: "openclaw_remote_admin_token",
             legacy: null,

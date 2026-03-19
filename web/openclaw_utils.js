@@ -2,6 +2,7 @@
 /**
  * Shared Utilities for Moltbot UI
  */
+import { openclawNotifications } from "./openclaw_notifications.js";
 
 /**
  * Simple DOM factory helper.
@@ -74,9 +75,9 @@ export function normalizeLegacyClassNames(root) {
 /**
  * Lightweight toast helper for UI feedback.
  * @param {string} message
- * @param {"info"|"error"|"success"} variant
+ * @param {"info"|"error"|"success"|"warning"} variant
  */
-export function showToast(message, variant = "info") {
+export function showToast(message, variant = "info", options = {}) {
     const toast = document.createElement("div");
     toast.className = `openclaw-toast moltbot-toast openclaw-toast-${variant} moltbot-toast-${variant}`;
     toast.textContent = message;
@@ -91,9 +92,21 @@ export function showToast(message, variant = "info") {
     toast.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
     document.body.appendChild(toast);
 
+    const shouldPersist = options.persist != null ? Boolean(options.persist) : variant === "error";
+    if (shouldPersist) {
+        openclawNotifications.notify({
+            severity: variant,
+            message,
+            source: options.source || "toast",
+            dedupeKey: options.dedupeKey,
+            action: options.action,
+            metadata: options.metadata,
+        });
+    }
+
     setTimeout(() => {
         toast.remove();
-    }, 2500);
+    }, Number.isFinite(options.durationMs) ? options.durationMs : 2500);
 }
 
 /**
