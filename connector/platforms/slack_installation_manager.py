@@ -21,6 +21,11 @@ try:
         InstallationStatus,
         get_connector_installation_registry,
     )
+    from services.safe_io import (
+        STANDARD_OUTBOUND_POLICY,
+        SafeIOHTTPError,
+        safe_request_json,
+    )
     from services.secret_store import SecretStore, get_secret_store
     from services.state_dir import get_state_dir
 except ImportError:  # pragma: no cover
@@ -31,6 +36,11 @@ except ImportError:  # pragma: no cover
         InstallationResolution,
         InstallationStatus,
         get_connector_installation_registry,
+    )
+    from services.safe_io import (  # type: ignore
+        STANDARD_OUTBOUND_POLICY,
+        SafeIOHTTPError,
+        safe_request_json,
     )
     from services.secret_store import SecretStore, get_secret_store  # type: ignore
     from services.state_dir import get_state_dir  # type: ignore
@@ -45,14 +55,6 @@ _INVALID_TOKEN_ERRORS = frozenset(
     {"account_inactive", "invalid_auth", "not_authed", "token_revoked"}
 )
 _DEGRADED_TOKEN_ERRORS = frozenset({"ratelimited", "request_timeout", "fatal_error"})
-
-
-def _load_aiohttp():
-    try:
-        import aiohttp  # type: ignore
-    except ModuleNotFoundError:
-        return None
-    return aiohttp
 
 
 class SlackInstallationManager:
@@ -150,27 +152,35 @@ class SlackInstallationManager:
         return f"{SLACK_AUTHORIZE_URL}?{urlencode(params)}"
 
     async def exchange_code(self, code: str) -> Dict[str, Any]:
-        aiohttp = _load_aiohttp()
-        if aiohttp is None:
-            raise RuntimeError("aiohttp required for Slack OAuth exchange")
         payload = {
             "client_id": self.config.slack_client_id or "",
             "client_secret": self.config.slack_client_secret or "",
             "code": str(code or "").strip(),
             "redirect_uri": self.resolve_redirect_uri(),
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                SLACK_OAUTH_ACCESS_URL,
-                data=payload,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                data = await resp.json(content_type=None)
-                if resp.status != 200 or not data.get("ok"):
-                    raise RuntimeError(
-                        f"slack_oauth_exchange_failed:{resp.status}:{data.get('error', 'unknown')}"
-                    )
-                return data
+        try:
+            return safe_request_json(
+                method="POST",
+                url=SLACK_OAUTH_ACCESS_URL,
+                raw_body=urlencode(payload).encode("utf-8"),
+                headers={"Accept": "application/json"},
+                content_type="application/x-www-form-urlencoded",
+                timeout_sec=15,
+                allow_hosts={"slack.com"},
+                policy=STANDARD_OUTBOUND_POLICY,
+            )
+        except SafeIOHTTPError as exc:
+            error_code = "unknown"
+            try:
+                body = exc.body or ""
+                parsed = json.loads(body) if body else {}
+                if isinstance(parsed, dict):
+                    error_code = str(parsed.get("error", "") or error_code)
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"slack_oauth_exchange_failed:{exc.status_code}:{error_code}"
+            ) from exc
 
     def _normalize_workspace_id(self, payload: Dict[str, Any]) -> str:
         workspace_id = (

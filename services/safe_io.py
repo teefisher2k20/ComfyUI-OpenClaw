@@ -610,11 +610,13 @@ def safe_request_json(
     url: str,
     json_body: Any = None,
     *,
+    raw_body: Optional[bytes] = None,
     allow_hosts: Optional[Set[str]] = None,
     allow_any_public_host: bool = False,
     allow_loopback_hosts: Optional[Set[str]] = None,
     allow_insecure_base_url: bool = False,
     headers: Optional[dict] = None,
+    content_type: str = "application/json",
     timeout_sec: int = 10,
     max_response_bytes: int = 1_000_000,
     max_redirects: int = 0,
@@ -629,7 +631,11 @@ def safe_request_json(
 
     current_url = url
     current_method = method
-    current_body = json.dumps(json_body).encode("utf-8") if json_body else None
+    if json_body is not None and raw_body is not None:
+        raise ValueError("safe_request_json accepts either json_body or raw_body")
+    current_body = raw_body
+    if json_body is not None:
+        current_body = json.dumps(json_body).encode("utf-8")
     redirects_followed = 0
 
     while True:
@@ -659,7 +665,8 @@ def safe_request_json(
                 PACK_VERSION = "0.0.0"
 
         request.add_header("User-Agent", f"ComfyUI-OpenClaw/{PACK_VERSION}")
-        request.add_header("Content-Type", "application/json")
+        if content_type:
+            request.add_header("Content-Type", content_type)
 
         # Add safe headers
         # R106: external control-plane adapter requires Authorization header support.

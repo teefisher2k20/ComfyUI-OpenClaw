@@ -60,4 +60,35 @@ describe("OpenClawNotifications", () => {
         expect(reloaded.getEntries({ includeDismissed: true })[0].dismissed_at).not.toBeNull();
         expect(reloaded.getEntries({ includeDismissed: true })[0].acknowledged_at).not.toBeNull();
     });
+
+    it("does not resurrect an identical dismissed notification on repeated auto-refresh", () => {
+        let nowValue = Date.parse("2026-03-19T00:00:00Z");
+        const store = new OpenClawNotifications({
+            storage: localStorage,
+            now: () => nowValue,
+        });
+
+        const entry = store.notify({
+            severity: "error",
+            source: "model-manager",
+            message: "search: search_failed",
+            dedupeKey: "model-manager:refresh",
+        });
+
+        store.dismiss(entry.id);
+        expect(store.getEntries()).toHaveLength(0);
+
+        nowValue += 1_000;
+        store.notify({
+            severity: "error",
+            source: "model-manager",
+            message: "search: search_failed",
+            dedupeKey: "model-manager:refresh",
+        });
+
+        expect(store.getEntries()).toHaveLength(0);
+        const dismissed = store.getEntries({ includeDismissed: true });
+        expect(dismissed).toHaveLength(1);
+        expect(dismissed[0].dismissed_at).not.toBeNull();
+    });
 });

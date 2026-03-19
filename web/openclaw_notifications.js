@@ -139,6 +139,15 @@ export class OpenClawNotifications {
             existing.action = action;
             existing.metadata = metadata;
         } else {
+            const dismissed = this.entries.find((entry) => entry.dedupe_key === dedupeKey && entry.dismissed_at);
+            if (dismissed && dismissed.message === message && dismissed.severity === severity) {
+                dismissed.updated_at = nowIso;
+                dismissed.action = action;
+                dismissed.metadata = metadata;
+                this._save();
+                this._emit();
+                return { ...dismissed };
+            }
             this.entries.unshift({
                 id: String(payload.id || `ntf_${Math.random().toString(36).slice(2, 10)}`),
                 source,

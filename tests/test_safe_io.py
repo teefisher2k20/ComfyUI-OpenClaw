@@ -298,6 +298,40 @@ class TestURLSafety(unittest.TestCase):
 
     @patch("services.safe_io._build_pinned_opener")
     @patch("services.safe_io.validate_outbound_url")
+    def test_safe_request_json_supports_form_encoded_raw_body(
+        self, mock_validate, mock_build
+    ):
+        """Non-JSON callers should still use safe_io without direct client sessions."""
+        mock_validate.return_value = ("https", "slack.com", 443, ["93.184.216.34"])
+
+        mock_response = MagicMock()
+        mock_response.getcode.return_value = 200
+        mock_response.read.return_value = b'{"ok": true}'
+
+        mock_opener = MagicMock()
+        mock_opener.open.return_value.__enter__.return_value = mock_response
+        mock_build.return_value = mock_opener
+
+        out = safe_request_json(
+            method="POST",
+            url="https://slack.com/api/oauth.v2.access",
+            raw_body=b"code=test&client_id=abc",
+            content_type="application/x-www-form-urlencoded",
+            headers={"Accept": "application/json"},
+            allow_hosts={"slack.com"},
+        )
+
+        self.assertEqual(out["ok"], True)
+        request_arg = mock_opener.open.call_args.args[0]
+        self.assertEqual(request_arg.data, b"code=test&client_id=abc")
+        header_map = {k.lower(): v for k, v in request_arg.header_items()}
+        self.assertEqual(
+            header_map.get("content-type"), "application/x-www-form-urlencoded"
+        )
+        self.assertEqual(header_map.get("accept"), "application/json")
+
+    @patch("services.safe_io._build_pinned_opener")
+    @patch("services.safe_io.validate_outbound_url")
     def test_safe_request_text_stream_accept_header_is_allowed(
         self, mock_validate, mock_build
     ):
