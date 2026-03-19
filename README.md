@@ -632,9 +632,11 @@ Deployment profiles and hardening checklists:
   - [Sidebar Modules](#sidebar-modules)
   - [Model Manager tab (F64)](#model-manager-tab-f64)
 - [Operator UX Features](#operator-ux-features)
+  - [Notification Center](#notification-center)
 - [API Overview](#api-overview)
   - [Observability](#observability-read-only)
   - [LLM config](#llm-config-non-secret)
+  - [Connector installation diagnostics](#connector-installation-diagnostics-admin)
   - [Webhooks](#webhooks)
   - [Triggers + approvals](#triggers--approvals-admin)
   - [Schedules](#schedules-admin)
@@ -853,6 +855,18 @@ This tab stays admin-bound through existing backend policy checks; it does not b
 
 ## Operator UX Features
 
+### Notification Center
+
+The sidebar includes a persistent `Notification Center` for operator-facing alerts that should survive reloads:
+
+- warning/error banners and selected durable toasts are mirrored into a local notification store
+- entries are deduplicated by source-specific keys and keep an unread count
+- `Acknowledge` clears unread state without hiding the item
+- `Dismiss` removes the item from the active panel while preserving historical storage
+- action-enabled entries can deep-link back to the affected surface, such as `Model Manager` or `Jobs`
+
+Current examples include queue-monitor incidents and managed-model failures that need operator follow-up.
+
 ### In-canvas context toolbox
 
 Right-click a node and open the `OpenClaw` menu to access:
@@ -938,10 +952,6 @@ Access control:
 - `POST /openclaw/llm/test` -test connectivity (admin boundary)
 - `POST /openclaw/llm/chat` -connector chat completion path (admin boundary)
 - `GET /openclaw/llm/models` -fetch model list for selected provider/base URL
-- `GET /openclaw/connector/installations` -connector multi-workspace installation diagnostics (admin boundary)
-- `GET /openclaw/connector/installations/{installation_id}` -connector installation detail (admin boundary)
-- `GET /openclaw/connector/installations/resolve` -workspace installation resolution diagnostics (admin boundary)
-- `GET /openclaw/connector/installations/audit` -installation lifecycle audit evidence (admin boundary)
 - `POST /openclaw/assist/planner` -planner structured prompt generation (admin boundary)
 - `GET /openclaw/assist/planner/profiles` -active planner profile registry metadata for node/UI alignment
 - `POST /openclaw/assist/refiner` -prompt refinement with optional image context (admin boundary)
@@ -987,6 +997,20 @@ Notes:
     - Ollama: `http://127.0.0.1:11434`
     - LM Studio: `http://localhost:1234/v1`
 
+### Connector installation diagnostics (admin)
+
+- `GET /openclaw/connector/installations` -connector multi-workspace installation diagnostics
+- `GET /openclaw/connector/installations/{installation_id}` -connector installation detail
+- `GET /openclaw/connector/installations/resolve` -workspace installation resolution diagnostics
+- `GET /openclaw/connector/installations/audit` -installation lifecycle audit evidence
+
+Notes:
+
+- diagnostics are redacted and expose token references only, never raw connector tokens
+- Slack multi-workspace installs surface stable health states such as `ok`, `invalid_token`, `revoked`, `workspace_unbound`, and `degraded`
+- installation resolution is fail-closed for missing, ambiguous, revoked, or unhealthy workspace bindings
+- lifecycle updates such as token revocation/uninstall feed back into these diagnostics so operators can confirm why a workspace stopped receiving replies
+
 ### Webhooks
 
 - `POST /openclaw/webhook` -authenticate + validate schema and return normalized payload (no queue submission)
@@ -1029,6 +1053,11 @@ Callback allowlist:
 - `OPENCLAW_CALLBACK_ALLOW_HOSTS=example.com,api.example.com`
 - `OPENCLAW_CALLBACK_TIMEOUT_SEC=10`
 - `OPENCLAW_CALLBACK_MAX_RETRIES=3`
+
+Rate-limit diagnostics:
+
+- `429` responses now include stable machine-readable diagnostics for the rejected budget/cooldown decision
+- callers should expect fields such as `bucket`, `scope`, `retry_after_sec`, and `reason_code` instead of relying on free-form text parsing
 
 ### Triggers + approvals (admin)
 
@@ -1497,14 +1526,15 @@ python3 -m unittest discover -s tests -p "test_*.py"
 
 ## Remote Control (Connector)
 
-OpenClaw includes a standalone **Connector** process that allows you to control your local instance securely via **Telegram**, **Discord**, **LINE**, **WhatsApp**, **WeChat**, and **KakaoTalk**.
+OpenClaw includes a standalone **Connector** process that allows you to control your local instance securely via **Telegram**, **Discord**, **LINE**, **WhatsApp**, **WeChat**, **KakaoTalk**, and **Slack**.
 
 - **Status & Queue**: Check job progress remotely.
 - **Run Jobs**: Submit templates via chat commands.
 - **Approvals**: Approve/Reject paused workflows from your phone.
-- **Secure**: Outbound-only for Telegram/Discord. LINE/WhatsApp/WeChat/KakaoTalk require inbound HTTPS (webhook).
+- **Secure**: Outbound-only for Telegram/Discord. LINE/WhatsApp/WeChat/KakaoTalk/Slack require inbound HTTPS (webhook), while Slack can also use Socket Mode.
 - **WeChat encrypted mode**: Official Account encrypted webhook mode is supported when AES settings are configured.
 - **KakaoTalk response safety**: QuickReply limits and safe fallback handling are enforced for reliable payload behavior.
+- **Slack multi-workspace mode**: Workspace installs can be handled through connector-managed OAuth install/callback routes with per-workspace token binding and fail-closed health diagnostics.
 
 - [See Setup Guide (`docs/connector.md`)](docs/connector.md)
 
