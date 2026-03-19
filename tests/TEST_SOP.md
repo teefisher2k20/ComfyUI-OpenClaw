@@ -8,6 +8,19 @@ Every implementation plan must include the **full test validation procedure** in
 
 For bugfix and hotfix work, the final full gate is necessary but not sufficient. Acceptance must also prove the reported failure was reproduced and pinned with a targeted regression.
 
+### Documentation-only exception
+
+If a change is **strictly documentation-only**, the test workflow in this SOP is not required.
+
+This exception applies only when all touched files are documentation/planning/SOP content and the change does **not** modify:
+- application code
+- test code or test fixtures
+- scripts/tooling behavior
+- generated contracts/specs/artifacts
+- configuration or runtime behavior
+
+If a documentation edit is bundled with any non-documentation change, this exception does not apply.
+
 ## Bugfix / Hotfix Acceptance Model (Mandatory)
 
 Bugfix and hotfix acceptance follows `Reproduce -> Pin -> Sweep`.
