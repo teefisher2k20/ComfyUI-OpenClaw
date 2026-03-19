@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 from services.legacy_compat import (
     ADMIN_TOKEN_HEADERS,
-    OPENCLAW_API_PREFIX,
     LEGACY_API_PREFIX,
+    OPENCLAW_API_PREFIX,
     get_api_path_candidates,
     get_header_alias_value,
 )

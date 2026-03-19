@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 
 if __package__ and "." in __package__:
     from ..services.import_fallback import import_attrs_dual, import_module_dual
@@ -167,49 +166,42 @@ except Exception:
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.config")
 
-# R60: Bounded model list cache with TTL + LRU eviction.
-# Key: (provider, base_url) -> (timestamp, models[])
-# - TTL: entries older than _MODEL_LIST_TTL_SEC are treated as stale on read.
-# - Size cap: at most _MODEL_LIST_MAX_ENTRIES; oldest entry evicted on insert.
-from collections import OrderedDict
-
-_MODEL_LIST_CACHE: OrderedDict = OrderedDict()
-_MODEL_LIST_TTL_SEC = 600  # 10 minutes
-_MODEL_LIST_MAX_ENTRIES = 16
-
-
-def _build_model_cache_key(provider: str, base_url: str, tenant_id: str) -> tuple:
-    # S49: keep single-tenant key shape stable while isolating multi-tenant entries.
-    if str(tenant_id).strip().lower() in ("", "default"):
-        return (provider, base_url)
-    return (tenant_id, provider, base_url)
-
-
-def _cache_put(key: tuple, models: list) -> None:
-    """Insert into bounded cache, evicting oldest if over cap."""
-    if key in _MODEL_LIST_CACHE:
-        _MODEL_LIST_CACHE.move_to_end(key)
-    _MODEL_LIST_CACHE[key] = (time.time(), models)
-    while len(_MODEL_LIST_CACHE) > _MODEL_LIST_MAX_ENTRIES:
-        _MODEL_LIST_CACHE.popitem(last=False)
-
-
-def _cache_get(key: tuple):
-    """Return (timestamp, models) if fresh, else None.
-
-    Expired entries are NOT removed — they remain available for fallback
-    on network failure (handler reads _MODEL_LIST_CACHE directly).
-    Eviction is handled only by the size cap in _cache_put.
-    """
-    entry = _MODEL_LIST_CACHE.get(key)
-    if entry is None:
-        return None
-    ts, models = entry
-    if (time.time() - ts) >= _MODEL_LIST_TTL_SEC:
-        return None
-    # Touch for LRU
-    _MODEL_LIST_CACHE.move_to_end(key)
-    return entry
+(
+    _MODEL_LIST_CACHE,
+    _MODEL_LIST_MAX_ENTRIES,
+    _MODEL_LIST_TTL_SEC,
+    _build_model_cache_key,
+    _cache_get,
+    _cache_put,
+    _extract_models_from_payload,
+    _format_llm_ssrf_error,
+    _get_llm_allowed_hosts,
+    _llm_insecure_override_enabled,
+    fetch_remote_model_list,
+    get_stale_cached_models,
+    resolve_model_list_target,
+    validate_model_list_target,
+) = import_attrs_dual(
+    __package__,
+    "..services.llm_model_list",
+    "services.llm_model_list",
+    (
+        "_MODEL_LIST_CACHE",
+        "_MODEL_LIST_MAX_ENTRIES",
+        "_MODEL_LIST_TTL_SEC",
+        "build_model_cache_key",
+        "cache_get",
+        "cache_put",
+        "extract_models_from_payload",
+        "format_llm_ssrf_error",
+        "get_llm_allowed_hosts",
+        "llm_insecure_override_enabled",
+        "fetch_remote_model_list",
+        "get_stale_cached_models",
+        "resolve_model_list_target",
+        "validate_model_list_target",
+    ),
+)
 
 
 # S14/R98 / R64: Import Endpoint Metadata
@@ -345,90 +337,6 @@ async def config_get_handler(request: web.Request) -> web.Response:
         )
 
 
-def _env_flag(primary: str, legacy: str, default: bool = False) -> bool:
-    import os
-
-    val = os.environ.get(primary)
-    if val is None:
-        val = os.environ.get(legacy)
-    if val is None:
-        return default
-    return str(val).strip().lower() in ("1", "true", "yes", "y", "on")
-
-
-def _get_llm_allowed_hosts() -> set:
-    import os
-
-    allowed_hosts_str = os.environ.get("OPENCLAW_LLM_ALLOWED_HOSTS") or os.environ.get(
-        "MOLTBOT_LLM_ALLOWED_HOSTS", ""
-    )
-    env_hosts = {h.lower().strip() for h in allowed_hosts_str.split(",") if h.strip()}
-
-    # Default allowlist: built-in provider public hosts.
-    # This makes core providers work out-of-the-box while keeping custom base URLs
-    # constrained to explicit allowlists (or OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1).
-    try:
-        from ..services.providers.catalog import get_default_public_llm_hosts
-    except ImportError:  # pragma: no cover
-        from services.providers.catalog import (
-            get_default_public_llm_hosts,  # type: ignore
-        )
-
-    return set(get_default_public_llm_hosts()) | env_hosts
-
-
-def _format_llm_ssrf_error(exc: Exception) -> str:
-    detail = str(exc)
-    # IMPORTANT: keep this guidance aligned with services.runtime_config so Remote
-    # Admin config writes and model refreshes explain the same fail-closed policy.
-    return (
-        f"SSRF policy blocked outbound URL: {detail}. "
-        "OPENCLAW_LLM_ALLOWED_HOSTS only allows additional exact public hosts; "
-        "private/reserved IP targets still require "
-        "OPENCLAW_ALLOW_INSECURE_BASE_URL=1. Wildcard '*' entries are not "
-        "supported."
-    )
-
-
-def _llm_insecure_override_enabled() -> bool:
-    return _env_flag(
-        "OPENCLAW_ALLOW_INSECURE_BASE_URL",
-        "MOLTBOT_ALLOW_INSECURE_BASE_URL",
-        default=False,
-    )
-
-
-def _extract_models_from_payload(payload: dict) -> list:
-    """
-    Extract model IDs from common provider responses.
-    Expected OpenAI format: {"data":[{"id":"..."}]}
-    """
-    if not isinstance(payload, dict):
-        return []
-
-    data = payload.get("data")
-    if isinstance(data, list):
-        out = []
-        for item in data:
-            if isinstance(item, str):
-                out.append(item)
-            elif isinstance(item, dict) and isinstance(item.get("id"), str):
-                out.append(item["id"])
-        return sorted({m for m in out if m})
-
-    models = payload.get("models")
-    if isinstance(models, list):
-        out = []
-        for item in models:
-            if isinstance(item, str):
-                out.append(item)
-            elif isinstance(item, dict) and isinstance(item.get("id"), str):
-                out.append(item["id"])
-        return sorted({m for m in out if m})
-
-    return []
-
-
 @endpoint_metadata(
     auth=AuthTier.ADMIN,
     risk=RiskTier.LOW,  # Read-only external fetch, but admin-gated
@@ -504,56 +412,26 @@ async def llm_models_handler(request: web.Request) -> web.Response:
 
             provider_override = (request.query.get("provider") or "").strip().lower()
             effective, _sources = get_effective_config(tenant_id=tenant.tenant_id)
-            provider = provider_override or (effective.get("provider") or "openai")
-
-            # Resolve Base URL (Runtime config > Catalog Default)
-            # Allows users to override base_url for standard providers (e.g. self-hosted OpenAI compat)
-            runtime_base_url = (effective.get("base_url") or "").strip()
 
             try:
-                from ..services.providers.catalog import ProviderType, get_provider_info
-                from ..services.providers.keys import (
-                    get_api_key_for_provider,
-                    requires_api_key,
+                target = resolve_model_list_target(
+                    provider_override,
+                    effective,
+                    tenant.tenant_id,
                 )
-            except ImportError:
-                from services.providers.catalog import ProviderType, get_provider_info
-                from services.providers.keys import (
-                    get_api_key_for_provider,
-                    requires_api_key,
-                )
-
-            info = get_provider_info(provider)
-            if not info:
+            except ValueError as e:
                 return web.json_response(
-                    {"ok": False, "error": f"Unknown provider: {provider}"}, status=400
-                )
-
-            if info.api_type != ProviderType.OPENAI_COMPAT:
-                return web.json_response(
-                    {
-                        "ok": False,
-                        "error": "Model list is only supported for OpenAI-compatible providers.",
-                    },
+                    {"ok": False, "error": str(e)},
                     status=400,
                 )
-
-            # Priority: Runtime URL -> Info Default
-            base_url = runtime_base_url if runtime_base_url else info.base_url
-            if not base_url:
+            except TypeError as e:
                 return web.json_response(
-                    {
-                        "ok": False,
-                        "error": f"No base URL configured for provider '{provider}'.",
-                    },
+                    {"ok": False, "error": str(e)},
                     status=400,
                 )
-
-            # R60: Cache key includes provider + base_url to avoid cross-provider staleness.
-            cache_key = _build_model_cache_key(provider, base_url, tenant.tenant_id)
 
             # R60: Check bounded TTL+LRU cache
-            cached_entry = _cache_get(cache_key)
+            cached_entry = _cache_get(target.cache_key)
             if cached_entry:
                 _ts, models = cached_entry
                 if isinstance(models, list):
@@ -561,47 +439,32 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                         {
                             "ok": True,
                             "tenant_id": tenant.tenant_id,
-                            "provider": provider,
+                            "provider": target.provider,
                             "models": models,
                             "cached": True,
                         }
                     )
 
-            api_key = get_api_key_for_provider(provider, tenant_id=tenant.tenant_id)
             # CRITICAL:
             # Local providers (e.g. ollama/lmstudio) intentionally work without API keys.
             # Do not change this gate back to `if not api_key`, or local model-list loading
             # will regress with false 400 errors.
-            if requires_api_key(provider) and not api_key:
+            if target.requires_api_key and not target.api_key:
                 return web.json_response(
                     {
                         "ok": False,
-                        "error": f"No API key configured for provider '{provider}'.",
+                        "error": f"No API key configured for provider '{target.provider}'.",
                     },
                     status=400,
                 )
 
             # SSRF policy
             try:
-                try:
-                    from ..services.safe_io import (
-                        STANDARD_OUTBOUND_POLICY,
-                        validate_outbound_url,
-                    )
-                except ImportError:
-                    from services.safe_io import (  # type: ignore
-                        STANDARD_OUTBOUND_POLICY,
-                        validate_outbound_url,
-                    )
-
-                controls = get_llm_egress_controls(provider, base_url)
-                validate_outbound_url(
-                    base_url,
-                    allow_hosts=controls.get("allow_hosts"),
-                    allow_any_public_host=bool(controls.get("allow_any_public_host")),
-                    allow_loopback_hosts=controls.get("allow_loopback_hosts"),
+                controls = get_llm_egress_controls(target.provider, target.base_url)
+                validate_model_list_target(
+                    target,
+                    controls,
                     allow_insecure_base_url=_llm_insecure_override_enabled(),
-                    policy=STANDARD_OUTBOUND_POLICY,
                 )
             except Exception as e:
                 return web.json_response(
@@ -612,50 +475,22 @@ async def llm_models_handler(request: web.Request) -> web.Response:
             # Fetch /models
             try:
                 try:
-                    from ..services.safe_io import (
-                        STANDARD_OUTBOUND_POLICY,
-                        SSRFError,
-                        safe_request_json,
-                    )
+                    from ..services.safe_io import SSRFError
                 except ImportError:
-                    from services.safe_io import (  # type: ignore
-                        STANDARD_OUTBOUND_POLICY,
-                        SSRFError,
-                        safe_request_json,
-                    )
+                    from services.safe_io import SSRFError  # type: ignore
 
-                url = f"{base_url.rstrip('/')}/models"
-                request_headers = {
-                    "User-Agent": f"ComfyUI-OpenClaw/{PACK_VERSION}",
-                    "Accept": "application/json",
-                }
-                if api_key:
-                    request_headers["Authorization"] = f"Bearer {api_key}"
-
-                # S65: Enforce outbound policy via safe_io
-                payload = safe_request_json(
-                    method="GET",
-                    url=url,
-                    json_body=None,
-                    headers=request_headers,
-                    timeout_sec=10,
-                    policy=STANDARD_OUTBOUND_POLICY,
-                    allow_hosts=controls.get("allow_hosts"),
-                    allow_any_public_host=bool(controls.get("allow_any_public_host")),
-                    allow_loopback_hosts=controls.get("allow_loopback_hosts"),
+                models = fetch_remote_model_list(
+                    target,
+                    controls,
+                    pack_version=PACK_VERSION,
                     allow_insecure_base_url=_llm_insecure_override_enabled(),
                 )
-
-                models = _extract_models_from_payload(payload)
-
-                # R60: Insert/update bounded cache
-                _cache_put(cache_key, models)
 
                 return web.json_response(
                     {
                         "ok": True,
                         "tenant_id": tenant.tenant_id,
-                        "provider": provider,
+                        "provider": target.provider,
                         "models": models,
                         "cached": False,
                     }
@@ -671,7 +506,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                 str_e = str(e)
                 if "HTTP" in str_e:
                     # Fallback: serve stale cache entry (if any) on fetch failure
-                    stale = _MODEL_LIST_CACHE.get(cache_key)
+                    stale = get_stale_cached_models(target.cache_key)
                     if stale:
                         _ts, models = stale
                         warning = f"Using cached list (refresh failed: {str_e})"
@@ -679,7 +514,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                             {
                                 "ok": True,
                                 "tenant_id": tenant.tenant_id,
-                                "provider": provider,
+                                "provider": target.provider,
                                 "models": models,
                                 "cached": True,
                                 "warning": warning,
@@ -691,7 +526,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                 raise e
 
             except Exception as e:
-                stale = _MODEL_LIST_CACHE.get(cache_key)
+                stale = get_stale_cached_models(target.cache_key)
                 if stale:
                     # IMPORTANT:
                     # Test path intentionally injects network failures to verify cache fallback.
@@ -705,7 +540,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                         {
                             "ok": True,
                             "tenant_id": tenant.tenant_id,
-                            "provider": provider,
+                            "provider": target.provider,
                             "models": models,
                             "cached": True,
                             "warning": warning,

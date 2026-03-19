@@ -70,7 +70,9 @@ def emit_legacy_header_warning(
     logger: Optional[logging.Logger] = None,
 ) -> None:
     _increment_legacy_api_hits()
-    active_logger = logger or logging.getLogger("ComfyUI-OpenClaw.services.legacy_compat")
+    active_logger = logger or logging.getLogger(
+        "ComfyUI-OpenClaw.services.legacy_compat"
+    )
     active_logger.warning(
         "DEPRECATION WARNING: Legacy header %s used. Please migrate to %s.",
         alias.legacy,
