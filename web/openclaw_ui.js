@@ -8,7 +8,8 @@ import { openclawApi } from "./openclaw_api.js";
 import { normalizeLegacyClassNames } from "./openclaw_utils.js";
 import { OpenClawActions } from "./openclaw_actions.js";
 import { QueueMonitor } from "./openclaw_queue_monitor.js";
-import { openclawNotifications } from "./openclaw_notifications.js";
+import { OpenClawNotificationCenter } from "./openclaw_notification_center.js";
+import { OpenClawBannerManager } from "./openclaw_banner_manager.js";
 
 export class OpenClawUI {
     constructor() {
@@ -18,12 +19,11 @@ export class OpenClawUI {
             panel: null,
             content: null,
         };
-        this.notificationsOpen = false;
-        this.notificationNodes = null;
-        this._notificationSnapshot = [];
-        this._unsubscribeNotifications = openclawNotifications.subscribe((entries) => {
-            this._notificationSnapshot = entries;
-            this._renderNotificationSnapshot();
+        this.notificationCenter = new OpenClawNotificationCenter({
+            onAction: (action) => this.handleAction(action),
+        });
+        this.bannerManager = new OpenClawBannerManager({
+            onAction: (action) => this.handleAction(action),
         });
     }
 
@@ -111,7 +111,6 @@ export class OpenClawUI {
         container.innerHTML = "";
         container.className = "openclaw-sidebar-container";
 
-        // 1. Header
         const header = document.createElement("div");
         header.className = "openclaw-header";
 
@@ -124,37 +123,36 @@ export class OpenClawUI {
         title.className = "openclaw-title";
         title.textContent = "OpenClaw";
 
-        // F9: About badges (version fetched from /openclaw/health; legacy /moltbot/health)
         const badges = document.createElement("div");
         badges.className = "openclaw-badges";
+
         const versionSpan = document.createElement("span");
         versionSpan.className = "openclaw-version";
         versionSpan.textContent = "v...";
+
         const repoLink = document.createElement("a");
         repoLink.href = "https://github.com/rookiestar28/ComfyUI-OpenClaw";
         repoLink.target = "_blank";
         repoLink.className = "openclaw-repo-link";
         repoLink.title = "View on GitHub";
         repoLink.textContent = "View on GitHub";
+
         badges.appendChild(versionSpan);
         badges.appendChild(repoLink);
-        badges.appendChild(this._buildNotificationToggle());
+        badges.appendChild(this.notificationCenter.buildToggle());
 
-        // Fetch version from health endpoint
-        openclawApi.getHealth().then(res => {
+        openclawApi.getHealth().then((res) => {
             if (res.ok && res.data) {
                 const data = res.data;
                 if (data.pack) {
                     versionSpan.textContent = `v${data.pack.version}`;
                 }
 
-                // F55: Control plane mode indicator badge
                 const cpMode = data?.control_plane?.mode || data?.deployment_profile || "local";
                 const modeBadge = document.createElement("span");
                 modeBadge.className = `openclaw-mode-badge openclaw-mode-${cpMode}`;
                 modeBadge.textContent = cpMode.toUpperCase();
                 modeBadge.title = `Control plane: ${cpMode}`;
-                // Style inline for immediate visibility
                 modeBadge.style.cssText = `
                     font-size: 10px; padding: 1px 6px; border-radius: 4px;
                     font-weight: 600; margin-left: 6px; letter-spacing: 0.5px;
@@ -172,14 +170,14 @@ export class OpenClawUI {
                 badges.appendChild(modeBadge);
                 this._controlPlaneMode = cpMode;
 
-                // S15: Check exposure
                 this.checkExposure(data?.access_policy);
 
-                // R87: Check Backpressure
                 const obs = data.stats?.observability;
                 if (obs && obs.total_dropped > 0) {
-                    const dropCount = obs.total_dropped;
-                    this.showBanner("warning", `\u26A0\uFE0F High load: ${dropCount} observability events dropped (Queue full). logs/traces might be incomplete.`);
+                    this.showBanner(
+                        "warning",
+                        `\u26A0\uFE0F High load: ${obs.total_dropped} observability events dropped (Queue full). logs/traces might be incomplete.`
+                    );
                 }
             } else {
                 versionSpan.textContent = "v?.?.?";
@@ -192,158 +190,26 @@ export class OpenClawUI {
         header.appendChild(title);
         header.appendChild(badges);
         container.appendChild(header);
-        container.appendChild(this._buildNotificationPanel());
+        container.appendChild(this.notificationCenter.buildPanel());
 
-        // 2. Tab Bar
         const tabBar = document.createElement("div");
         tabBar.className = "openclaw-tabs";
         this.tabBar = tabBar;
         container.appendChild(tabBar);
 
-        // 3. Content Area
         const contentArea = document.createElement("div");
         contentArea.className = "openclaw-content";
         this.contentArea = contentArea;
         container.appendChild(contentArea);
 
-        // Initialize Tabs
         tabManager.init(tabBar, contentArea);
         normalizeLegacyClassNames(container);
-        this._renderNotificationSnapshot();
-    }
-
-    _buildNotificationToggle() {
-        const button = document.createElement("button");
-        button.className = "openclaw-notification-toggle";
-        button.id = "openclaw-notification-toggle";
-        button.type = "button";
-        button.innerHTML = `
-            <span class="openclaw-notification-toggle-label">Alerts</span>
-            <span class="openclaw-notification-badge" hidden>0</span>
-        `;
-        button.addEventListener("click", () => this.toggleNotifications());
-        this.notificationNodes = this.notificationNodes || {};
-        this.notificationNodes.toggle = button;
-        this.notificationNodes.badge = button.querySelector(".openclaw-notification-badge");
-        return button;
-    }
-
-    _buildNotificationPanel() {
-        const panel = document.createElement("div");
-        panel.className = "openclaw-notification-panel";
-        panel.id = "openclaw-notification-panel";
-        panel.hidden = true;
-
-        panel.innerHTML = `
-            <div class="openclaw-notification-panel-header">
-                <div>
-                    <div class="openclaw-notification-panel-title">Notification Center</div>
-                    <div class="openclaw-notification-panel-subtitle">Persistent operator alerts and actions</div>
-                </div>
-                <button type="button" class="openclaw-notification-close" aria-label="Close notification center">x</button>
-            </div>
-            <div class="openclaw-notification-list"></div>
-        `;
-
-        panel.querySelector(".openclaw-notification-close").addEventListener("click", () => {
-            this.notificationsOpen = false;
-            this._renderNotificationSnapshot();
-        });
-
-        panel.querySelector(".openclaw-notification-list").addEventListener("click", (event) => {
-            const button = event.target.closest("button[data-notification-action]");
-            if (!button) return;
-            const action = button.getAttribute("data-notification-action");
-            const id = button.getAttribute("data-notification-id");
-            if (!id) return;
-
-            if (action === "ack") {
-                openclawNotifications.acknowledge(id);
-                return;
-            }
-            if (action === "dismiss") {
-                openclawNotifications.dismiss(id);
-                return;
-            }
-            if (action === "open") {
-                const entry = this._notificationSnapshot.find((item) => item.id === id);
-                if (!entry?.action) return;
-                openclawNotifications.acknowledge(id);
-                this.handleAction(entry.action);
-            }
-        });
-
-        this.notificationNodes = this.notificationNodes || {};
-        this.notificationNodes.panel = panel;
-        this.notificationNodes.list = panel.querySelector(".openclaw-notification-list");
-        return panel;
+        this.bannerManager.bind(container, (action) => this.handleAction(action));
+        this.notificationCenter.render();
     }
 
     toggleNotifications() {
-        this.notificationsOpen = !this.notificationsOpen;
-        this._renderNotificationSnapshot();
-    }
-
-    _formatNotificationTime(value) {
-        if (!value) return "";
-        try {
-            return new Date(value).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-            });
-        } catch {
-            return "";
-        }
-    }
-
-    _renderNotificationSnapshot() {
-        const badge = this.notificationNodes?.badge;
-        const panel = this.notificationNodes?.panel;
-        const list = this.notificationNodes?.list;
-        if (!badge || !panel || !list) return;
-
-        const activeEntries = this._notificationSnapshot.filter((entry) => !entry.dismissed_at);
-        const unreadCount = activeEntries.filter((entry) => !entry.acknowledged_at).length;
-        badge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
-        badge.hidden = unreadCount <= 0;
-        panel.hidden = !this.notificationsOpen;
-
-        if (activeEntries.length === 0) {
-            list.innerHTML = '<div class="openclaw-notification-empty">No active operator notifications.</div>';
-            return;
-        }
-
-        list.innerHTML = activeEntries.map((entry) => {
-            const escapedMessage = String(entry.message || "").replace(/"/g, "&quot;");
-            const actionHtml = entry.action?.type && entry.action?.payload
-                ? `<button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="open" data-notification-id="${entry.id}" aria-label="Open notification action for ${escapedMessage}">${entry.action.label || "Open"}</button>`
-                : "";
-            const countHtml = entry.count > 1
-                ? `<span class="openclaw-notification-count">x${entry.count}</span>`
-                : "";
-            const ackLabel = entry.acknowledged_at ? "Acknowledged" : "Acknowledge";
-            const ackDisabled = entry.acknowledged_at ? "disabled" : "";
-            return `
-                <div class="openclaw-notification-item openclaw-notification-${entry.severity}">
-                    <div class="openclaw-notification-meta">
-                        <span class="openclaw-notification-source">${entry.source}</span>
-                        <span class="openclaw-notification-time">${this._formatNotificationTime(entry.updated_at)}</span>
-                    </div>
-                    <div class="openclaw-notification-message">${entry.message}</div>
-                    <div class="openclaw-notification-footer">
-                        <div class="openclaw-notification-state">
-                            <span class="openclaw-notification-severity">${entry.severity}</span>
-                            ${countHtml}
-                        </div>
-                        <div class="openclaw-notification-actions">
-                            ${actionHtml}
-                            <button type="button" class="openclaw-btn openclaw-btn-sm" data-notification-action="ack" data-notification-id="${entry.id}" aria-label="Acknowledge notification: ${escapedMessage}" ${ackDisabled}>${ackLabel}</button>
-                            <button type="button" class="openclaw-btn openclaw-btn-sm openclaw-btn-danger" data-notification-action="dismiss" data-notification-id="${entry.id}" aria-label="Dismiss notification: ${escapedMessage}">Dismiss</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join("");
+        this.notificationCenter.toggle();
     }
 
     /**
@@ -353,18 +219,13 @@ export class OpenClawUI {
         if (!policy) return;
 
         const isLocal = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
-
-        // Warn if not local
         if (!isLocal) {
             const isProtected = policy.observability === "token" && policy.token_configured;
-
             if (!isProtected) {
-                // High risk: Remote + No Token
-                this.showBanner("warning", "\u26A0\uFE0F Remote access detected; logs/config are protected unless you explicitly enable token-based access.");
-            } else {
-                // Medium risk: Remote + Token (Just info)
-                // Optionally show nothing, or a small "Remote Access Secured" badge
-                // console.log("OpenClaw remote access secured by token.");
+                this.showBanner(
+                    "warning",
+                    "\u26A0\uFE0F Remote access detected; logs/config are protected unless you explicitly enable token-based access."
+                );
             }
         }
     }
@@ -374,134 +235,27 @@ export class OpenClawUI {
      * @param {Object} banner - { id, severity, message, source, ttl_ms, dismissible, action }
      */
     showBanner(banner) {
-        // If passed raw args (legacy compatibility)
-        if (arguments.length > 1 && typeof arguments[0] === "string") {
-            banner = {
-                severity: arguments[0],
-                message: arguments[1],
-                id: "legacy_" + Date.now(),
-                ttl_ms: 5000
-            };
-        }
-
-        const { id, severity, message, ttl_ms, action, dismissible = true } = banner;
-
-        // 1. Priority Check
-        // If an error is currently shown, don't replace with info/warning unless it's a new error
-        const currentBanner = this.container.querySelector('.openclaw-banner');
-        if (currentBanner) {
-            const currentSeverity = currentBanner.dataset.severity;
-            const isCurrentError = currentSeverity === "error";
-            const isNewError = severity === "error";
-
-            // If current is error and new is not, ignore new (unless current is stale? handled by TTL)
-            // Exception: update content if same ID
-            const sameId = currentBanner.dataset.id === id;
-            if (isCurrentError && !isNewError && !sameId) {
-                return; // Suppress lower priority
-            }
-        }
-
-        // 2. Clear existing timer
-        if (this._bannerTimer) {
-            clearTimeout(this._bannerTimer);
-            this._bannerTimer = null;
-        }
-
-        // 3. Render
-        let bannerEl = currentBanner; // Reuse or create
-        if (!bannerEl) {
-            bannerEl = document.createElement("div");
-            // Insert after header
-            const header = this.container.querySelector('.openclaw-header');
-            header.after(bannerEl);
-        }
-
-        bannerEl.className = `openclaw-banner openclaw-banner-${severity}`;
-        bannerEl.dataset.id = id;
-        bannerEl.dataset.severity = severity;
-        bannerEl.innerHTML = ""; // Clear content
-
-        // Message
-        const msgSpan = document.createElement("span");
-        msgSpan.textContent = message;
-        bannerEl.appendChild(msgSpan);
-
-        // Action Button
-        if (action) {
-            const btn = document.createElement("button");
-            btn.className = "openclaw-banner-action";
-            btn.textContent = action.label;
-            btn.addEventListener("click", () => this.handleAction(action));
-            bannerEl.appendChild(btn);
-        }
-
-        // Dismiss Button
-        if (dismissible) {
-            const close = document.createElement("button");
-            close.className = "openclaw-banner-close";
-            close.textContent = "\u00D7";
-            close.addEventListener("click", () => {
-                bannerEl.remove();
-                if (this._bannerTimer) clearTimeout(this._bannerTimer);
-            });
-            bannerEl.appendChild(close);
-        }
-
-        // 4. TTL / Auto-dismiss
-        if (ttl_ms > 0) {
-            this._bannerTimer = setTimeout(() => {
-                if (bannerEl.isConnected) bannerEl.remove();
-            }, ttl_ms);
-        }
-
-        const shouldPersist = banner.persist != null
-            ? Boolean(banner.persist)
-            : severity === "warning" || severity === "error";
-        if (shouldPersist) {
-            openclawNotifications.notify({
-                id: `banner_${id || severity}`,
-                severity,
-                message,
-                source: banner.source || "banner",
-                dedupeKey: `banner:${id || `${severity}:${message}`}`,
-                action,
-                metadata: {
-                    ttl_ms: ttl_ms || 0,
-                },
-            });
-        }
+        this.bannerManager.showBanner(...arguments);
     }
 
     handleAction(action) {
         if (!action) return;
 
-        const run = () => {
-            switch (action.type) {
-                case "url":
-                    window.open(action.payload, "_blank");
-                    break;
-                case "tab":
-                    tabManager.activateTab(action.payload);
-                    break;
-                case "action":
-                    // F51: Route through OpenClaw actions singleton.
-                    if (openclawActions && openclawActions.dispatch) {
-                        openclawActions.dispatch(action.payload);
-                    } else {
-                        console.log("Action triggered:", action.payload);
-                    }
-                    break;
-            }
-        };
-
-        // F51: Check if action requires confirmation (heuristic or explicit)
-        // For now, only explicit 'confirm' property in action banner handles this,
-        // OR if the action type itself implies mutation.
-        // But Banner actions are usually just navigation.
-        // Use showConfirm if the banner action metadata says so?
-        // Let's assume standard banner actions are safe unless specified.
-        run();
+        switch (action.type) {
+            case "url":
+                window.open(action.payload, "_blank");
+                break;
+            case "tab":
+                tabManager.activateTab(action.payload);
+                break;
+            case "action":
+                if (openclawActions && openclawActions.dispatch) {
+                    openclawActions.dispatch(action.payload);
+                } else {
+                    console.log("Action triggered:", action.payload);
+                }
+                break;
+        }
     }
 
     /**
@@ -509,7 +263,6 @@ export class OpenClawUI {
      * @param {Object} options - { title, message, fatal, onConfirm }
      */
     showConfirm({ title, message, fatal = false, onConfirm }) {
-        // Create modal overlay
         const overlay = document.createElement("div");
         overlay.className = "openclaw-modal-overlay";
 
