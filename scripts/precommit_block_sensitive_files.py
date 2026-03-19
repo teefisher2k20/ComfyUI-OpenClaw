@@ -8,10 +8,6 @@ SENSITIVE_PATH_PREFIXES = (
     ".planning\\",
 )
 
-SENSITIVE_EXACT = {
-    "ROADMAP.md",
-}
-
 
 def _get_staged_paths() -> list[str]:
     res = subprocess.run(
@@ -28,17 +24,17 @@ def _get_staged_paths() -> list[str]:
     return [line.strip() for line in res.stdout.splitlines() if line.strip()]
 
 
-def main() -> int:
-    staged = _get_staged_paths()
+def _get_blocked_paths(staged: list[str]) -> list[str]:
     blocked: list[str] = []
-
     for path in staged:
-        if path in SENSITIVE_EXACT:
-            blocked.append(path)
-            continue
         if path.startswith(SENSITIVE_PATH_PREFIXES):
             blocked.append(path)
-            continue
+    return blocked
+
+
+def main() -> int:
+    staged = _get_staged_paths()
+    blocked = _get_blocked_paths(staged)
 
     if not blocked:
         return 0
@@ -51,7 +47,7 @@ def main() -> int:
             *[f"  - {p}" for p in blocked],
             "",
             "Fix:",
-            "  git restore --staged ROADMAP.md .planning",
+            "  git restore --staged .planning",
             "",
             "If you intentionally need an internal-only commit, use a separate private remote/repo.",
         ]
