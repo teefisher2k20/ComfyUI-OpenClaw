@@ -4,7 +4,10 @@
  */
 import { ErrorBoundary } from "./ErrorBoundary.js";
 import { STORAGE_KEYS, getMirroredStorageValue, setMirroredStorageValue } from "./openclaw_compat.js";
-import { normalizeLegacyClassNames } from "./openclaw_utils.js";
+import {
+    applyLegacyClassAliases,
+    normalizeLegacyClassNames,
+} from "./openclaw_utils.js";
 
 export class TabManager {
     constructor() {
@@ -79,6 +82,8 @@ export class TabManager {
 
         normalizeLegacyClassNames(this.tabsEl);
         normalizeLegacyClassNames(this.contentEl);
+        applyLegacyClassAliases(this.tabsEl);
+        applyLegacyClassAliases(this.contentEl);
     }
 
     activateTab(id) {
@@ -119,6 +124,7 @@ export class TabManager {
 
         if (pane) {
             normalizeLegacyClassNames(pane);
+            applyLegacyClassAliases(pane);
         }
     }
 

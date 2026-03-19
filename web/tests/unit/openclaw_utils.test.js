@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+    applyLegacyClassAliases,
+    buildLegacyAliasClassTokens,
     makeEl,
     normalizeLegacyClassTokens,
     normalizeLegacyClassNames,
@@ -32,6 +34,26 @@ describe("openclaw_utils", () => {
         normalizeLegacyClassNames(root);
         expect(root.className).toBe("openclaw-panel");
         expect(root.querySelector("button").className).toBe("openclaw-btn openclaw-btn-primary");
+    });
+
+    it("derives runtime legacy aliases from canonical tokens", () => {
+        expect(buildLegacyAliasClassTokens("openclaw-panel openclaw-btn")).toBe(
+            "openclaw-panel openclaw-btn moltbot-panel moltbot-btn"
+        );
+    });
+
+    it("applies runtime legacy aliases across a subtree", () => {
+        document.body.innerHTML = `
+            <section class="openclaw-panel">
+                <button class="openclaw-btn openclaw-btn-primary">Run</button>
+            </section>
+        `;
+        const root = document.body.firstElementChild;
+        applyLegacyClassAliases(root);
+        expect(root.className).toBe("openclaw-panel moltbot-panel");
+        expect(root.querySelector("button").className).toBe(
+            "openclaw-btn openclaw-btn-primary moltbot-btn moltbot-btn-primary"
+        );
     });
 
     it("returns fallback data for invalid JSON", () => {

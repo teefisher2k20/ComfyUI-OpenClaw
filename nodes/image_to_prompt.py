@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from typing import Any, Tuple
 
 try:
@@ -64,14 +65,11 @@ class OpenClawImageToPrompt:
     FUNCTION = "generate_prompt"
     CATEGORY = "moltbot"
 
-    def _tensor_to_base64_png(self, tensor_image: Any, max_side: int) -> str:
-        """
-        Convert ComfyUI tensor (Batch, H, W, C) to base64 PNG.
-        Uses the first image in batch.
-        """
-        return tensor_to_base64_png(
-            tensor_image=tensor_image, max_side=max_side, context="ImageToPrompt"
-        )
+    # R154: keep the compatibility method name, but bind the shared helper
+    # directly so node wrappers do not duplicate image conversion logic.
+    _tensor_to_base64_png = staticmethod(
+        partial(tensor_to_base64_png, context="ImageToPrompt")
+    )
 
     def generate_prompt(
         self, image: Any, goal: str, detail_level: str, max_image_side: int

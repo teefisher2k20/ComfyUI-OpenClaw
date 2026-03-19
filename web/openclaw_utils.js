@@ -73,6 +73,54 @@ export function normalizeLegacyClassNames(root) {
 }
 
 /**
+ * R154: derive runtime legacy aliases from canonical class tokens so templates
+ * do not need to hand-author duplicate `openclaw-*` + `moltbot-*` markup.
+ */
+export function buildLegacyAliasClassTokens(className = "") {
+    const canonicalTokens = normalizeLegacyClassTokens(className)
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(Boolean);
+    const seen = new Set(canonicalTokens);
+    const combined = [...canonicalTokens];
+
+    canonicalTokens.forEach((token) => {
+        if (!token.startsWith("openclaw-")) {
+            return;
+        }
+        const legacy = `moltbot-${token.slice("openclaw-".length)}`;
+        if (seen.has(legacy)) {
+            return;
+        }
+        seen.add(legacy);
+        combined.push(legacy);
+    });
+
+    return combined.join(" ");
+}
+
+export function applyLegacyClassAliases(root) {
+    if (!root) return root;
+    const nodes = [];
+    if (typeof root.className === "string") {
+        nodes.push(root);
+    }
+    if (typeof root.querySelectorAll === "function") {
+        nodes.push(...root.querySelectorAll("[class]"));
+    }
+
+    nodes.forEach((node) => {
+        if (typeof node.className !== "string") return;
+        const withAliases = buildLegacyAliasClassTokens(node.className);
+        if (withAliases !== node.className) {
+            node.className = withAliases;
+        }
+    });
+
+    return root;
+}
+
+/**
  * Lightweight toast helper for UI feedback.
  * @param {string} message
  * @param {"info"|"error"|"success"|"warning"} variant

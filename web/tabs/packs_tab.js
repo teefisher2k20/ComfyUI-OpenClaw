@@ -20,21 +20,21 @@ export const PacksTab = {
     render(container) {
         // --- 1. Static Layout ---
         container.innerHTML = `
-            <div class="openclaw-panel openclaw-panel moltbot-panel">
-                <div class="openclaw-card openclaw-card moltbot-card" style="border-radius:0; border:none; border-bottom:1px solid var(--moltbot-color-border);">
-                     <div class="openclaw-section-header openclaw-section-header moltbot-section-header">Asset Packs</div>
-                     <div class="openclaw-error-box openclaw-error-box moltbot-error-box" style="display:none"></div>
-                     <div class="openclaw-toolbar openclaw-toolbar moltbot-toolbar" style="margin-top:5px; display:flex; gap:5px; align-items:center;" id="pack-toolbar">
+            <div class="openclaw-panel">
+                <div class="openclaw-card" style="border-radius:0; border:none; border-bottom:1px solid var(--moltbot-color-border);">
+                     <div class="openclaw-section-header">Asset Packs</div>
+                     <div class="openclaw-error-box" style="display:none"></div>
+                     <div class="openclaw-toolbar" style="margin-top:5px; display:flex; gap:5px; align-items:center;" id="pack-toolbar">
                         <input type="file" id="pack-import-input" accept=".zip" style="display:none">
-                        <button class="openclaw-btn openclaw-btn moltbot-btn openclaw-btn-primary openclaw-btn-primary moltbot-btn-primary" id="pack-import-btn">Import Pack</button>
-                        <button class="openclaw-btn openclaw-btn moltbot-btn openclaw-btn-sm openclaw-btn-sm moltbot-btn-sm" id="pack-refresh-btn" style="margin-left: auto;">
+                        <button class="openclaw-btn openclaw-btn-primary" id="pack-import-btn">Import Pack</button>
+                        <button class="openclaw-btn openclaw-btn-sm" id="pack-refresh-btn" style="margin-left: auto;">
                             Refresh
                         </button>
                     </div>
                 </div>
 
-                <div id="pack-list" class="openclaw-scroll-area openclaw-scroll-area moltbot-scroll-area" style="padding:10px;">
-                     <div class="openclaw-empty-state openclaw-empty-state moltbot-empty-state">Loading...</div>
+                <div id="pack-list" class="openclaw-scroll-area" style="padding:10px;">
+                     <div class="openclaw-empty-state">Loading...</div>
                 </div>
             </div>
         `;
@@ -51,7 +51,7 @@ export const PacksTab = {
 
         const renderListItem = (pack) => {
             return `
-                <div class="openclaw-card openclaw-card moltbot-card" style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: start;">
+                <div class="openclaw-card" style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: start;">
                     <div>
                         <div style="font-weight: bold; font-size: var(--moltbot-font-md); color: var(--moltbot-color-fg);">
                             ${escapeHtml(pack.name)} <span style="font-weight:normal; color:var(--moltbot-color-fg-muted);">v${escapeHtml(pack.version)}</span>
@@ -64,8 +64,8 @@ export const PacksTab = {
                         </div>
                     </div>
                     <div style="display: flex; gap: 5px; flex-direction: column; align-items: flex-end;">
-                        <button class="openclaw-btn openclaw-btn moltbot-btn openclaw-btn-sm openclaw-btn-sm moltbot-btn-sm" data-action="export" data-name="${escapeHtml(pack.name)}" data-version="${escapeHtml(pack.version)}">Export</button>
-                        <button class="openclaw-btn openclaw-btn moltbot-btn openclaw-btn-sm openclaw-btn-sm moltbot-btn-sm openclaw-btn-danger openclaw-btn-danger moltbot-btn-danger" data-action="delete" data-name="${escapeHtml(pack.name)}" data-version="${escapeHtml(pack.version)}">Uninstall</button>
+                        <button class="openclaw-btn openclaw-btn-sm" data-action="export" data-name="${escapeHtml(pack.name)}" data-version="${escapeHtml(pack.version)}">Export</button>
+                        <button class="openclaw-btn openclaw-btn-sm openclaw-btn-danger" data-action="delete" data-name="${escapeHtml(pack.name)}" data-version="${escapeHtml(pack.version)}">Uninstall</button>
                     </div>
                 </div>
             `;
@@ -73,7 +73,7 @@ export const PacksTab = {
 
         const renderList = (packs) => {
             if (!packs || packs.length === 0) {
-                ui.list.innerHTML = '<div class="openclaw-empty-state openclaw-empty-state moltbot-empty-state">No packs installed.</div>';
+                ui.list.innerHTML = '<div class="openclaw-empty-state">No packs installed.</div>';
                 return;
             }
             ui.list.innerHTML = packs.map(renderListItem).join("");

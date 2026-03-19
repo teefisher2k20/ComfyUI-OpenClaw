@@ -7,42 +7,42 @@ export const VariantsTab = {
 
     render(container) {
         container.innerHTML = `
-            <div class="openclaw-panel openclaw-panel moltbot-panel">
-                <div class="openclaw-scroll-area openclaw-scroll-area moltbot-scroll-area">
-                    <div class="openclaw-card openclaw-card moltbot-card">
-                        <div class="openclaw-section-header openclaw-section-header moltbot-section-header">Variants Configuration</div>
+            <div class="openclaw-panel">
+                <div class="openclaw-scroll-area">
+                    <div class="openclaw-card">
+                        <div class="openclaw-section-header">Variants Configuration</div>
 
-                        <div class="openclaw-error-box openclaw-error-box moltbot-error-box" style="display:none"></div>
+                        <div class="openclaw-error-box" style="display:none"></div>
 
-                        <div class="openclaw-input-group openclaw-input-group moltbot-input-group">
-                            <label class="openclaw-label openclaw-label moltbot-label">Base Parameters (JSON)</label>
-                            <textarea id="var-base-params" class="openclaw-textarea openclaw-textarea moltbot-textarea openclaw-textarea-md openclaw-textarea-md moltbot-textarea-md">{"width": 1024, "height": 1024, "seed": 0}</textarea>
+                        <div class="openclaw-input-group">
+                            <label class="openclaw-label">Base Parameters (JSON)</label>
+                            <textarea id="var-base-params" class="openclaw-textarea openclaw-textarea-md">{"width": 1024, "height": 1024, "seed": 0}</textarea>
                         </div>
 
-                        <div class="openclaw-grid-2 openclaw-grid-2 moltbot-grid-2">
-                             <div class="openclaw-input-group openclaw-input-group moltbot-input-group">
-                                <label class="openclaw-label openclaw-label moltbot-label">Strategy</label>
-                                <select id="var-strategy" class="openclaw-select openclaw-select moltbot-select">
+                        <div class="openclaw-grid-2">
+                             <div class="openclaw-input-group">
+                                <label class="openclaw-label">Strategy</label>
+                                <select id="var-strategy" class="openclaw-select">
                                     <option value="seeds">Seed Sweep (Count)</option>
                                     <option value="cfg">CFG Scale (Range)</option>
                                 </select>
                             </div>
 
                             <!-- Dynamic inputs based on strategy -->
-                            <div id="var-opts-seeds" class="var-opts openclaw-input-group openclaw-input-group moltbot-input-group">
-                                <label class="openclaw-label openclaw-label moltbot-label">Count</label>
-                                <input type="number" id="var-seed-count" class="openclaw-input openclaw-input moltbot-input" value="4" min="1" max="100">
+                            <div id="var-opts-seeds" class="var-opts openclaw-input-group">
+                                <label class="openclaw-label">Count</label>
+                                <input type="number" id="var-seed-count" class="openclaw-input" value="4" min="1" max="100">
                             </div>
                         </div>
 
-                        <button id="var-run-btn" class="openclaw-btn openclaw-btn moltbot-btn openclaw-btn-primary openclaw-btn-primary moltbot-btn-primary">Generate Variants JSON</button>
+                        <button id="var-run-btn" class="openclaw-btn openclaw-btn-primary">Generate Variants JSON</button>
                     </div>
 
-                    <div class="openclaw-card openclaw-card moltbot-card">
-                         <div class="openclaw-section-header openclaw-section-header moltbot-section-header">Resulting List</div>
-                        <div class="openclaw-input-group openclaw-input-group moltbot-input-group">
-                            <label class="openclaw-label openclaw-label moltbot-label">Output (List of Params)</label>
-                            <textarea id="var-output" class="openclaw-textarea openclaw-textarea moltbot-textarea openclaw-textarea-lg openclaw-textarea-lg moltbot-textarea-lg" readonly></textarea>
+                    <div class="openclaw-card">
+                         <div class="openclaw-section-header">Resulting List</div>
+                        <div class="openclaw-input-group">
+                            <label class="openclaw-label">Output (List of Params)</label>
+                            <textarea id="var-output" class="openclaw-textarea openclaw-textarea-lg" readonly></textarea>
                         </div>
                     </div>
                 </div>

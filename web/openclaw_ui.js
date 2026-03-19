@@ -5,7 +5,10 @@
 import { tabManager } from "./openclaw_tabs.js";
 import { ErrorBoundary } from "./ErrorBoundary.js";
 import { openclawApi } from "./openclaw_api.js";
-import { normalizeLegacyClassNames } from "./openclaw_utils.js";
+import {
+    applyLegacyClassAliases,
+    normalizeLegacyClassNames,
+} from "./openclaw_utils.js";
 import { OpenClawActions } from "./openclaw_actions.js";
 import { QueueMonitor } from "./openclaw_queue_monitor.js";
 import { OpenClawNotificationCenter } from "./openclaw_notification_center.js";
@@ -204,6 +207,7 @@ export class OpenClawUI {
 
         tabManager.init(tabBar, contentArea);
         normalizeLegacyClassNames(container);
+        applyLegacyClassAliases(container);
         this.bannerManager.bind(container, (action) => this.handleAction(action));
         this.notificationCenter.render();
     }
@@ -301,6 +305,7 @@ export class OpenClawUI {
 
         this.container.appendChild(overlay);
         normalizeLegacyClassNames(overlay);
+        applyLegacyClassAliases(overlay);
     }
 }
 
