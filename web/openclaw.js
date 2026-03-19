@@ -10,6 +10,7 @@ import { openclawApi } from "./openclaw_api.js";
 // If that module uses a wrong relative path (e.g. ../../scripts/app.js), the import chain fails at module-load time
 // and this whole extension never reaches setup(), which makes the OpenClaw sidebar disappear.
 import { registerContextToolbox } from "./extensions/context_toolbox.js"; // F51
+import { getCompatibleSettingValue } from "./openclaw_compat.js";
 
 // Tabs
 import { tabManager } from "./openclaw_tabs.js";
@@ -166,14 +167,7 @@ app.registerExtension({
 
         // Helper to read settings with backward compatibility
         const getSetting = (key, def) => {
-            if (!app?.ui?.settings?.getSettingValue) return def;
-            // 1. Try new key
-            let val = app.ui.settings.getSettingValue(`OpenClaw.${key}`, undefined);
-            if (val !== undefined) return val;
-            // 2. Try legacy key
-            val = app.ui.settings.getSettingValue(`Moltbot.${key}`, undefined);
-            if (val !== undefined) return val;
-            return def;
+            return getCompatibleSettingValue(app?.ui?.settings, key, def);
         };
 
         if (getSetting("General.Enable", true) === false) {

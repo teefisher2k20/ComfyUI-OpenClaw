@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from .providers.catalog import DEFAULT_MODEL_BY_PROVIDER, DEFAULT_PROVIDER, get_provider_info
+from .providers.catalog import (
+    DEFAULT_MODEL_BY_PROVIDER,
+    DEFAULT_PROVIDER,
+    get_provider_info,
+)
 from .providers.keys import get_api_key_for_provider
 from .runtime_config import get_effective_config
 

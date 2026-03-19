@@ -3,6 +3,7 @@
  * Handles tab creation, switching, and lazy rendering.
  */
 import { ErrorBoundary } from "./ErrorBoundary.js";
+import { STORAGE_KEYS, getMirroredStorageValue, setMirroredStorageValue } from "./openclaw_compat.js";
 import { normalizeLegacyClassNames } from "./openclaw_utils.js";
 
 export class TabManager {
@@ -82,7 +83,7 @@ export class TabManager {
 
     activateTab(id) {
         this.activeTabId = id;
-        localStorage.setItem("openclaw-active-tab", id);
+        setMirroredStorageValue(localStorage, STORAGE_KEYS.local.activeTab, id);
 
         // Update Tab Buttons
         Array.from(this.tabsEl.children).forEach((btn, idx) => {
@@ -123,9 +124,7 @@ export class TabManager {
 
     _restoreActiveTab() {
         // CRITICAL: keep legacy key fallback to avoid tab-state loss across migration.
-        const saved =
-            localStorage.getItem("openclaw-active-tab") ||
-            localStorage.getItem("moltbot-active-tab");
+        const saved = getMirroredStorageValue(localStorage, STORAGE_KEYS.local.activeTab);
         const defaultTab = this.tabs.length > 0 ? this.tabs[0].id : null;
         this.activateTab(saved && this.tabs.find(t => t.id === saved) ? saved : defaultTab);
     }

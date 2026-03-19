@@ -4,6 +4,7 @@
  */
 import { OpenClawSession } from "./openclaw_session.js";
 import { fetchApi, apiURL, fileURL } from "./openclaw_comfy_api.js";
+import { API_PREFIXES, buildAdminTokenHeaders, getApiPathCandidates } from "./openclaw_compat.js";
 import { isAbortError, linkAbortSignal, parseJsonSafe } from "./openclaw_utils.js";
 import {
     composeFetchWrappersOnce,
@@ -14,9 +15,6 @@ import {
 
 export class OpenClawAPI {
     constructor() {
-        // baseUrl is handled by ComfyUI shim provided via fetchApi
-        this.prefix = "/openclaw";
-        this.legacyPrefix = "/moltbot";
         this._capabilitiesCache = null;
         this._capabilitiesCacheTs = 0;
 
@@ -42,22 +40,11 @@ export class OpenClawAPI {
     }
 
     _path(suffix) {
-        return `${this.prefix}${suffix}`;
+        return `${API_PREFIXES.canonical}${suffix}`;
     }
 
     _candidatePaths(url) {
-        const candidates = [];
-        if (typeof url === "string") {
-            candidates.push(url);
-            if (url.startsWith(this.prefix + "/")) {
-                candidates.push(url.replace(this.prefix, this.legacyPrefix));
-            } else if (url.startsWith(this.legacyPrefix + "/")) {
-                candidates.push(url.replace(this.legacyPrefix, this.prefix));
-            }
-        } else {
-            candidates.push(url);
-        }
-        return candidates;
+        return getApiPathCandidates(url);
     }
 
     async _fetchWithCandidates(url, options = {}) {
@@ -83,11 +70,7 @@ export class OpenClawAPI {
     }
 
     _adminTokenHeaders(token) {
-        const t = token || this._getAdminToken();
-        return {
-            "X-OpenClaw-Admin-Token": t,
-            "X-Moltbot-Admin-Token": t, // legacy
-        };
+        return buildAdminTokenHeaders(token || this._getAdminToken());
     }
 
     /**
@@ -693,7 +676,7 @@ export class OpenClawAPI {
         // Fetch as blob
         // R26: Use fetchApi to ensure base path
         const primaryPath = `${this._path("/packs/export")}/${encodeURIComponent(name)}/${encodeURIComponent(version)}`;
-        const legacyPath = primaryPath.replace(this.prefix, this.legacyPrefix);
+        const legacyPath = getApiPathCandidates(primaryPath)[1];
 
         const headers = this._adminTokenHeaders();
 

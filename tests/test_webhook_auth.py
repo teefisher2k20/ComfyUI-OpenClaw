@@ -130,6 +130,28 @@ class TestVerifyHmac(unittest.TestCase):
             self.assertFalse(valid)
             self.assertEqual(error, "missing_signature_header")
 
+    def test_legacy_hmac_headers_are_still_accepted(self):
+        secret = "hmac_secret"
+        body = b'{"test": "data"}'
+        expected_sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+        with patch.dict(
+            os.environ,
+            {
+                "OPENCLAW_WEBHOOK_HMAC_SECRET": secret,
+                "OPENCLAW_WEBHOOK_REQUIRE_REPLAY_PROTECTION": "0",
+            },
+        ):
+            request = MockRequest(
+                headers={"X-Moltbot-Signature": f"sha256={expected_sig}"}
+            )
+            with patch("services.webhook_auth.logger.warning") as warn:
+                valid, error = verify_hmac(request, body)
+
+        self.assertTrue(valid)
+        self.assertEqual(error, "")
+        warn.assert_called_once()
+
     def test_not_configured(self):
         """Test when HMAC secret is not configured."""
         with patch.dict(os.environ, {}, clear=True):

@@ -1,6 +1,7 @@
 """Tests for trace utilities and trace store (R25)."""
 
 import unittest
+from unittest.mock import patch
 
 from services.trace import TRACE_HEADER, get_effective_trace_id, normalize_trace_id
 from services.trace_store import TraceStore
@@ -36,6 +37,13 @@ class TestTraceUtils(unittest.TestCase):
         body = {}
         tid = get_effective_trace_id(headers, body)
         self.assertTrue(isinstance(tid, str) and len(tid) >= 16)
+
+    def test_get_effective_trace_id_accepts_legacy_header(self):
+        with patch("services.trace.logger.warning") as warn:
+            tid = get_effective_trace_id({"X-Moltbot-Trace-Id": "trace_legacy"}, {})
+
+        self.assertEqual(tid, "trace_legacy")
+        warn.assert_called_once()
 
 
 class TestTraceStore(unittest.TestCase):

@@ -193,6 +193,17 @@ class TestRBAC(unittest.TestCase):
         self.assertIsNotNone(token_info)
         self.assertEqual(token_info.tenant_id, "team-a")
 
+    def test_resolve_token_info_accepts_legacy_admin_header(self):
+        req = MagicMock()
+        req.headers = {"X-Moltbot-Admin-Token": "admin-secret"}
+
+        with patch("services.access_control.logger.warning") as warn:
+            token_info = resolve_token_info(req)
+
+        self.assertIsNotNone(token_info)
+        self.assertEqual(token_info.role, AuthTier.ADMIN)
+        warn.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

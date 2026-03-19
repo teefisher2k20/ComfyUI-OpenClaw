@@ -27,7 +27,9 @@ class EffectiveConfigFacadeTests(unittest.TestCase):
         )
 
     @patch("services.effective_config.get_effective_config")
-    def test_base_url_uses_catalog_default_when_provider_differs(self, mock_get_effective):
+    def test_base_url_uses_catalog_default_when_provider_differs(
+        self, mock_get_effective
+    ):
         mock_get_effective.return_value = (
             {
                 "provider": "openai",

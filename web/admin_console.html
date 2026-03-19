@@ -87,16 +87,24 @@
     <article class="panel wide"><h2>Quick Actions</h2><div class="tools"><button id="qaRetry" class="warn">Retry Last Failed Schedule</button><button id="qaModels">Refresh Model List</button><button id="qaDrill" class="danger">Run Drill</button></div><div class="box" id="quickBox"></div></article>
   </section>
 </div>
-<script>
+<script type="module">
+import {
+  API_PREFIXES,
+  STORAGE_KEYS,
+  buildRemoteAdminHeaders,
+  getMirroredStorageValue,
+  setMirroredStorageValue,
+} from "./openclaw_compat.js";
+
 (function(){
-const s={p:"/openclaw",lp:"/moltbot",token:localStorage.getItem("openclaw_remote_admin_token")||"",lastSeq:0,sseAbort:null};
+const s={p:API_PREFIXES.canonical,lp:API_PREFIXES.legacy,token:getMirroredStorageValue(localStorage, STORAGE_KEYS.local.remoteAdminToken)||"",lastSeq:0,sseAbort:null};
 const q=(id)=>document.getElementById(id);
 const e={token:q("token"),saveToken:q("saveToken"),clearToken:q("clearToken"),refreshAll:q("refreshAll"),chips:q("chips"),globalStatus:q("globalStatus"),dashKv:q("dashKv"),errorsBox:q("errorsBox"),refreshRuns:q("refreshRuns"),connectSse:q("connectSse"),disconnectSse:q("disconnectSse"),eventsStatus:q("eventsStatus"),runsList:q("runsList"),eventsBox:q("eventsBox"),refreshApprovals:q("refreshApprovals"),approvalsList:q("approvalsList"),refreshSchedules:q("refreshSchedules"),schedulesList:q("schedulesList"),trigTemplate:q("trigTemplate"),trigApproval:q("trigApproval"),trigInputs:q("trigInputs"),fireTrigger:q("fireTrigger"),trigStatus:q("trigStatus"),cfgProvider:q("cfgProvider"),cfgModel:q("cfgModel"),cfgBase:q("cfgBase"),cfgTimeout:q("cfgTimeout"),cfgRetries:q("cfgRetries"),cfgKey:q("cfgKey"),loadCfg:q("loadCfg"),saveCfg:q("saveCfg"),cfgStatus:q("cfgStatus"),refreshDoctor:q("refreshDoctor"),doctorBox:q("doctorBox"),inventoryBox:q("inventoryBox"),qaRetry:q("qaRetry"),qaModels:q("qaModels"),qaDrill:q("qaDrill"),quickBox:q("quickBox")};
 e.token.value=s.token;
 const now=()=>new Date().toLocaleTimeString();
 const setStatus=(node,msg,cls)=>{node.textContent=msg||"";node.className="status"+(cls?" "+cls:"");};
 const box=(node,v)=>{node.textContent=typeof v==="string"?v:JSON.stringify(v,null,2);};
-const ah=()=>({"X-OpenClaw-Admin-Token":s.token||"","X-Moltbot-Admin-Token":s.token||"","X-OpenClaw-Obs-Token":s.token||"","X-Moltbot-Obs-Token":s.token||""});
+const ah=()=>buildRemoteAdminHeaders(s.token||"");
 async function api(path,opt){const o=opt||{};const urls=[s.p+path,s.lp+path];let last={ok:false,status:0,error:"request_failed"};for(const u of urls){try{const r=await fetch(u,{method:o.method||"GET",headers:Object.assign({},ah(),o.body?{"Content-Type":"application/json"}:{},o.headers||{}),body:o.body?JSON.stringify(o.body):undefined});const t=await r.text();let d=null;try{d=t?JSON.parse(t):null;}catch(_){d={raw:t};}if(r.status===404){last={ok:false,status:404,error:"not_found",data:d};continue;}return {ok:r.ok,status:r.status,error:(d&&d.error)||(!r.ok?r.statusText:""),data:d,url:u};}catch(err){last={ok:false,status:0,error:String(err)};}}return last;}
 function appendEvt(obj){const line="["+now()+"] "+JSON.stringify(obj);const arr=e.eventsBox.textContent?e.eventsBox.textContent.split("\n"):[];arr.push(line);e.eventsBox.textContent=arr.slice(-120).join("\n");e.eventsBox.scrollTop=e.eventsBox.scrollHeight;const seq=Number(obj&&obj.seq);if(!Number.isNaN(seq)&&seq>s.lastSeq)s.lastSeq=seq;}
 function parseSse(chunk){const lines=chunk.split(/\r?\n/);let type="message";const ds=[];for(const ln of lines){if(ln.startsWith("event:"))type=ln.slice(6).trim()||"message";else if(ln.startsWith("data:"))ds.push(ln.slice(5).trim());}if(!ds.length)return null;const raw=ds.join("\n");let payload=null;try{payload=JSON.parse(raw);}catch(_){payload={raw};}payload.event_type=payload.event_type||type;return payload;}
@@ -117,8 +125,8 @@ async function qaModels(){const p=(e.cfgProvider.value||"").trim();const q=p?("?
 async function qaDrill(){if(!window.confirm("Run drill via Tools API? This is an admin action."))return;const list=await api("/tools");if(!list.ok){box(e.quickBox,{action:"run_drill",ok:false,error:list.error,detail:list.data});return;}const tools=(list.data&&list.data.tools)||[];const m=tools.find(t=>/drill|crypto/i.test(String(t.name||"")));if(!m){box(e.quickBox,{action:"run_drill",ok:false,error:"no_drill_tool_found",tools:tools.map(t=>t.name)});return;}const r=await api("/tools/"+encodeURIComponent(m.name)+"/run",{method:"POST",body:{args:{scenarios:"planned_rotation,token_compromise"}}});box(e.quickBox,{action:"run_drill",tool:m.name,ok:r.ok,detail:r.data||r.error});}
 async function refreshAll(){await Promise.all([loadDashboard(),refreshRuns(),refreshApprovals(),refreshSchedules(),loadConfig(),refreshDoctor()]);}
 
-e.saveToken.onclick=()=>{s.token=e.token.value.trim();localStorage.setItem("openclaw_remote_admin_token",s.token);setStatus(e.globalStatus,"Token saved locally in this browser","ok");};
-e.clearToken.onclick=()=>{s.token="";e.token.value="";localStorage.removeItem("openclaw_remote_admin_token");setStatus(e.globalStatus,"Token cleared","warn-txt");};
+e.saveToken.onclick=()=>{s.token=e.token.value.trim();setMirroredStorageValue(localStorage, STORAGE_KEYS.local.remoteAdminToken, s.token);setStatus(e.globalStatus,"Token saved locally in this browser","ok");};
+e.clearToken.onclick=()=>{s.token="";e.token.value="";setMirroredStorageValue(localStorage, STORAGE_KEYS.local.remoteAdminToken, "");setStatus(e.globalStatus,"Token cleared","warn-txt");};
 e.refreshAll.onclick=refreshAll;e.refreshRuns.onclick=refreshRuns;e.connectSse.onclick=connectSse;e.disconnectSse.onclick=disconnectSse;e.refreshApprovals.onclick=refreshApprovals;e.refreshSchedules.onclick=refreshSchedules;e.fireTrigger.onclick=fireTrigger;e.loadCfg.onclick=loadConfig;e.saveCfg.onclick=saveConfig;e.refreshDoctor.onclick=refreshDoctor;e.qaRetry.onclick=qaRetry;e.qaModels.onclick=qaModels;e.qaDrill.onclick=qaDrill;
 window.addEventListener("beforeunload",disconnectSse);
 refreshAll();

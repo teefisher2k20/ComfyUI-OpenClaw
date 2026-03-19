@@ -8,14 +8,16 @@ import re
 import uuid
 from typing import Optional
 
+from .legacy_compat import TRACE_ID_HEADERS, get_header_alias_value
+
 logger = logging.getLogger("ComfyUI-OpenClaw.services.trace")
 
 # Trace ID validation regex: Alphanumeric, dash, underscore, 1-64 chars
 TRACE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 # Header name constant
-TRACE_HEADER = "X-OpenClaw-Trace-Id"
-LEGACY_TRACE_HEADER = "X-Moltbot-Trace-Id"
+TRACE_HEADER = TRACE_ID_HEADERS.primary
+LEGACY_TRACE_HEADER = TRACE_ID_HEADERS.legacy
 
 
 def generate_trace_id() -> str:
@@ -75,19 +77,9 @@ def get_effective_trace_id(headers: dict, body_data: dict) -> str:
     3. Body: traceId (camelCase, for JS clients)
     4. Generated
     """
-    try:
-        from .metrics import metrics
-    except ImportError:
-        metrics = None
-
-    header_trace = headers.get(TRACE_HEADER)
-    if not header_trace and headers.get(LEGACY_TRACE_HEADER):
-        header_trace = headers.get(LEGACY_TRACE_HEADER)
-        if metrics:
-            metrics.inc("legacy_api_hits")
-        logger.warning(
-            f"DEPRECATION WARNING: Legacy header used: {LEGACY_TRACE_HEADER}. Please migrate to {TRACE_HEADER}."
-        )
+    header_trace, _used_legacy = get_header_alias_value(
+        headers, TRACE_ID_HEADERS, logger=logger
+    )
 
     body_trace = body_data.get("trace_id") or body_data.get("traceId")
     # Priority: Header > Body > Generated

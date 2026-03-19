@@ -13,6 +13,13 @@ import logging
 import os
 from typing import Mapping, Optional, Protocol, Tuple
 
+from .legacy_compat import (
+    WEBHOOK_NONCE_HEADERS,
+    WEBHOOK_SIGNATURE_HEADERS,
+    WEBHOOK_TIMESTAMP_HEADERS,
+    get_header_alias_value,
+)
+
 logger = logging.getLogger("ComfyUI-OpenClaw.services.webhook_auth")
 
 
@@ -145,19 +152,9 @@ def verify_hmac(request: RequestLike, raw_body: bytes) -> Tuple[bool, str]:
     if not secret:
         return False, "hmac_not_configured"
 
-    sig_header = request.headers.get("X-OpenClaw-Signature", "")
-    if not sig_header and request.headers.get("X-Moltbot-Signature"):
-        sig_header = request.headers.get("X-Moltbot-Signature", "")
-        try:
-            from .metrics import metrics
-
-            if metrics:
-                metrics.inc("legacy_api_hits")
-        except ImportError:
-            pass
-        logger.warning(
-            "DEPRECATION WARNING: Legacy header X-Moltbot-Signature is used. Please migrate to X-OpenClaw-Signature."
-        )
+    sig_header, _used_legacy_sig = get_header_alias_value(
+        request.headers, WEBHOOK_SIGNATURE_HEADERS, logger=logger
+    )
 
     if not sig_header:
         return False, "missing_signature_header"
@@ -178,33 +175,12 @@ def verify_hmac(request: RequestLike, raw_body: bytes) -> Tuple[bool, str]:
         return False, "invalid_signature"
 
     # Replay Protection (S2.1)
-    timestamp = request.headers.get("X-OpenClaw-Timestamp")
-    if not timestamp and request.headers.get("X-Moltbot-Timestamp"):
-        timestamp = request.headers.get("X-Moltbot-Timestamp")
-        try:
-            from .metrics import metrics
-
-            if metrics:
-                metrics.inc("legacy_api_hits")
-        except ImportError:
-            pass
-        logger.warning(
-            "DEPRECATION WARNING: Legacy header X-Moltbot-Timestamp is used. Please migrate to X-OpenClaw-Timestamp."
-        )
-
-    nonce = request.headers.get("X-OpenClaw-Nonce")
-    if not nonce and request.headers.get("X-Moltbot-Nonce"):
-        nonce = request.headers.get("X-Moltbot-Nonce")
-        try:
-            from .metrics import metrics
-
-            if metrics:
-                metrics.inc("legacy_api_hits")
-        except ImportError:
-            pass
-        logger.warning(
-            "DEPRECATION WARNING: Legacy header X-Moltbot-Nonce is used. Please migrate to X-OpenClaw-Nonce."
-        )
+    timestamp, _used_legacy_ts = get_header_alias_value(
+        request.headers, WEBHOOK_TIMESTAMP_HEADERS, logger=logger
+    )
+    nonce, _used_legacy_nonce = get_header_alias_value(
+        request.headers, WEBHOOK_NONCE_HEADERS, logger=logger
+    )
 
     # Enforced if headers present OR if strictly required configuration
     should_enforce = timestamp or nonce or should_require_replay_protection()

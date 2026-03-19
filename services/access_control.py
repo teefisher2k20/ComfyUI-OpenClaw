@@ -18,6 +18,11 @@ try:
 except ImportError:
     web = None
 
+from .legacy_compat import (
+    ADMIN_TOKEN_HEADERS,
+    OBS_TOKEN_HEADERS,
+    get_header_alias_value,
+)
 from .request_ip import get_client_ip
 from .tenant_context import (
     DEFAULT_TENANT_ID,
@@ -172,13 +177,6 @@ class TokenRegistry:
         return cls._tokens.get(secret)
 
 
-def _header_token_value(headers: Mapping[str, str], key: str) -> str:
-    value = headers.get(key)
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
 def _resolve_header_tenant(request) -> str:
     if not is_multi_tenant_enabled():
         return DEFAULT_TENANT_ID
@@ -206,33 +204,12 @@ def resolve_token_info(request) -> Optional[TokenInfo]:
 
     # Extract token from headers
     client_token = ""
-    if _header_token_value(headers, "X-OpenClaw-Admin-Token"):
-        client_token = _header_token_value(headers, "X-OpenClaw-Admin-Token")
-    elif _header_token_value(headers, "X-Moltbot-Admin-Token"):
-        client_token = _header_token_value(headers, "X-Moltbot-Admin-Token")
-        try:
-            from .metrics import metrics
-
-            if metrics:
-                metrics.inc("legacy_api_hits")
-        except ImportError:
-            pass
-        logger.warning(
-            "DEPRECATION WARNING: Legacy header X-Moltbot-Admin-Token used. Please migrate to X-OpenClaw-Admin-Token."
-        )
-    elif _header_token_value(headers, "X-OpenClaw-Obs-Token"):
-        client_token = _header_token_value(headers, "X-OpenClaw-Obs-Token")
-    elif _header_token_value(headers, "X-Moltbot-Obs-Token"):
-        client_token = _header_token_value(headers, "X-Moltbot-Obs-Token")
-        try:
-            from .metrics import metrics
-
-            if metrics:
-                metrics.inc("legacy_api_hits")
-        except ImportError:
-            pass
-        logger.warning(
-            "DEPRECATION WARNING: Legacy header X-Moltbot-Obs-Token used. Please migrate to X-OpenClaw-Obs-Token."
+    client_token, _used_legacy_admin = get_header_alias_value(
+        headers, ADMIN_TOKEN_HEADERS, logger=logger
+    )
+    if not client_token:
+        client_token, _used_legacy_obs = get_header_alias_value(
+            headers, OBS_TOKEN_HEADERS, logger=logger
         )
 
     request_tenant = _resolve_header_tenant(request)
@@ -488,9 +465,9 @@ def require_observability_access(request) -> Tuple[bool, Optional[str]]:
         or ""
     ).strip()
     if expected_token:
-        client_token = request.headers.get(
-            "X-OpenClaw-Obs-Token", ""
-        ) or request.headers.get("X-Moltbot-Obs-Token", "")
+        client_token, _used_legacy = get_header_alias_value(
+            request.headers, OBS_TOKEN_HEADERS, logger=logger
+        )
         if hmac.compare_digest(client_token, expected_token):
             return True, None
         return False, "Invalid or missing observability token."
@@ -517,9 +494,9 @@ def require_admin_token(request) -> Tuple[bool, Optional[str]]:
         or ""
     ).strip()
     if expected_token:
-        client_token = request.headers.get(
-            "X-OpenClaw-Admin-Token", ""
-        ) or request.headers.get("X-Moltbot-Admin-Token", "")
+        client_token, _used_legacy = get_header_alias_value(
+            request.headers, ADMIN_TOKEN_HEADERS, logger=logger
+        )
         if hmac.compare_digest(client_token, expected_token):
             return True, None
         return False, "Invalid admin token."

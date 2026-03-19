@@ -6,26 +6,20 @@
  * - Admin Token is stored in sessionStorage (cleared on tab close).
  * - NOT persisted to localStorage (security).
  */
+import { STORAGE_KEYS, getMirroredStorageValue, setMirroredStorageValue } from "./openclaw_compat.js";
+
 export const OpenClawSession = {
     // Keys
-    KEYS: {
-        ADMIN_TOKEN: "openclaw_admin_token",
-        LEGACY_ADMIN_TOKEN: "moltbot_admin_token",
-    },
+    KEYS: STORAGE_KEYS.session.adminToken,
 
     /**
      * Set the admin token for this session.
      * @param {string} token
      */
     setAdminToken(token) {
-        if (!token) {
-            sessionStorage.removeItem(this.KEYS.ADMIN_TOKEN);
-            sessionStorage.removeItem(this.KEYS.LEGACY_ADMIN_TOKEN);
-        } else {
-            sessionStorage.setItem(this.KEYS.ADMIN_TOKEN, token);
-            // Keep legacy key in sync so downgrades / older builds still work.
-            sessionStorage.setItem(this.KEYS.LEGACY_ADMIN_TOKEN, token);
-        }
+        // CRITICAL: keep mirrored legacy session key writes until the legacy
+        // storage contract is explicitly retired; downgrade flows depend on it.
+        setMirroredStorageValue(sessionStorage, this.KEYS, token);
     },
 
     /**
@@ -33,10 +27,7 @@ export const OpenClawSession = {
      * @returns {string|null}
      */
     getAdminToken() {
-        return (
-            sessionStorage.getItem(this.KEYS.ADMIN_TOKEN) ||
-            sessionStorage.getItem(this.KEYS.LEGACY_ADMIN_TOKEN)
-        );
+        return getMirroredStorageValue(sessionStorage, this.KEYS);
     },
 
     /**
