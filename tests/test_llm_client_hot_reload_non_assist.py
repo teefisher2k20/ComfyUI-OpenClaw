@@ -51,7 +51,7 @@ class TestLLMClientHotReloadNonAssist(unittest.TestCase):
             patch.dict(os.environ, {"OPENCLAW_ENABLE_TOOL_CALLING": "1"}),
         ):
             svc = composer_mod.AutomationComposerService()
-            first_init_client = svc.llm_client
+            init_client = svc.llm_client
 
             res1 = svc.compose_payload(
                 kind="trigger",
@@ -59,19 +59,15 @@ class TestLLMClientHotReloadNonAssist(unittest.TestCase):
                 intent="compose 1",
                 inputs_hint={"requirements": "a"},
             )
-            first_request_client = svc.llm_client
             res2 = svc.compose_payload(
                 kind="trigger",
                 template_id="tmpl",
                 intent="compose 2",
                 inputs_hint={"requirements": "b"},
             )
-            second_request_client = svc.llm_client
 
-        self.assertIsNot(first_init_client, first_request_client)
-        self.assertIsNot(first_request_client, second_request_client)
-        self.assertEqual(first_request_client.instance_id, 2)
-        self.assertEqual(second_request_client.instance_id, 3)
+        self.assertIs(svc.llm_client, init_client)
+        self.assertEqual(init_client.instance_id, 1)
         self.assertFalse(res1["used_tool_calling"])
         self.assertFalse(res2["used_tool_calling"])
         self.assertTrue(any("tool_call_fallback" in w for w in res1["warnings"]))
@@ -98,12 +94,9 @@ class TestLLMClientHotReloadNonAssist(unittest.TestCase):
                     detail_level="medium",
                     max_image_side=512,
                 )
-                second_request_client = node.llm_client
 
-        self.assertIsNot(init_client, first_request_client)
-        self.assertIsNot(first_request_client, second_request_client)
-        self.assertEqual(first_request_client.instance_id, 2)
-        self.assertEqual(second_request_client.instance_id, 3)
+        self.assertIs(node.llm_client, init_client)
+        self.assertEqual(init_client.instance_id, 1)
         self.assertNotEqual(cap1, cap2)
         self.assertEqual(tags1, "tag1, tag2")
         self.assertNotEqual(prompt1, prompt2)

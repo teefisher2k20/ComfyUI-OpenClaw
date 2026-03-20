@@ -10,9 +10,10 @@ function resolveUiTimeoutMs() {
   }
 
   // IMPORTANT: WSL on /mnt/* can load the module-heavy harness much slower than
-  // native filesystems; give readiness checks extra budget to avoid false reds.
+  // native filesystems, especially after several sequential page reloads in the
+  // same worker; give readiness checks extra budget to avoid false reds.
   if (process.platform === 'linux' && process.env.WSL_DISTRO_NAME && process.cwd().startsWith('/mnt/')) {
-    return 60_000;
+    return 120_000;
   }
 
   return 30_000;

@@ -47,7 +47,7 @@ class AutomationComposerService:
         # Refresh the default LLMClient per request so UI-saved provider/key updates
         # take effect without backend restart. Keep injected fakes intact for tests.
         if isinstance(self.llm_client, LLMClient):
-            self.llm_client = LLMClient()
+            return LLMClient()
         return self.llm_client
 
     def consume_last_reasoning_debug(self) -> Any:

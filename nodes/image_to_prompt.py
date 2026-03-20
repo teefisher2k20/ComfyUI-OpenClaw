@@ -40,7 +40,7 @@ class OpenClawImageToPrompt:
         # Refresh the default LLMClient per call so provider/key changes from Settings/UI
         # apply without restarting ComfyUI. Preserve injected mocks/fakes for tests.
         if isinstance(self.llm_client, LLMClient):
-            self.llm_client = LLMClient()
+            return LLMClient()
         return self.llm_client
 
     @classmethod
@@ -132,10 +132,10 @@ Do not use markdown blocks.
 
             return (caption, tags_str, prompt_suggestion)
 
-        except Exception as e:
+        except Exception:
             metrics.increment("errors")
-            logger.error(f"Failed to generate prompt from image: {e}")
-            raise e
+            logger.error("Failed to generate prompt from image", exc_info=True)
+            raise
 
 
 # IMPORTANT: keep legacy class alias for existing imports and tests.

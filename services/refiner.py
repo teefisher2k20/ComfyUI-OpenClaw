@@ -51,8 +51,10 @@ class RefinerService:
         # Refiner shares the same long-lived assist handler lifecycle as Planner; keeping
         # the startup client causes stale provider/key state after UI Save.
         # Preserve injected fakes by only rotating real LLMClient instances.
+        # IMPORTANT: do not mutate the stored long-lived service client when resolving
+        # a fresh default request client; that write is unnecessary shared-state churn.
         if isinstance(self.llm_client, LLMClient):
-            self.llm_client = LLMClient()
+            return LLMClient()
         return self.llm_client
 
     def consume_last_reasoning_debug(self) -> Any:
@@ -254,7 +256,7 @@ Issue: {issue}
 
             return refined_pos, refined_neg, final_patch, rationale
 
-        except Exception as e:
+        except Exception:
             metrics.increment("errors")
-            logger.error(f"Refiner failed: {e}")
-            raise e
+            logger.error("Refiner failed", exc_info=True)
+            raise

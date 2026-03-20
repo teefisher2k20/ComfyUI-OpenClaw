@@ -45,8 +45,10 @@ class PlannerService:
         # Assist handlers are long-lived singletons, so caching the startup client here
         # causes stale provider/key state after UI Save (requires backend restart).
         # Keep custom test fakes/injected clients intact by only rotating real LLMClient.
+        # IMPORTANT: do not overwrite self.llm_client here; mutating shared service state
+        # just to obtain a fresh default client is needlessly racy under concurrent access.
         if isinstance(self.llm_client, LLMClient):
-            self.llm_client = LLMClient()
+            return LLMClient()
         return self.llm_client
 
     def consume_last_reasoning_debug(self) -> Any:
@@ -197,7 +199,7 @@ Style: {style_directives}
 
             return positive, negative, validated_params.dict()
 
-        except Exception as e:
+        except Exception:
             metrics.increment("errors")
-            logger.error(f"Failed to plan generation: {e}")
-            raise e
+            logger.error("Failed to plan generation", exc_info=True)
+            raise

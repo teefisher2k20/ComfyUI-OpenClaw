@@ -531,7 +531,7 @@ async def llm_models_handler(request: web.Request) -> web.Response:
                     return web.json_response(
                         {"ok": False, "error": f"Upstream error: {str_e}"}, status=502
                     )
-                raise e
+                raise
 
             except Exception as e:
                 stale = get_stale_cached_models(target.cache_key)
