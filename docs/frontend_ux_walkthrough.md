@@ -8,14 +8,17 @@ This document summarizes the current OpenClaw sidebar UI structure and how to ve
 - Shell: `web/openclaw_ui.js` now acts as the composition root for the sidebar shell and public singleton exports.
 - Actions: `web/openclaw_actions.js` owns submit/cancel/retry wiring and guarded action routing for the shell.
 - Queue monitor: `web/openclaw_queue_monitor.js` owns queue polling lifecycle and transient banner/status updates used by the shell.
+- Notification center: `web/openclaw_notification_center.js` owns persistent in-app notification storage, dedupe, acknowledge, dismiss, and deep-link behavior.
+- Banner runtime: `web/openclaw_banner_manager.js` owns transient banner state and shell-facing banner transitions.
 - Tabs: `web/openclaw_tabs.js` manages tab registration, rendering, and remount safety.
 - API: `web/openclaw_api.js` provides a normalized fetch wrapper and OpenClaw endpoints (legacy Moltbot endpoints still work).
 - Styles: `web/openclaw.css` provides shared design tokens and component classes.
-- Errors: `web/openclaw_utils.js` provides `showError()` / `clearError()` helpers.
+- Errors and compatibility helpers: `web/openclaw_utils.js` provides `showError()` / `clearError()` plus runtime legacy-class alias helpers used to keep canonical `openclaw-*` markup compatible with existing `moltbot-*` selectors.
 
 Refactor note:
 - `web/openclaw_ui.js` should stay focused on shell composition, shared singleton ownership, and exports.
 - New shell behaviors should prefer the extracted action/queue modules unless they truly belong to top-level shell assembly.
+- New tab markup should use canonical `openclaw-*` classes; legacy `moltbot-*` aliases are generated centrally at runtime instead of being duplicated in each template.
 
 ## Feature Gating (Capabilities)
 
@@ -35,6 +38,8 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 
 - Entry route: `GET /openclaw/admin` (legacy `GET /moltbot/admin` still works).
 - HTML shell: `web/admin_console.html`
+- Runtime app module: `web/admin_console_app.js`
+- Runtime API module: `web/admin_console_api.js`
 - Purpose: mobile-friendly standalone operations UI for non-sidebar workflows.
 - Security model:
   - The page itself is a static shell and can render without authentication.

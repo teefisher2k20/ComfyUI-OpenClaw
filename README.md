@@ -96,6 +96,18 @@ Deployment profiles and hardening checklists:
 
 <details>
 
+<summary><strong>Maintainability wave completed across routes, model operations, admin shell, and compatibility cleanup</strong></summary>
+
+- Split route registration into focused route-family registrars while keeping one startup composition root and preserving legacy `/moltbot/*` plus `/api/*` fallback behavior.
+- Split Model Manager internals into dedicated catalog, task-lifecycle, and transfer/security service slices without changing the accepted managed-download, resume, import, and recovery contract.
+- Extracted sidebar notification/banner runtime and standalone admin-console browser logic into dedicated modules so the shell stays a composition root instead of a growing page-level hotspot.
+- Centralized runtime generation of legacy `moltbot-*` class aliases and removed residual duplicated node image-helper wrappers, so canonical `openclaw-*` markup and shared image encoding logic now have one maintained path.
+- Re-validated the full batch on WSL with the full SOP gate: detect-secrets, pre-commit, backend full suites, adaptive adversarial gate, and Playwright E2E.
+
+</details>
+
+<details>
+
 <summary><strong>Slack multi-workspace installation flow completed, with final egress and notification-center hardening</strong></summary>
 
 - Added Slack multi-workspace OAuth install/callback handling with single-use state validation, workspace-scoped installation binding, encrypted token refs, and workspace-aware reply routing for inbound events and delayed result delivery.
@@ -746,6 +758,12 @@ The project now includes a standalone admin UI endpoint for mobile/remote operat
 
 This page is independent from the embedded ComfyUI side panel and is intended for phone/desktop browsers.
 
+Implementation shape:
+
+- static shell: `web/admin_console.html`
+- runtime app module: `web/admin_console_app.js`
+- runtime API client module: `web/admin_console_api.js`
+
 ### Environment variables for remote admin
 
 Recommended baseline before enabling remote administration:
@@ -821,6 +839,16 @@ See `web/docs/` for node usage notes.
 ![OpenClaw /sidebar ui example](assets/sidebar.png)
 
 The frontend lives in `web/` and is served by ComfyUI as an extension panel. It uses the backend routes below (preferring `/api/openclaw/*`).
+
+Current sidebar composition keeps `web/openclaw_ui.js` as the shell root and routes specialized browser logic through focused modules:
+
+- actions and submit/cancel wiring: `web/openclaw_actions.js`
+- queue polling and transient banners: `web/openclaw_queue_monitor.js` and `web/openclaw_banner_manager.js`
+- persistent operator notifications: `web/openclaw_notification_center.js`
+- tab registration/remount behavior: `web/openclaw_tabs.js`
+- shared error + compatibility helpers: `web/openclaw_utils.js`
+
+Canonical DOM/class ownership is now centered on `openclaw-*`; legacy `moltbot-*` class compatibility is still supported through shared runtime aliasing instead of duplicated markup in each tab template.
 
 ### Sidebar Modules
 

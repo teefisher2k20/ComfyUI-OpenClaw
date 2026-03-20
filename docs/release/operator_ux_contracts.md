@@ -49,7 +49,7 @@ interface BannerStatus {
 
 - **Monitoring**: Polls `/health` every 10s.
 - **Triggers**: Checks `stats.observability.total_dropped > 0`.
-- **Display**: Simple DOM injection of `.moltbot-banner`.
+- **Display**: Simple DOM injection of canonical `.openclaw-banner` markup; legacy `.moltbot-banner` compatibility selectors remain available through centralized runtime aliasing.
 - **Limitations**: No connectivity state handling, no 'info'/'success' states, simplistic dedupe.
 
 ## 1.1 Notification Center (F66)
@@ -85,6 +85,7 @@ interface NotificationEntry {
 - `Dismiss` hides an entry from the active list without deleting the historical record from storage.
 - `Acknowledge` clears unread state while keeping the entry visible.
 - Sources with jump targets should attach a tab/action deep link so operators can navigate directly to the affected surface.
+- Canonical `openclaw-*` DOM/class ownership should be authored once in the shell/templates; any retained `moltbot-*` class compatibility must come from shared runtime alias helpers instead of duplicated markup.
 
 ## 2. Context Actions (F51)
 
