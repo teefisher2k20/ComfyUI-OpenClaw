@@ -2,6 +2,14 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+function parsePositiveInt(value, label) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${label} must be a positive integer, got '${value}'`);
+  }
+  return parsed;
+}
+
 function isWSL() {
   return process.platform === 'linux' && !!process.env.WSL_DISTRO_NAME;
 }
@@ -64,6 +72,55 @@ function ensurePlaywrightBrowsersIfNeeded() {
 }
 
 const env = { ...process.env };
+const rawArgs = process.argv.slice(2);
+
+function hasArg(args, name) {
+  return args.some((arg) => arg === name || arg.startsWith(`${name}=`));
+}
+
+function resolveStressMode(args) {
+  return args.includes('--stress') || env.OPENCLAW_PLAYWRIGHT_STRESS === '1';
+}
+
+function resolveRepeatEach() {
+  if (!env.OPENCLAW_PLAYWRIGHT_REPEAT_EACH) {
+    return 5;
+  }
+  return parsePositiveInt(env.OPENCLAW_PLAYWRIGHT_REPEAT_EACH, 'OPENCLAW_PLAYWRIGHT_REPEAT_EACH');
+}
+
+function resolveStressWorkers() {
+  if (env.OPENCLAW_PLAYWRIGHT_STRESS_WORKERS) {
+    return parsePositiveInt(
+      env.OPENCLAW_PLAYWRIGHT_STRESS_WORKERS,
+      'OPENCLAW_PLAYWRIGHT_STRESS_WORKERS',
+    );
+  }
+  if (isWSL() && isDrvFsCwd()) {
+    return 1;
+  }
+  return 2;
+}
+
+function buildPlaywrightArgs(args) {
+  const scriptArgs = args.filter((arg) => arg !== '--stress');
+  const playwrightArgs = ['test'];
+  const stressMode = resolveStressMode(args);
+
+  if (stressMode) {
+    if (!hasArg(scriptArgs, '--repeat-each')) {
+      playwrightArgs.push('--repeat-each', String(resolveRepeatEach()));
+    }
+    if (!hasArg(scriptArgs, '--workers')) {
+      playwrightArgs.push('--workers', String(resolveStressWorkers()));
+    }
+    if (!hasArg(scriptArgs, '--reporter')) {
+      playwrightArgs.push('--reporter', env.OPENCLAW_PLAYWRIGHT_STRESS_REPORTER || 'line');
+    }
+  }
+
+  return [...playwrightArgs, ...scriptArgs];
+}
 
 if (isWSL() && isDrvFsCwd()) {
   const tmpDir = path.join(process.cwd(), '.tmp', 'playwright');
@@ -75,7 +132,7 @@ if (isWSL() && isDrvFsCwd()) {
 
 ensurePlaywrightBrowsersIfNeeded();
 
-let res = runPlaywright(['test'], { label: 'Playwright' });
+let res = runPlaywright(buildPlaywrightArgs(rawArgs), { label: 'Playwright' });
 if (res.error) {
   console.error('[OpenClaw] Failed to run Playwright:', res.error);
   process.exit(1);

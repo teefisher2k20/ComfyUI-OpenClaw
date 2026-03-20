@@ -63,6 +63,29 @@ TMPDIR=.tmp/playwright TMP=.tmp/playwright TEMP=.tmp/playwright \
   PATH=".tmp/bin:$PATH" npm test
 ```
 
+### 2.3 Optional flake-stress mode
+
+Use this when you need to amplify timing-sensitive Playwright failures locally without changing the default `npm test` path.
+
+- Targeted stress run:
+
+```bash
+npm run test:stress -- tests/e2e/specs/notifications.spec.js
+```
+
+- Override repeat count / workers:
+
+```bash
+OPENCLAW_PLAYWRIGHT_REPEAT_EACH=8 \
+OPENCLAW_PLAYWRIGHT_STRESS_WORKERS=2 \
+  npm run test:stress -- tests/e2e/specs/notifications.spec.js
+```
+
+Notes:
+- `npm test` remains the default deterministic acceptance path.
+- `npm run test:stress` is optional and intended for flake hunting or CI-race investigation.
+- The repo-local runner now forwards passthrough Playwright args, so `npm test -- <spec>` and `npm run test:stress -- <spec>` both target specific specs.
+
 ## 3. Test Harness Behavior
 
 `tests/e2e/test-harness.html`:
