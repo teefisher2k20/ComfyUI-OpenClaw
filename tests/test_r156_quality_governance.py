@@ -5,7 +5,6 @@ import textwrap
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "verify_quality_governance.py"
 

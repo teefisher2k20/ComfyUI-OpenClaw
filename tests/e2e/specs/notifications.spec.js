@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { clickTab, mockComfyUiCore, waitForOpenClawReady } from "../utils/helpers.js";
 
+const NOTIFICATION_STORAGE_KEY = "openclaw_notifications";
+
 function normalizeApiPath(pathname) {
   const stripped = pathname.startsWith("/api/") ? pathname.slice(4) : pathname;
   return stripped.replace(/\/+$/, "");
@@ -10,6 +12,39 @@ function isPath(pathname, suffix) {
   const normalizedSuffix = String(suffix || "").replace(/\/+$/, "");
   const path = normalizeApiPath(pathname);
   return path === `/openclaw${normalizedSuffix}` || path === `/moltbot${normalizedSuffix}`;
+}
+
+function isApiCandidatePath(pathname, suffix) {
+  const normalized = normalizeApiPath(pathname);
+  return isPath(normalized, suffix);
+}
+
+function modelManagerRoutePattern(suffix) {
+  const normalizedSuffix = String(suffix || "").replace(/\/+$/, "");
+  return new RegExp(`/(?:api/)?(?:openclaw|moltbot)${normalizedSuffix.replace(/\//g, "\\/")}(?:\\?.*)?$`);
+}
+
+async function readNotificationEntries(page) {
+  return page.evaluate((storageKey) => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }, NOTIFICATION_STORAGE_KEY);
+}
+
+async function getMatchingNotification(page, options = {}) {
+  const { dedupeKey, message, includeDismissed = true } = options;
+  const entries = await readNotificationEntries(page);
+  return entries.find((entry) => {
+    if (!entry || typeof entry !== "object") return false;
+    if (dedupeKey && entry.dedupe_key !== dedupeKey) return false;
+    if (message && entry.message !== message) return false;
+    if (!includeDismissed && entry.dismissed_at) return false;
+    return true;
+  }) || null;
 }
 
 test.describe("Notification Center", () => {
@@ -28,12 +63,20 @@ test.describe("Notification Center", () => {
 
     await mockComfyUiCore(page);
 
-    await page.route("**/models/search**", async (route) => {
-      const url = new URL(route.request().url());
-      if (!isPath(url.pathname, "/models/search")) {
-        await route.fallback();
-        return;
+    const unexpectedSearchResponses = [];
+    page.on("response", async (response) => {
+      try {
+        const url = new URL(response.url());
+        if (!isApiCandidatePath(url.pathname, "/models/search")) return;
+        if (response.status() >= 400 && response.status() !== 503) {
+          unexpectedSearchResponses.push(`${response.status()} ${url.pathname}${url.search}`);
+        }
+      } catch {
+        // Ignore malformed URLs emitted by the browser tooling layer.
       }
+    });
+
+    await page.route(modelManagerRoutePattern("/models/search"), async (route) => {
       await route.fulfill({
         status: 503,
         contentType: "application/json",
@@ -49,12 +92,7 @@ test.describe("Notification Center", () => {
       filters: {},
     });
 
-    await page.route("**/models/downloads**", async (route) => {
-      const url = new URL(route.request().url());
-      if (!isPath(url.pathname, "/models/downloads")) {
-        await route.fallback();
-        return;
-      }
+    await page.route(modelManagerRoutePattern("/models/downloads"), async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -62,12 +100,7 @@ test.describe("Notification Center", () => {
       });
     });
 
-    await page.route("**/models/installations**", async (route) => {
-      const url = new URL(route.request().url());
-      if (!isPath(url.pathname, "/models/installations")) {
-        await route.fallback();
-        return;
-      }
+    await page.route(modelManagerRoutePattern("/models/installations"), async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -130,7 +163,7 @@ test.describe("Notification Center", () => {
     await page.locator("#mm-refresh-btn").click();
 
     const toggle = page.locator("#openclaw-notification-toggle");
-    await toggle.dispatchEvent("click");
+    await toggle.click();
     const targetNotification = page
       .locator("#openclaw-notification-panel .openclaw-notification-item")
       .filter({ hasText: "search: search_failed" })
@@ -140,7 +173,7 @@ test.describe("Notification Center", () => {
 
     await page.reload();
     await waitForOpenClawReady(page);
-    await page.locator("#openclaw-notification-toggle").dispatchEvent("click");
+    await page.locator("#openclaw-notification-toggle").click();
     const reloadedNotification = page
       .locator("#openclaw-notification-panel .openclaw-notification-item")
       .filter({ hasText: "search: search_failed" })
@@ -150,6 +183,35 @@ test.describe("Notification Center", () => {
     await reloadedNotification
       .getByRole("button", { name: "Dismiss notification: search: search_failed" })
       .click();
-    await expect(page.locator("#openclaw-notification-panel")).not.toContainText("search: search_failed");
+
+    await expect
+      .poll(async () => {
+        const entry = await getMatchingNotification(page, {
+          dedupeKey: "model-manager:refresh",
+          message: "search: search_failed",
+        });
+        return entry?.dismissed_at ? "dismissed" : "active";
+      }, { timeout: 15000 })
+      .toBe("dismissed");
+
+    const visibleNotifications = page
+      .locator("#openclaw-notification-panel .openclaw-notification-item")
+      .filter({ hasText: "search: search_failed" });
+    await expect(visibleNotifications).toHaveCount(0);
+
+    await page.locator("#mm-refresh-btn").click();
+    await expect(visibleNotifications).toHaveCount(0);
+
+    await expect
+      .poll(async () => {
+        const entry = await getMatchingNotification(page, {
+          dedupeKey: "model-manager:refresh",
+          message: "search: search_failed",
+        });
+        return entry?.dismissed_at ? "dismissed" : "active";
+      }, { timeout: 15000 })
+      .toBe("dismissed");
+
+    expect(unexpectedSearchResponses).toEqual([]);
   });
 });

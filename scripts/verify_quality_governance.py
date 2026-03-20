@@ -25,9 +25,7 @@ def _read_text(path: Path) -> str:
 
 
 def _extract_toml_section(text: str, header: str) -> Optional[str]:
-    pattern = re.compile(
-        rf"(?ms)^\[{re.escape(header)}\]\s*$\n(?P<body>.*?)(?=^\[|\Z)"
-    )
+    pattern = re.compile(rf"(?ms)^\[{re.escape(header)}\]\s*$\n(?P<body>.*?)(?=^\[|\Z)")
     match = pattern.search(text)
     if not match:
         return None
@@ -45,9 +43,7 @@ def _extract_float_assignment(section_text: str, key: str) -> Optional[float]:
 
 
 def _extract_bool_assignment(section_text: str, key: str) -> Optional[bool]:
-    match = re.search(
-        rf"(?m)^\s*{re.escape(key)}\s*=\s*(true|false)\s*$", section_text
-    )
+    match = re.search(rf"(?m)^\s*{re.escape(key)}\s*=\s*(true|false)\s*$", section_text)
     if not match:
         return None
     return match.group(1) == "true"
@@ -143,7 +139,9 @@ def verify_governance(
         try:
             payload = json.loads(_read_text(survivor_allowlist_path))
         except json.JSONDecodeError as exc:
-            failures.append(f"mutation governance: invalid survivor allowlist JSON: {exc}")
+            failures.append(
+                f"mutation governance: invalid survivor allowlist JSON: {exc}"
+            )
         else:
             if not isinstance(payload, dict) or not isinstance(
                 payload.get("entries", []), list
