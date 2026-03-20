@@ -9,7 +9,7 @@ ComfyUI-OpenClaw is a **security-first orchestration layer** for ComfyUI that co
 - **A standalone Remote Admin Console** (`/openclaw/admin`) for mobile/remote browser operations
 - **A secure-by-default HTTP API** for automation (webhooks, triggers, schedules, approvals, presets, rewrite recipes, model manager)
 - **Public-ready control-plane split architecture** (embedded UX + externalized high-risk control surfaces)
-- **Verification-first hardening lanes** (route drift, real-backend E2E, adversarial fuzz/mutation gates)
+- **Verification-first hardening lanes** (coverage governance, route drift, real-backend E2E, adversarial fuzz/mutation gates)
 - **Now supports 7 major messaging platforms, including Discord, Telegram, WhatsApp, LINE, WeChat, KakaoTalk, and Slack.**
 - **And more exciting features being added continuously**
 
@@ -79,6 +79,7 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 - Management queries enforce deterministic pagination normalization and bounded scans against malformed or unbounded admin/list requests
 - Retry partition hardening separates rate-limit and transport budgets with deterministic degrade decisions and lane-level diagnostics/audit evidence
 - Compatibility matrix freshness/drift governance is surfaced in Doctor with repeatable refresh evidence
+- Coverage governance is fail-closed in local and CI-parity flows, with explicit baseline checks for `fail_under`, visible missing-line reporting, skip-covered behavior, and adversarial threshold drift
 - Adversarial verification gates (bounded fuzz + mutation, adaptive smoke=>extended escalation on high-risk diffs) are enforced in CI and local full-test/pre-push workflows
 - Wave E hardening closeout includes deployment-profile gates, critical-flow parity, signed policy posture controls, bounded anomaly telemetry, adversarial fuzz validation, and mutation sensitivity checks
 - Wave A/B/C hardening closeout includes runtime/config/session stability contracts, strict outbound and supply-chain controls, and capability-aware operator guidance with bounded Parameter Lab/compare workflows
@@ -93,6 +94,18 @@ Deployment profiles and hardening checklists:
 
 
 <details><summary><h2>Latest Updates - Click to expand</h2></summary>
+
+<details>
+
+<summary><strong>Exception-fidelity cleanup and verification-governance baseline completed</strong></summary>
+
+- Preserved original traceback origins on the remaining planner/refiner/vision/config failure paths and aligned request-time default `LLMClient` refresh so runtime config hot-reload no longer mutates long-lived service state just to get a fresh client.
+- Added explicit coverage governance in `pyproject.toml`, including minimum `fail_under`, visible missing-line reporting, and skip-covered output, so baseline quality drift is no longer implicit.
+- Added a stdlib-only governance verifier that fails closed when coverage config, adversarial mutation thresholds, SOP guidance, or mutation-survivor allowlist shape drift away from the enforced baseline.
+- Wired the governance verifier into Linux/Windows full-test flows and the repo pre-push gate, keeping local CI-parity checks aligned with the enforced verification contract.
+- Re-validated the full implementation on WSL with the full SOP gate: detect-secrets, pre-commit, governance verification, backend full suites, adaptive adversarial gate, and Playwright E2E.
+
+</details>
 
 <details>
 
@@ -1541,11 +1554,21 @@ Full setup steps: see `tests/TEST_SOP.md`.
 
 ## Tests
 
-Run unit tests from the repo root:
+For the authoritative validation workflow, follow `tests/TEST_SOP.md`.
+
+Fast backend-only check from the repo root:
 
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py"
 ```
+
+Full local acceptance gate (recommended before push):
+
+```bash
+bash scripts/run_full_tests_linux.sh
+```
+
+This full gate includes detect-secrets, pre-commit, coverage governance verification, backend suites, adaptive adversarial verification, and Playwright E2E.
 
 ## Updating
 
