@@ -48,48 +48,26 @@ Optional companion process (outside the ComfyUI process):
 This project is designed to make **ComfyUI a reliable automation target** with an explicit admin boundary and hardened defaults.
 <br>
 
-## Security stance (how this project differs from convenience-first automation packs):
+<details><summary><h2>Security stance (how this project differs from convenience-first automation packs) - Click to expand</h2></summary>
 
-- Public profile requires explicit shared-surface boundary acknowledgement to reduce accidental exposure of ComfyUI-native high-risk routes behind reverse proxies
-- Public MAE route-plane posture is guaranteed by startup enforcement plus no-skip CI route-drift checks
-- Public deployments enforce Control Plane Split so high-risk controls are externalized and embedded UI stays on safer read/UX surfaces
-- Runtime profile startup hardening is fail-closed in hardened mode
-- Multi-tenant boundary model rejects cross-tenant mismatches fail-closed and keeps tenant-scoped isolation across config, secret sources, connector installations, approvals, presets/templates visibility, and execution concurrency budgets, with explicit compatibility fallback controls
-- Operator-facing outputs redact provider reasoning/thinking traces by default across assist, events, traces, callbacks, and connector replies; privileged local-debug reveal is explicit, loopback/admin-gated, auditable, and fail-closed outside permissive local posture
-- Connector ingress is fail-closed in public/hardened posture when platform allowlists are missing, with synchronized startup gate, deployment-profile check, Security Doctor posture, and startup audit visibility
-- Admin write actions are protected by an explicit **Admin Token** boundary
-- Webhook ingress is **deny-by-default** until authentication is configured
-- Encrypted webhook ingress is **fail-closed** on signature/decrypt/app-id validation failures
-- Bridge worker ingress enforces device token auth, scope checks, and idempotency handling
-- Outbound SSRF policy is strict for callbacks and custom LLM base URLs
-- External tool sandboxing is fail-closed with filesystem path guards
-- Secrets are never stored in browser storage; optional server-side key store remains local-only convenience
-- Secrets-at-rest encryption depends on cryptography; WeChat AES ingress stays optional via `pycryptodomex`
-- Optional local secret-manager integration supports 1Password CLI with explicit enable + command allowlist fail-closed controls while keeping frontend surfaces secret-blind
-- Cryptographic lifecycle drills emit machine-readable evidence for rotate/revoke/key-loss/token-compromise fail-closed exercises
-- Layered config resolution is deterministic (`env > runtime override > persisted > default`) with compatibility aliases preserved, reducing config drift/misrouting risk across API/node/runtime paths
-- Module capability gates prevent disabled modules from registering routes/workers
-- Endpoint inventory metadata plus route-drift tests catch unclassified API exposure regressions
-- Pack lifecycle file paths and pack API file inputs are root-bounded and traversal-validated
-- Sensitive write/admin paths use tamper-evident, append-only audit trails
-- Replay risk is reduced with deterministic dedupe keys for payloads without message IDs
-- Localhost-first defaults remain in place; remote access is explicit opt-in
-- Localhost no-origin CSRF override posture is surfaced in startup logs, Security Doctor, and audit visibility
-- Runtime guardrails are runtime-only, with diagnostics, clamping, and reject-on-persist behavior for safety-critical limits
-- Management queries enforce deterministic pagination normalization and bounded scans against malformed or unbounded admin/list requests
-- Retry partition hardening separates rate-limit and transport budgets with deterministic degrade decisions and lane-level diagnostics/audit evidence
-- Compatibility matrix freshness/drift governance is surfaced in Doctor with repeatable refresh evidence
-- Coverage governance is fail-closed in local and CI-parity flows, with explicit baseline checks for `fail_under`, visible missing-line reporting, skip-covered behavior, and adversarial threshold drift
-- Adversarial verification gates (bounded fuzz + mutation, adaptive smoke=>extended escalation on high-risk diffs) are enforced in CI and local full-test/pre-push workflows
-- Wave E hardening closeout includes deployment-profile gates, critical-flow parity, signed policy posture controls, bounded anomaly telemetry, adversarial fuzz validation, and mutation sensitivity checks
-- Wave A/B/C hardening closeout includes runtime/config/session stability contracts, strict outbound and supply-chain controls, and capability-aware operator guidance with bounded Parameter Lab/compare workflows
+- Public and hardened deployment postures are fail-closed by design: shared-surface acknowledgement, startup gates, route-plane governance, and control-plane split all aim to reduce accidental exposure.
+- Admin writes, webhook ingress, and bridge worker paths are protected as explicit trust boundaries rather than convenience-only localhost helpers.
+- Connector ingress keeps allowlist and policy checks as first-class controls, with degraded/public posture handled deliberately instead of silently widening access.
+- Outbound egress is constrained: callback delivery and custom LLM base URLs stay behind SSRF-safe validation, exact-host policy, and explicit insecure overrides.
+- Secret handling stays server-side: browser storage is not used for secrets, local secret-manager integration is opt-in, and secrets-at-rest / token lifecycle controls are treated as operational boundaries.
+- Multi-tenant mode is isolation-first: tenant mismatches fail closed across config, secret sources, connector installations, approvals, visibility, and execution budgets.
+- Operator-facing payloads default to redaction for provider reasoning-like content, while audit trails, diagnostics, and runtime guardrails remain explicit and tamper-evident.
+- Verification is part of the security model: route drift checks, coverage governance, adversarial gates, and doctor/compatibility diagnostics are all wired into CI-parity workflows.
 
-Deployment profiles and hardening checklists:
-- [Security Deployment Guide](docs/security_deployment_guide.md) (local / LAN / public templates + self-check command)
-- [Security Key/Token Lifecycle SOP](docs/security_key_lifecycle_sop.md) (trust-root, secrets key, and bridge token rotation/revocation/disaster recovery)
-- [Security Checklist](docs/security_checklist.md) (pre-exposure operational checklist for connector and ingress boundaries)
-- [Runtime Hardening and Startup](docs/runtime_hardening_and_startup.md) (runtime profile, startup gate, and hardened baseline behaviors)
-- [R69 Frontend Migration Decision](docs/r69_ui_framework_migration_decision.md) (framework migration feasibility matrix and no-migration decision record)
+Deployment profiles and hardening references:
+- [Security Deployment Guide](docs/security_deployment_guide.md)
+- [Security Key/Token Lifecycle SOP](docs/security_key_lifecycle_sop.md)
+- [Security Checklist](docs/security_checklist.md)
+- [Runtime Hardening and Startup](docs/runtime_hardening_and_startup.md)
+- [Threat Model](docs/release/threat_model.md)
+- [R69 Frontend Migration Decision](docs/r69_ui_framework_migration_decision.md)
+
+</details>
 
 
 
@@ -659,27 +637,10 @@ Deployment profiles and hardening checklists:
 - [Operator UX Features](#operator-ux-features)
   - [Notification Center](#notification-center)
 - [API Overview](#api-overview)
-  - [Observability](#observability-read-only)
-  - [LLM config](#llm-config-non-secret)
-  - [Connector installation diagnostics](#connector-installation-diagnostics-admin)
-  - [Webhooks](#webhooks)
-  - [Triggers + approvals](#triggers--approvals-admin)
-  - [Schedules](#schedules-admin)
-  - [Presets](#presets-admin)
-  - [Rewrite recipes](#rewrite-recipes-admin-f53)
-  - [Model manager](#model-manager-admin-f54)
-  - [Packs](#packs-admin)
-  - [Bridge](#bridge-sidecar-optional)
 - [Templates](#templates)
 - [Execution Budgets](#execution-budgets)
 - [LLM Failover](#llm-failover)
 - [Advanced Security and Runtime Setup](#advanced-security-and-runtime-setup)
-  - [Runtime hardening and startup gates](#runtime-hardening-and-startup-gates)
-  - [Multi-tenant boundary mode](#multi-tenant-boundary-mode)
-  - [Optional local secret-manager (1Password CLI)](#optional-local-secret-manager-1password-cli)
-  - [Config-layer precedence contract](#config-layer-precedence-contract)
-  - [Remote registry sync and constrained transforms](#remote-registry-sync-and-constrained-transforms)
-  - [Connector command authorization policy](#connector-command-authorization-policy)
 - [State Directory & Logs](#state-directory--logs)
 - [Troubleshooting](#troubleshooting)
 - [Tests](#tests)
@@ -951,429 +912,67 @@ Operator actions are wired for faster recovery loops:
 
 ## API Overview
 
-### Base paths
+This README now keeps only the high-level API map. Detailed route shapes, auth contracts, examples, and release-facing behavior live in `docs/`.
 
-Routes are registered to support both:
+Base path notes:
 
-- New prefix: `/openclaw/*`
-- Legacy prefix: `/moltbot/*`
+- primary prefix: `/openclaw/*`
+- legacy prefix: `/moltbot/*`
+- browser/extension callers should prefer `/api/openclaw/*`
+- standalone admin UI entry: `GET /openclaw/admin`
 
-And both:
+Main API families:
 
-- Direct: `/openclaw/...`
-- ComfyUI API shim: `/api/openclaw/...`
+- Observability: health, capabilities, logs, traces, event feeds
+- Config + LLM: effective config, provider tests, model lists, assist planner/refiner
+- Connector installation diagnostics: installation state, resolution, audit views
+- Webhooks + events: validate, submit, callback delivery, SSE/polling status
+- Admin operations: approvals, schedules, presets, rewrite recipes
+- Model Manager + Packs: search, download/import lifecycle, pack import/export
+- Bridge / sidecar: worker poll/result/heartbeat and bridge health/submit routes
 
-Use `/api/...` from browsers and extension JS.
+Primary references:
 
-Machine-readable API spec:
-
-- Generated OpenAPI spec: `docs/openapi.yaml` (derived from `docs/release/api_contract.md`; regenerate with `python scripts/generate_openapi_spec.py`)
-- UI entry route: `GET /openclaw/admin` (legacy `GET /moltbot/admin`) serves the standalone remote admin console HTML shell; backend write actions still enforce admin-token and remote-admin policy.
-
-### Observability (read-only)
-
-- `GET /openclaw/health` -pack status, key presence, and basic metrics
-- `GET /openclaw/logs/tail?n=50` - log tail (supports `trace_id` / `prompt_id` filters)
-- `GET /openclaw/trace/{prompt_id}` -trace timeline (redacted)
-- `GET /openclaw/capabilities` -feature/capability probe for frontend compatibility
-  - includes feature flags such as `assist_planner`, `assist_refiner`, and optional `assist_streaming` (when incremental assist preview is available)
-- `GET /openclaw/jobs` -currently a stub (returns an empty list)
-
-Access control:
-
-- loopback is allowed
-- remote access requires `OPENCLAW_OBSERVABILITY_TOKEN` via `X-OpenClaw-Obs-Token`
-- trace/events payloads redact provider reasoning/thinking-like content by default; do not treat them as stable client-facing fields
-- privileged debug reveal is opt-in via `X-OpenClaw-Debug-Reveal-Reasoning: 1` or `?debug_reasoning=1`, and only becomes effective when server-side debug enablement, admin auth, loopback source, and permissive local posture all pass
-
-### LLM config (non-secret)
-
-- `GET /openclaw/config` -effective config + sources + provider catalog (observability-protected)
-- `PUT /openclaw/config` -update non-secret config (admin boundary)
-- `POST /openclaw/llm/test` -test connectivity (admin boundary)
-- `POST /openclaw/llm/chat` -connector chat completion path (admin boundary)
-- `GET /openclaw/llm/models` -fetch model list for selected provider/base URL
-- `POST /openclaw/assist/planner` -planner structured prompt generation (admin boundary)
-- `GET /openclaw/assist/planner/profiles` -active planner profile registry metadata for node/UI alignment
-- `POST /openclaw/assist/refiner` -prompt refinement with optional image context (admin boundary)
-- `POST /openclaw/assist/planner/stream` -optional SSE-style planner streaming path (`text/event-stream`, admin boundary)
-- `POST /openclaw/assist/refiner/stream` -optional SSE-style refiner streaming path (`text/event-stream`, admin boundary)
-
-Notes:
-
-- Queue submission uses `OPENCLAW_COMFYUI_URL` (default `http://127.0.0.1:8188`).
-- Planner/Refiner UI uses capability-gated assist streaming when available and falls back to the non-stream endpoints automatically.
-- Assist endpoints preserve final user-visible answer fields while redacting provider reasoning/thinking-like content by default; privileged reveal, when allowed, is appended only as debug data and must not be treated as a normal client contract.
-- Planner profiles/system prompt are file-backed:
-  - package defaults: `data/planner/profiles.json`, `data/planner/system_prompt.txt`
-  - operator overrides: `<OPENCLAW_STATE_DIR>/planner/profiles.json`, `<OPENCLAW_STATE_DIR>/planner/system_prompt.txt`
-  - invalid overrides fail closed to validated lower-precedence defaults
-- `PUT /openclaw/config` now returns apply metadata so callers can reason about what actually took effect:
-  - `apply.ok`, `apply.requires_restart`, `apply.applied_keys`
-  - `apply.effective_provider`, `apply.effective_model`
-- Provider/model precedence is strict:
-  - explicit request values > persisted config > provider defaults
-  - model is revalidated against provider when provider changes (prevents cross-provider contamination)
-- `POST /openclaw/llm/chat` in localhost convenience mode (no admin token configured):
-  - allows same-origin loopback requests
-  - denies cross-origin requests with CSRF error
-  - if `OPENCLAW_LOCALHOST_ALLOW_NO_ORIGIN=true`, requests missing `Origin` / `Sec-Fetch-Site` are allowed for local tooling compatibility; this posture is explicitly surfaced in startup logs, Security Doctor, and audit events
-- `/openclaw/llm/models` cache behavior:
-  - key: `(provider, base_url)`
-  - TTL: 5 minutes
-  - capacity: 16 entries (LRU eviction)
-- Custom `base_url` is protected by SSRF policy:
-  - built-in provider hosts are allowlisted by default
-  - `OPENCLAW_ALLOW_CUSTOM_BASE_URL=1` is required before custom `base_url` changes are accepted
-  - allow additional exact public hosts via `OPENCLAW_LLM_ALLOWED_HOSTS=host1,host2`
-  - or opt in to any public host via `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1`
-  - private/reserved IPs are still blocked even when present in `OPENCLAW_LLM_ALLOWED_HOSTS`
-  - `OPENCLAW_ALLOW_INSECURE_BASE_URL=1` is the explicit risk-acceptance override for HTTP or private/reserved IP targets (not recommended)
-  - wildcard entries such as `OPENCLAW_LLM_ALLOWED_HOSTS=*` are not supported
-  - the same contract applies at request time: `/openclaw/llm/models` refreshes and provider fetches honor the same explicit insecure override
-- Local providers (`ollama`, `lmstudio`) are loopback-only by design:
-  - valid targets: `localhost` / `127.0.0.1` / `::1`
-  - do **not** enable `OPENCLAW_ALLOW_INSECURE_BASE_URL` just to use local LLM
-  - recommended examples:
-    - Ollama: `http://127.0.0.1:11434`
-    - LM Studio: `http://localhost:1234/v1`
-
-### Connector installation diagnostics (admin)
-
-- `GET /openclaw/connector/installations` -connector multi-workspace installation diagnostics
-- `GET /openclaw/connector/installations/{installation_id}` -connector installation detail
-- `GET /openclaw/connector/installations/resolve` -workspace installation resolution diagnostics
-- `GET /openclaw/connector/installations/audit` -installation lifecycle audit evidence
-
-Notes:
-
-- diagnostics are redacted and expose token references only, never raw connector tokens
-- Slack multi-workspace installs surface stable health states such as `ok`, `invalid_token`, `revoked`, `workspace_unbound`, and `degraded`
-- installation resolution is fail-closed for missing, ambiguous, revoked, or unhealthy workspace bindings
-- lifecycle updates such as token revocation/uninstall feed back into these diagnostics so operators can confirm why a workspace stopped receiving replies
-
-### Webhooks
-
-- `POST /openclaw/webhook` -authenticate + validate schema and return normalized payload (no queue submission)
-- `POST /openclaw/webhook/validate` -dry-run render (no queue submission; includes render budgets + warnings)
-- `POST /openclaw/webhook/submit` -full pipeline: auth -normalize -idempotency -render -submit to queue
-
-**Payload mapping**:
-
-- Submit arbitrary payloads (GitHub, Discord, etc.) by adding `X-Webhook-Mapping-Profile: github_push` (or `discord_message`).
-- The internal engine maps fields to the canonical schema before validation.
-
-**Job events**:
-
-- `GET /openclaw/events/stream` -SSE endpoint for real-time job lifecycle events (queued, running, completed, failed).
-- `GET /openclaw/events` -JSON polling fallback.
-- Supports `Last-Event-ID` header to resume streams without data loss.
-
-Request schema (minimal):
-
-```json
-{
-  "version": 1,
-  "template_id": "portrait_v1",
-  "profile_id": "SDXL-v1",
-  "inputs": { "requirements": "..." },
-  "job_id": "optional",
-  "trace_id": "optional",
-  "callback": { "url": "https://example.com/callback" }
-}
-```
-
-Auth headers:
-
-- Bearer: `Authorization: Bearer <token>`
-- HMAC: `X-OpenClaw-Signature: sha256=<hex>` (legacy header: `X-Moltbot-Signature`)
-  - optional replay protection: `X-OpenClaw-Timestamp` and `X-OpenClaw-Nonce` (legacy `X-Moltbot-*`)
-
-Callback allowlist:
-
-- `OPENCLAW_CALLBACK_ALLOW_HOSTS=example.com,api.example.com`
-- `OPENCLAW_CALLBACK_TIMEOUT_SEC=10`
-- `OPENCLAW_CALLBACK_MAX_RETRIES=3`
-
-Rate-limit diagnostics:
-
-- `429` responses now include stable machine-readable diagnostics for the rejected budget/cooldown decision
-- callers should expect fields such as `bucket`, `scope`, `retry_after_sec`, and `reason_code` instead of relying on free-form text parsing
-
-### Triggers + approvals (admin)
-
-- `POST /openclaw/triggers/fire` -fire a template with optional approval gate
-- `GET /openclaw/approvals`
-- `GET /openclaw/approvals/{approval_id}`
-- `POST /openclaw/approvals/{approval_id}/approve` -can auto-execute
-- `POST /openclaw/approvals/{approval_id}/reject`
-
-Admin boundary:
-
-- `OPENCLAW_ADMIN_TOKEN` via `X-OpenClaw-Admin-Token`
-- strict localhost auth is enabled by default (`OPENCLAW_STRICT_LOCALHOST_AUTH=1`)
-
-### Schedules (admin)
-
-- `GET/POST /openclaw/schedules`
-- `GET/PUT/DELETE /openclaw/schedules/{schedule_id}`
-- `POST /openclaw/schedules/{schedule_id}/toggle`
-- `POST /openclaw/schedules/{schedule_id}/run`
-- `GET /openclaw/schedules/{schedule_id}/runs`
-- `GET /openclaw/runs`
-
-### Presets (admin)
-
-- `GET /openclaw/presets` and `GET /openclaw/presets/{preset_id}`:
-  - public-read is allowed only when `OPENCLAW_PRESETS_PUBLIC_READ=1` **and** `OPENCLAW_STRICT_LOCALHOST_AUTH=0`
-  - otherwise requires admin token
-- `POST/PUT/DELETE /openclaw/presets*` always require admin token
-
-### Rewrite recipes (admin, F53)
-
-- `GET /openclaw/rewrite/recipes`
-- `POST /openclaw/rewrite/recipes`
-- `GET/PUT/DELETE /openclaw/rewrite/recipes/{recipe_id}`
-- `POST /openclaw/rewrite/recipes/{recipe_id}/dry-run`:
-  - returns structured `diff` + preview render metadata
-  - does not mutate upstream workflow state
-- `POST /openclaw/rewrite/recipes/{recipe_id}/apply`:
-  - requires `confirm=true` (guarded apply)
-  - returns `rollback_snapshot` on validation failure
-
-Recipe object (minimal example):
-
-```json
-{
-  "name": "rewrite prompt + params",
-  "prompt_template": "cinematic {{topic}}",
-  "tags": ["prompt", "safe-defaults"],
-  "constraints": {
-    "required_inputs": ["topic"],
-    "allowed_inputs": ["topic", "steps", "width", "height", "cfg"],
-    "max_string_length": 2048
-  },
-  "operations": [
-    { "path": "/1/inputs/text", "value": "{{rewrite_prompt}}" },
-    { "path": "/1/inputs/steps", "value": "{{steps}}" }
-  ]
-}
-```
-
-Notes:
-
-- `operations[].path` uses RFC6901 JSON pointer format and only rewrites existing paths.
-- Templating placeholders use `{{key}}` from `inputs` (or `rewrite_prompt` when `prompt_template` is set).
-- Safety inheritance: common generation fields (`width`, `height`, `steps`, `cfg`) are clamped through existing `S3` bounds before apply.
-
-Dry-run request example:
-
-```bash
-curl -X POST "http://127.0.0.1:8188/openclaw/rewrite/recipes/<recipe_id>/dry-run" \
-  -H "Content-Type: application/json" \
-  -H "X-OpenClaw-Admin-Token: <admin_token>" \
-  -d '{
-    "workflow": {
-      "1": { "inputs": { "text": "old prompt", "steps": 20 } }
-    },
-    "inputs": { "topic": "portrait photo", "steps": 30 }
-  }'
-```
-
-Dry-run response shape:
-
-```json
-{
-  "ok": true,
-  "recipe_id": "<recipe_id>",
-  "workflow": { "...": "rendered workflow preview" },
-  "diff": [
-    {
-      "path": "/1/inputs/text",
-      "change": "modified",
-      "before": "old prompt",
-      "after": "cinematic portrait photo"
-    }
-  ],
-  "render": {
-    "workflow_bytes": 1234,
-    "node_count_estimate": 1,
-    "diff_entries": 2
-  }
-}
-```
-
-Guarded apply example:
-
-```bash
-curl -X POST "http://127.0.0.1:8188/openclaw/rewrite/recipes/<recipe_id>/apply" \
-  -H "Content-Type: application/json" \
-  -H "X-OpenClaw-Admin-Token: <admin_token>" \
-  -d '{
-    "workflow": {
-      "1": { "inputs": { "text": "old prompt", "steps": 20 } }
-    },
-    "inputs": { "topic": "portrait photo", "steps": 30 },
-    "confirm": true
-  }'
-```
-
-Error contract highlights:
-
-- Missing confirmation:
-  - `error: "apply_requires_confirm"`
-  - includes `rollback_snapshot` with original workflow
-- Validation failure:
-  - `error: "validation_error"` (deterministic detail message)
-  - includes `rollback_snapshot`
-- Render budget failure:
-  - `error: "budget_exceeded"` (dry-run/apply validation path)
-
-### Model manager (admin, F54)
-
-- Search:
-  - `GET /openclaw/models/search`
-  - deterministic filters: `q`, `source`, `model_type`, `installed`, `limit`, `offset`
-  - returns normalized metadata (`id`, `name`, `model_type`, `source`, `source_label`, install status, provenance/hash fields)
-- Download task lifecycle:
-  - `POST /openclaw/models/downloads`
-  - `GET /openclaw/models/downloads`
-  - `GET /openclaw/models/downloads/{task_id}`
-  - `POST /openclaw/models/downloads/{task_id}/cancel`
-  - states: `queued`, `running`, `completed`, `failed`, `cancelled`
-  - resumable behavior (`F65`): partial `.part` downloads use checkpoint metadata for HTTP Range continuation when upstream supports it; incompatible resume preconditions deterministically fallback to full restart
-  - task payload includes resume/recovery observability fields: `resume_status`, `recovery_attempts`, `last_checkpoint_at`
-  - progress/cancel/result states are also emitted through existing events endpoints (`/openclaw/events`, `/openclaw/events/stream`)
-- Activation/import:
-  - `POST /openclaw/models/import`
-  - `GET /openclaw/models/installations`
-
-Security gates:
-
-- Download URL must pass S4 outbound policy (`validate_outbound_url`) and configured host policy.
-- Managed downloads are disabled until one of the following is configured:
-  - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_HOSTS=host1,host2`
-  - `OPENCLAW_MODEL_DOWNLOAD_ALLOW_ANY_PUBLIC=1`
-- Startup replay of non-terminal download tasks is bounded by:
-  - `OPENCLAW_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT` (legacy alias: `MOLTBOT_MODEL_DOWNLOAD_RECOVERY_REPLAY_LIMIT`)
-- Import/activation fails closed unless provenance (`publisher`, `license`, `source_url`) and expected SHA256 verification pass.
-- Destination path is root-bounded before file placement; set install root with `OPENCLAW_MODEL_INSTALL_ROOT` when needed.
-
-### Packs (admin)
-
-- `GET /openclaw/packs`
-- `POST /openclaw/packs/import` (multipart upload)
-- `GET /openclaw/packs/export/{name}/{version}`
-- `DELETE /openclaw/packs/{name}/{version}`
-
-Packs are **versioned zip bundles** (templates/presets/profiles) with an integrity manifest (file hashes).
-Import/export is designed to be **reproducible** and hardened against common archive attacks (path traversal, zip bombs).
+- [API contract](docs/release/api_contract.md)
+- [Config and secrets contract](docs/release/config_secrets_contract.md)
+- [Connector guide](docs/connector.md)
+- [Sidecar guide](docs/sidecar.md)
+- [OpenAPI spec](docs/openapi.yaml)
 
 Operational notes:
 
-- Packs are **local-only by default** (no auto-download).
-- Packs management requires the Admin Token boundary (or localhost-only convenience mode).
-- UI: `OpenClaw` panel -> `Packs` tab.
-- Verification: `python -m unittest tests.test_packs_integrity -v`
-
-### Bridge (sidecar; optional)
-
-Sidecar bridge routes are registered under `/openclaw/bridge/*` and `/moltbot/bridge/*`.
-This repository provides both bridge API routes and a sidecar worker runtime path.
-
-Bridge route groups:
-
-- Core bridge routes:
-  - `GET /bridge/health`
-  - `POST /bridge/submit`
-  - `POST /bridge/deliver`
-  - `POST /bridge/handshake` (protocol compatibility check during sidecar startup)
-- Worker bridge routes:
-  - `GET /bridge/worker/poll`
-  - `POST /bridge/worker/result/{job_id}`
-  - `POST /bridge/worker/heartbeat`
-
-Enablement and auth (device token model):
-
-- `OPENCLAW_BRIDGE_ENABLED=1`
-- `OPENCLAW_BRIDGE_DEVICE_TOKEN=...`
-- optional allowlist: `OPENCLAW_BRIDGE_ALLOWED_DEVICE_IDS=dev1,dev2`
-
-Callback delivery allowlist (sidecar HTTP adapter):
-
-- `OPENCLAW_BRIDGE_CALLBACK_HOST_ALLOWLIST=example.com`
-
-Standalone worker runtime:
-
-- Entrypoint: `python scripts/start_sidecar.py`
-- Required:
-  - `OPENCLAW_BRIDGE_URL`
-  - `OPENCLAW_WORKER_TOKEN`
-- Optional:
-  - `OPENCLAW_WORKER_ID`
-- Current implementation note:
-  - worker queue/result/heartbeat persistence is in-memory (MVP); use persistent backing for production durability.
+- Observability remains token-gated for remote access and redacts provider reasoning-like content by default.
+- Config/assist/model-management paths inherit the unified config precedence contract and SSRF-safe outbound policy.
+- Connector installation diagnostics expose redacted token references only, never raw token material.
+- Webhook and rate-limit error paths expose machine-readable diagnostics; client integrations should consume codes and structured fields instead of free-form text.
 
 ## Advanced Security and Runtime Setup
 
-### Runtime hardening and startup gates
+Use this section as a pointer map rather than a second full deployment manual.
 
-- Runtime profile resolution, startup security enforcement, module startup boundaries, and bridge protocol compatibility are documented in:
-  - `docs/runtime_hardening_and_startup.md`
-- Key settings:
-  - `OPENCLAW_RUNTIME_PROFILE` (`minimal` or `hardened`)
-  - `OPENCLAW_BRIDGE_ENABLED`
-  - `OPENCLAW_BRIDGE_DEVICE_TOKEN`, `OPENCLAW_BRIDGE_ALLOWED_DEVICE_IDS`
+Primary references:
 
-### Multi-tenant boundary mode
+- [Runtime hardening and startup](docs/runtime_hardening_and_startup.md)
+- [Security deployment guide](docs/security_deployment_guide.md)
+- [Security checklist](docs/security_checklist.md)
+- [Config surface ADR](docs/adr/ADR-0001-config-surface-unification.md)
+- [Config and secrets contract](docs/release/config_secrets_contract.md)
+- [Advanced registry and transforms](docs/advanced_registry_and_transforms.md)
+- [Connector guide](docs/connector.md)
 
-- Optional multi-tenant mode is controlled by:
-  - `OPENCLAW_MULTI_TENANT_ENABLED=1`
-  - `OPENCLAW_TENANT_HEADER` (default: `X-OpenClaw-Tenant-Id`)
-- Fail-closed boundary behavior in multi-tenant mode:
-  - token/header mismatch is rejected (`tenant_mismatch`)
-  - connector installation resolution rejects cross-tenant matches (`tenant_mismatch`)
-- Current API/admin compatibility behavior:
-  - request handlers default missing tenant context to `default` tenant unless a stricter caller path is used
-- Compatibility fallbacks are explicit opt-in only:
-  - `OPENCLAW_MULTI_TENANT_ALLOW_DEFAULT_FALLBACK=1`
-  - `OPENCLAW_MULTI_TENANT_ALLOW_CONFIG_FALLBACK=1`
-  - `OPENCLAW_MULTI_TENANT_ALLOW_LEGACY_SECRET_FALLBACK=1`
+The most important knobs in this area are:
 
-### Optional local secret-manager (1Password CLI)
+- runtime posture: `OPENCLAW_RUNTIME_PROFILE`
+- multi-tenant boundary: `OPENCLAW_MULTI_TENANT_ENABLED`, `OPENCLAW_TENANT_HEADER`
+- local secret-manager path: `OPENCLAW_1PASSWORD_ENABLED`, `OPENCLAW_1PASSWORD_ALLOWED_COMMANDS`, `OPENCLAW_1PASSWORD_VAULT`
+- registry / transform controls: `OPENCLAW_ENABLE_REGISTRY_SYNC`, `OPENCLAW_REGISTRY_POLICY`, `OPENCLAW_ENABLE_TRANSFORMS`
+- connector authorization: `OPENCLAW_COMMAND_OVERRIDES`, `OPENCLAW_COMMAND_ALLOW_FROM_PUBLIC`, `OPENCLAW_COMMAND_ALLOW_FROM_RUN`, `OPENCLAW_COMMAND_ALLOW_FROM_ADMIN`
 
-- Optional backend secret chain:
-  - `env -> optional 1Password CLI -> encrypted server store -> none`
-- 1Password path is disabled by default and requires explicit guardrails:
-  - `OPENCLAW_1PASSWORD_ENABLED=1`
-  - `OPENCLAW_1PASSWORD_ALLOWED_COMMANDS=op`
-  - `OPENCLAW_1PASSWORD_VAULT=<vault>`
-- In multi-tenant mode, `OPENCLAW_1PASSWORD_ITEM_TEMPLATE` must include both `{tenant}` and `{provider}` or resolution fails closed.
+Config precedence remains:
 
-### Config-layer precedence contract
+- `env > runtime override > persisted config > default`
 
-- Effective configuration now resolves through one shared layered contract:
-  - `env > runtime override > persisted config > default`
-- Runtime aliases remain compatible (`OPENCLAW_*` preferred, `MOLTBOT_*` fallback), and precedence behavior is aligned across config API, provider key resolution, and runtime LLM client calls.
-- Full details: `docs/adr/ADR-0001-config-surface-unification.md` and `docs/release/config_secrets_contract.md`
-
-### Remote registry sync and constrained transforms
-
-- Optional remote registry sync and constrained transform execution are documented in:
-  - `docs/advanced_registry_and_transforms.md`
-- Key settings:
-  - `OPENCLAW_ENABLE_REGISTRY_SYNC`, `OPENCLAW_REGISTRY_POLICY`
-  - `OPENCLAW_ENABLE_TRANSFORMS`, `OPENCLAW_TRANSFORM_*`
-
-### Connector command authorization policy
-
-- Connector command authorization and allow-from policies are documented in:
-  - `docs/connector.md#command-authorization-policy`
-- Key settings:
-  - `OPENCLAW_COMMAND_OVERRIDES`
-  - `OPENCLAW_COMMAND_ALLOW_FROM_PUBLIC`
-  - `OPENCLAW_COMMAND_ALLOW_FROM_RUN`
-  - `OPENCLAW_COMMAND_ALLOW_FROM_ADMIN`
+Legacy `MOLTBOT_*` aliases still exist for compatibility, but `OPENCLAW_*` is the supported canonical surface.
 
 ## Templates
 
@@ -1457,100 +1056,18 @@ Logs:
 
 ## Troubleshooting
 
-### UI shows Backend Not Loaded / endpoints return 404
+Common operator issues now live in a dedicated troubleshooting guide:
 
-This means ComfyUI did not load the Python part of the pack or route registration failed.
+- [Troubleshooting guide](docs/troubleshooting.md)
 
-Steps:
+Quick jumps:
 
-1. Check ComfyUI startup logs for import errors while loading the custom node pack (search for `openclaw`, `Route registration failed`, `ModuleNotFoundError`).
-2. Confirm the pack folder is directly under `custom_nodes/` and contains `__init__.py`.
-3. Run the smoke import check inside the same Python environment ComfyUI uses:
-
-   ```bash
-   python scripts/openclaw_smoke_import.py
-   # or
-   python scripts/openclaw_smoke_import.py --verbose
-   ```
-
-4. Manually verify the endpoints used by the Settings tab:
-
-   - `GET /api/openclaw/health`
-   - `GET /api/openclaw/config`
-   - `GET /api/openclaw/logs/tail?n=50`
-
-Notes:
-
-- If your pack folder name is not `comfyui-openclaw`, the smoke script may need `OPENCLAW_PACK_IMPORT_NAME=your-folder-name`.
-- If imports fail with a `services.*` module error, check for name collisions with other custom nodes and prefer package-relative imports.
-
-### Operator Doctor
-
-Run the built-in diagnostic tool to verify environment readiness (libraries, permissions, contract files):
-
-```bash
-python scripts/operator_doctor.py
-# Or check JSON output:
-python scripts/operator_doctor.py --json
-```
-
-### Webhooks return `403 auth_not_configured`
-
-Set webhook auth env vars (see Quick Start) and restart ComfyUI.
-
-### LLM model list shows `HTTP 403 ... Private/reserved IP blocked: 127.0.0.1`
-
-This error usually means your OpenClaw version is older than the local-loopback SSRF fix.
-For local providers, `127.0.0.1` and `localhost` are valid targets and do not require insecure SSRF flags.
-
-Checklist:
-
-1. Update OpenClaw to the latest release.
-2. For Ollama:
-   - run `ollama serve`
-   - verify `http://127.0.0.1:11434/api/tags` is reachable on the same machine
-3. In OpenClaw Settings:
-   - Provider: `Ollama (Local)` or `LM Studio (Local)`
-   - Base URL: leave empty (use provider default) or set loopback URL explicitly
-4. Keep these flags disabled:
-   - `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0`
-   - `OPENCLAW_ALLOW_INSECURE_BASE_URL=0`
-
-### Remote Admin can open, but custom LLM on `192.168.x.x` is still blocked
-
-This is expected under the current SSRF design.
-
-- `OPENCLAW_ALLOW_REMOTE_ADMIN=1` only allows remote admin access; it does not relax outbound LLM egress rules.
-- `OPENCLAW_LLM_ALLOWED_HOSTS` only extends the exact-host allowlist for custom public hosts.
-- Private/reserved IP targets such as `192.168.x.x`, `10.x.x.x`, and `172.16.x.x` remain blocked unless `OPENCLAW_ALLOW_INSECURE_BASE_URL=1` is also set.
-- `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1` does not allow private/reserved IPs.
-- `OPENCLAW_LLM_ALLOWED_HOSTS=*` is not a wildcard and will not bypass the policy.
-
-Correct setup flow:
-
-1. If you are using a built-in local provider (`ollama`, `lmstudio`), keep it on loopback only and use the provider default or `localhost` / `127.0.0.1` / `::1`.
-2. If you need a custom public LLM host, set:
-   - `OPENCLAW_ALLOW_CUSTOM_BASE_URL=1`
-   - `OPENCLAW_LLM_ALLOWED_HOSTS=<exact-host>` or `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=1`
-3. If you intentionally need a LAN/private-IP target, set `OPENCLAW_ALLOW_INSECURE_BASE_URL=1`, accept the SSRF risk, and fully restart ComfyUI.
-4. On Windows portable, set env vars in the same launcher that starts `python_embeded\\python.exe`, or restart after `setx` / System Properties changes.
-5. Verify the effective value in the same embedded Python runtime:
-
-```bat
-python_embeded\python.exe -c "import os; print(repr(os.environ.get('OPENCLAW_LLM_ALLOWED_HOSTS')))"
-```
-
-Safer alternative:
-
-- keep the LLM behind a reviewed public HTTPS reverse proxy and allowlist that public host, instead of enabling `OPENCLAW_ALLOW_INSECURE_BASE_URL`.
-- on current builds, once that override is intentionally enabled and the process is restarted, both Remote Admin validation and `/openclaw/llm/models` should follow the same decision.
-
-### Admin Token: server-side vs UI
-
-`OPENCLAW_ADMIN_TOKEN` is a **server-side environment variable**.
-The Settings UI can **use** an Admin Token for authenticated requests, but **cannot set or persist** the server token.
-
-Full setup steps: see `tests/TEST_SOP.md`.
+- backend not loaded / route 404 startup failures
+- Operator Doctor usage
+- webhook auth not configured
+- loopback LLM SSRF validation errors
+- Remote Admin vs private-LAN LLM target behavior
+- server-side Admin Token vs UI token usage
 
 ## Tests
 
