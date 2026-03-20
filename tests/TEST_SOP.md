@@ -237,18 +237,20 @@ bash scripts/pre_push_checks.sh
 
 1) `detect-secrets`
 2) all `pre-commit` hooks
-3) backend unit tests (`scripts/run_unittests.py --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json`)
-4) backend real E2E lanes (`tests.test_r122_real_backend_lane` + `tests.test_r123_real_backend_model_list_lane`)
-5) R121 retry partition contract (`tests.test_r121_retry_partition_contract`)
-6) R118 adversarial adaptive gate (`scripts/run_adversarial_gate.py --profile auto --seed 42`)
-7) frontend E2E (`npm test`)
+3) coverage governance check (`scripts/verify_quality_governance.py`)
+4) backend unit tests (`scripts/run_unittests.py --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json`)
+5) backend real E2E lanes (`tests.test_r122_real_backend_lane` + `tests.test_r123_real_backend_model_list_lane`)
+6) R121 retry partition contract (`tests.test_r121_retry_partition_contract`)
+7) R118 adversarial adaptive gate (`scripts/run_adversarial_gate.py --profile auto --seed 42`)
+8) frontend E2E (`npm test`)
 
 IMPORTANT:
 
-- Do not remove stage (3). If pre-push skips backend unit tests, local pushes can pass while GitHub CI fails later.
-- Do not remove stage (4). If pre-push skips real-backend lanes, model-list/webhook wiring regressions can bypass local checks and fail later in CI.
-- Do not remove stage (5) or stage (6). If pre-push skips retry partition or adversarial gates, verification hardening regressions can bypass local checks and fail later in CI.
-- Do not downgrade stage (6) back to fixed smoke profile. Adaptive mode is required so high-risk diffs auto-escalate to `extended`.
+- Do not remove stage (3). If governance drift is not checked locally, coverage / mutation protections can silently weaken while the main test suite still looks green.
+- Do not remove stage (4). If pre-push skips backend unit tests, local pushes can pass while GitHub CI fails later.
+- Do not remove stage (5). If pre-push skips real-backend lanes, model-list/webhook wiring regressions can bypass local checks and fail later in CI.
+- Do not remove stage (6) or stage (7). If pre-push skips retry partition or adversarial gates, verification hardening regressions can bypass local checks and fail later in CI.
+- Do not downgrade stage (7) back to fixed smoke profile. Adaptive mode is required so high-risk diffs auto-escalate to `extended`.
 - Keep dependency bootstrap in this script aligned with `.github/workflows/ci.yml` unit-test dependencies.
 
 ## R118 Adaptive Profile + Mutation Strictness (Required)
@@ -263,6 +265,20 @@ IMPORTANT:
   - global score threshold (`>= 80%` unless explicitly overridden), and
   - strict zero-survivor on changed high-risk files.
 - Known equivalent survivors must be explicitly listed in `tests/mutation_survivor_allowlist.json`; non-allowlisted survivors fail the gate even if score threshold passes.
+
+## Coverage Governance Baseline (Required)
+
+- Coverage configuration lives in `pyproject.toml` and must keep:
+  - `fail_under >= 35.0`
+  - `show_missing = true`
+  - `skip_covered = true`
+- Governance drift check command:
+
+```bash
+python scripts/verify_quality_governance.py
+```
+
+- This check must stay in the standard local/full-test flow so threshold/config drift is caught before push.
 
 1) Detect Secrets (baseline-based)
 

@@ -97,9 +97,17 @@ class TestR155ExceptionFidelity(unittest.TestCase):
         with (
             patch("api.config.check_rate_limit", return_value=True),
             patch("api.config.require_admin_token", return_value=(True, None)),
-            patch("api.config.get_effective_config", return_value=({"provider": "openai"}, {})),
-            patch("services.providers.keys.get_api_key_for_provider", return_value="sk-test"),
-            patch("api.config.fetch_remote_model_list", side_effect=RuntimeError("boom")),
+            patch(
+                "api.config.get_effective_config",
+                return_value=({"provider": "openai"}, {}),
+            ),
+            patch(
+                "services.providers.keys.get_api_key_for_provider",
+                return_value="sk-test",
+            ),
+            patch(
+                "api.config.fetch_remote_model_list", side_effect=RuntimeError("boom")
+            ),
         ):
             _, tb = self._capture_runtime_error(
                 lambda: self._run_async(llm_models_handler(request))

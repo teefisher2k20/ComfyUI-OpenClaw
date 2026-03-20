@@ -176,13 +176,13 @@ fi
 
 echo "[tests] Node version: $(node -v)"
 
-echo "[tests] 0/8 R120 dependency preflight"
+echo "[tests] 0/9 R120 dependency preflight"
 "$VENV_PY" scripts/preflight_check.py --strict
 
-echo "[tests] 1/8 detect-secrets"
+echo "[tests] 1/9 detect-secrets"
 "$VENV_PY" -m pre_commit run detect-secrets --all-files
 
-echo "[tests] 2/8 pre-commit all hooks (pass 1: autofix)"
+echo "[tests] 2/9 pre-commit all hooks (pass 1: autofix)"
 capture_precommit_snapshots
 if "$VENV_PY" -m pre_commit run --all-files --show-diff-on-failure; then
   :
@@ -195,25 +195,28 @@ if precommit_changed_repo_state; then
 fi
 cleanup_precommit_snapshots
 
-echo "[tests] 3/8 backend unit tests"
+echo "[tests] 3/9 coverage governance check"
+"$VENV_PY" scripts/verify_quality_governance.py
+
+echo "[tests] 4/9 backend unit tests"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_local_unit" "$VENV_PY" scripts/run_unittests.py --start-dir tests --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json
 
 if [ -n "${OPENCLAW_IMPL_RECORD_PATH:-}" ]; then
-  echo "[tests] 3.5/8 implementation record lint (strict)"
+  echo "[tests] 4.5/9 implementation record lint (strict)"
   # IMPORTANT: strict mode is opt-in via OPENCLAW_IMPL_RECORD_PATH to avoid retroactive legacy record failures.
   "$VENV_PY" scripts/lint_implementation_record.py --path "$OPENCLAW_IMPL_RECORD_PATH" --strict
 fi
 
-echo "[tests] 4/8 backend real E2E lanes (R122/R123)"
+echo "[tests] 5/9 backend real E2E lanes (R122/R123)"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_local_backend_e2e_real" \
   "$VENV_PY" scripts/run_unittests.py --module tests.test_r122_real_backend_lane --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_local_backend_e2e_real" \
   "$VENV_PY" scripts/run_unittests.py --module tests.test_r123_real_backend_model_list_lane --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 
-echo "[tests] 5/8 R121 retry partition contract"
+echo "[tests] 6/9 R121 retry partition contract"
 "$VENV_PY" scripts/run_unittests.py --module tests.test_r121_retry_partition_contract --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 
-echo "[tests] 6/8 Slack integration gates (R124/R125/R117/F57)"
+echo "[tests] 7/9 Slack integration gates (R124/R125/R117/F57)"
 "$VENV_PY" scripts/run_unittests.py --module tests.test_r124_slack_ingress_contract --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 "$VENV_PY" scripts/run_unittests.py --module tests.test_r125_slack_real_backend_lane --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 "$VENV_PY" scripts/run_unittests.py --module tests.test_r117_observability_redaction_e2e --enforce-skip-policy tests/skip_policy.json --max-skipped 0
@@ -221,11 +224,11 @@ echo "[tests] 6/8 Slack integration gates (R124/R125/R117/F57)"
 "$VENV_PY" scripts/run_unittests.py --module tests.test_f57_slack_transport_parity --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 "$VENV_PY" scripts/run_unittests.py --module tests.test_f57_slack_socket_mode_startup --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 
-echo "[tests] 7/8 R118 adversarial gate (adaptive: smoke/extended)"
+echo "[tests] 8/9 R118 adversarial gate (adaptive: smoke/extended)"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_local_adversarial" \
   "$VENV_PY" scripts/run_adversarial_gate.py --profile auto --seed 42 --artifact-dir .tmp/adversarial
 
-echo "[tests] 8/8 frontend E2E"
+echo "[tests] 9/9 frontend E2E"
 npm test
 
 echo "[tests] PASS"

@@ -378,30 +378,33 @@ cleanup_precommit_snapshots
 # edits cannot hide until deep in the pre-push unit suite.
 "$VENV_PY" scripts/check_openapi_sync.py
 
-echo "[pre-push] 3/7 backend unit tests"
+echo "[pre-push] 3/8 coverage governance check"
+"$VENV_PY" scripts/verify_quality_governance.py
+
+echo "[pre-push] 4/8 backend unit tests"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_unit" \
   "$VENV_PY" scripts/run_unittests.py --start-dir tests --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json
 
 if [ -n "${OPENCLAW_IMPL_RECORD_PATH:-}" ]; then
-  echo "[pre-push] 3.5/7 implementation record lint (strict)"
+  echo "[pre-push] 4.5/8 implementation record lint (strict)"
   "$VENV_PY" scripts/lint_implementation_record.py --path "$OPENCLAW_IMPL_RECORD_PATH" --strict
 fi
 
-echo "[pre-push] 4/7 backend real E2E lanes (R122/R123)"
+echo "[pre-push] 5/8 backend real E2E lanes (R122/R123)"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_backend_e2e_real" \
   "$VENV_PY" scripts/run_unittests.py --module tests.test_r122_real_backend_lane --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_backend_e2e_real" \
   "$VENV_PY" scripts/run_unittests.py --module tests.test_r123_real_backend_model_list_lane --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 
-echo "[pre-push] 5/7 R121 retry partition contract"
+echo "[pre-push] 6/8 R121 retry partition contract"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_retry_partition" \
   "$VENV_PY" scripts/run_unittests.py --module tests.test_r121_retry_partition_contract --enforce-skip-policy tests/skip_policy.json --max-skipped 0
 
-echo "[pre-push] 6/7 R118 adversarial gate (adaptive: smoke/extended)"
+echo "[pre-push] 7/8 R118 adversarial gate (adaptive: smoke/extended)"
 MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_pre_push_adversarial" \
   "$VENV_PY" scripts/run_adversarial_gate.py --profile auto --seed 42 --artifact-dir .tmp/adversarial
 
-echo "[pre-push] 7/7 npm test (Playwright)"
+echo "[pre-push] 8/8 npm test (Playwright)"
 npm test
 
 echo "[pre-push] PASS"

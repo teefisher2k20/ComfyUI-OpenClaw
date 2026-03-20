@@ -47,6 +47,8 @@ DEFAULT_HIGH_RISK_PATTERNS = [
 DEFAULT_MUTATION_ALLOWLIST_PATH = os.path.join(
     os.path.dirname(__file__), "..", "tests", "mutation_survivor_allowlist.json"
 )
+SMOKE_MUTATION_THRESHOLD = 20.0
+EXTENDED_MUTATION_THRESHOLD = 80.0
 
 
 def _normalize_rel_path(path: str) -> str:
@@ -527,10 +529,10 @@ def main() -> int:
     # Profile defaults
     if effective_profile == "smoke":
         fuzz_max_runs = 200
-        mutation_threshold = args.mutation_threshold or 20.0
+        mutation_threshold = args.mutation_threshold or SMOKE_MUTATION_THRESHOLD
     else:  # extended
         fuzz_max_runs = 2000
-        mutation_threshold = args.mutation_threshold or 80.0
+        mutation_threshold = args.mutation_threshold or EXTENDED_MUTATION_THRESHOLD
 
     seed = args.seed if args.seed is not None else random.randint(0, 2**31)
     artifact_dir = os.path.abspath(args.artifact_dir)
