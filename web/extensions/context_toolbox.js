@@ -1,6 +1,7 @@
 // CRITICAL: this module is served from /extensions/<pack>/web/extensions/*.js in ComfyUI.
 // Keep ../../../scripts/app.js so it resolves to ComfyUI core /scripts/app.js (not /extensions/<pack>/scripts/app.js).
 import { app } from "../../../scripts/app.js";
+import { hasComparableWidget } from "../openclaw_graph_host.js";
 
 /**
  * F51: In-Canvas Context Toolbox
@@ -48,7 +49,7 @@ export function registerContextToolbox() {
 
                 // F50: OpenClaw Compare
                 // Only show if node has inputs/widgets that can be compared
-                if (node.widgets && node.widgets.length > 0) {
+                if (hasComparableWidget(app.graph, node)) {
                     options.push({
                         content: "\u2696\uFE0F OpenClaw: Compare...",
                         callback: () => {

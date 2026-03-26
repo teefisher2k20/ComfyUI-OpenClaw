@@ -54,6 +54,16 @@ function Assert-PreCommitDidNotMutateRepo {
 Require-Cmd node
 Require-Cmd npm
 
+function Ensure-NpmDeps {
+  $playwrightPkg = Join-Path $root "node_modules\@playwright\test\package.json"
+  if (Test-Path $playwrightPkg) {
+    return
+  }
+
+  Write-Host "[tests] Installing frontend dependencies via npm install ..."
+  Invoke-Checked "npm install" { npm install }
+}
+
 # Prefer project-local virtualenv to avoid global PATH / cache conflicts on Windows.
 $venvPython = Join-Path $root ".venv\Scripts\python.exe"
 function New-ProjectVenv {
@@ -224,6 +234,7 @@ else {
 }
 
 Write-Host "[tests] Node version: $(node -v)"
+Ensure-NpmDeps
 
 Write-Host "[tests] 0/8 R120 dependency preflight"
 Invoke-Checked "preflight_check" { & $venvPython scripts\preflight_check.py --strict }
@@ -291,6 +302,10 @@ Invoke-Checked "R118 adversarial adaptive" {
 }
 
 Write-Host "[tests] 9/9 frontend E2E"
+$env:OPENCLAW_PLAYWRIGHT_INSTALL = "1"
+$env:OPENCLAW_PLAYWRIGHT_BROWSERS = "chromium"
+# IMPORTANT: full-gate acceptance must provision Playwright browsers itself; do
+# not assume a warmed local browser cache when running on fresh Windows hosts.
 Invoke-Checked "frontend E2E" { npm test }
 
 Write-Host "[tests] PASS"

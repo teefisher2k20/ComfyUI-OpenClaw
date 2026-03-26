@@ -173,7 +173,8 @@ test.describe('Approvals surfaces', () => {
     await page.goto('test-harness.html');
     await waitForOpenClawReady(page);
     await clickTab(page, 'Approvals');
-    await expect(page.locator('#apr-list')).toContainText('apr-001');
+    await expect(page.locator('#apr-list .openclaw-list-item')).toHaveCount(1, { timeout: 15000 });
+    await expect(page.locator('#apr-list .openclaw-list-item').first()).toContainText('apr-001');
 
     await page.goto(new URL('/web/admin_console.html', baseURL).toString());
     await page.locator('#refreshApprovals').click();

@@ -9,10 +9,10 @@
   },
   "evidence": {
     "evidence_id": "compat-matrix-20260327",
-    "updated_at": "2026-03-27T00:00:00+08:00",
+    "updated_at": "2026-03-26T16:00:00+00:00",
     "updated_by": "manual"
   },
-  "last_validated_date": "2026-03-27",
+  "last_validated_date": "2026-03-26",
   "matrix_version": "v0.2.2",
   "policy": {
     "max_age_days": 45,

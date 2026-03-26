@@ -2,7 +2,6 @@ import re
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
@@ -26,9 +25,7 @@ class SecurityAuditWorkflowRegressionTests(unittest.TestCase):
         self.assertIn("pip-audit -r requirements.txt", job)
 
         bare_invocations = [
-            line.strip()
-            for line in job.splitlines()
-            if line.strip() == "pip-audit"
+            line.strip() for line in job.splitlines() if line.strip() == "pip-audit"
         ]
         self.assertEqual(
             bare_invocations,

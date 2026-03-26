@@ -140,4 +140,64 @@ test.describe('Parameter Lab - Dynamic Dimensions', () => {
             strategy: 'grid'
         });
     });
+
+    test('supports nested subgraph nodes and promoted widget candidates', async ({ page }) => {
+        await page.evaluate(() => {
+            const nestedLoader = {
+                id: 7,
+                type: "CheckpointLoaderSimple",
+                title: "Nested Loader",
+                widgets: [
+                    {
+                        name: "ckpt_name",
+                        type: "combo",
+                        value: "base.ckpt",
+                        options: { values: ["base.ckpt", "xl.ckpt"] }
+                    }
+                ]
+            };
+            const subgraph = {
+                _nodes: [nestedLoader],
+                getNodeById(id) {
+                    return this._nodes.find((node) => String(node.id) === String(id));
+                }
+            };
+
+            window.app.graph = {
+                _nodes: [
+                    {
+                        id: 50,
+                        type: "SubgraphNode",
+                        title: "Workflow Pack",
+                        widgets: [
+                            {
+                                name: "ckpt_name",
+                                type: "combo",
+                                value: "base.ckpt",
+                                options: {},
+                                sourceNodeId: "7",
+                                sourceWidgetName: "ckpt_name"
+                            }
+                        ],
+                        subgraph
+                    }
+                ],
+                getNodeById(id) {
+                    return this._nodes.find((node) => String(node.id) === String(id));
+                },
+                serialize() { return { "nested_graph": true }; }
+            };
+        });
+
+        await page.click('#lab-add-dim');
+        await expect(page.locator('.dim-node-select option[value="50:7"]')).toHaveText('[50:7] Workflow Pack / Nested Loader');
+
+        await page.selectOption('.dim-node-select', { value: '50' });
+        await page.selectOption('.dim-widget-select', { value: 'ckpt_name' });
+
+        const candidates = page.locator('.dim-candidate-select option');
+        await expect(candidates).toHaveCount(3);
+        await page.selectOption('.dim-candidate-select', { value: 'xl.ckpt' });
+        await expect(page.locator('.openclaw-chip >> text=xl.ckpt')).toBeVisible();
+    });
 });

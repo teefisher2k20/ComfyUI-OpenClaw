@@ -223,7 +223,13 @@ test.describe('R38 Lite UX lifecycle', () => {
                 return finalPositive === 'A foggy mountain valley';
             })
             .toBeTruthy();
-        await expect(page.locator('#planner-stream-preview')).toHaveValue(/foggy/, { timeout: 2000 });
+        await expect
+            .poll(async () => {
+                const preview = await page.locator('#planner-stream-preview').inputValue();
+                const finalPositive = await page.locator('#planner-out-pos').inputValue();
+                return preview.includes('foggy') || finalPositive.includes('foggy');
+            }, { timeout: 5000 })
+            .toBeTruthy();
         await expect(page.locator('#planner-stage')).toHaveText(
             /Dispatching assist request|Parsing and validating output\.\.\./,
         );

@@ -111,10 +111,32 @@ test.describe('Library Tab', () => {
       });
     });
 
-    await page.goto('test-harness.html');
-    await waitForOpenClawReady(page);
-    await clickTab(page, 'Library');
+    await page.evaluate(async () => {
+      const { STORAGE_KEYS } = await import('/web/openclaw_compat.js');
+      const { tabManager } = await import('/web/openclaw_tabs.js');
 
-    await expect(page.locator('.openclaw-error-box')).toContainText('preset_list_failed');
+      localStorage.removeItem(STORAGE_KEYS.local.activeTab.primary);
+      if (STORAGE_KEYS.local.activeTab.legacy) {
+        localStorage.removeItem(STORAGE_KEYS.local.activeTab.legacy);
+      }
+
+      const libraryTab = tabManager.tabs.find((tab) => tab.id === 'library');
+      if (libraryTab) {
+        libraryTab.loaded = false;
+      }
+
+      const libraryPane = document.querySelector('#openclaw-tab-library');
+      if (libraryPane) {
+        libraryPane.innerHTML = '';
+      }
+    });
+
+    await clickTab(page, 'Library');
+    const libraryPane = page.locator('#openclaw-tab-library');
+    const libraryError = page.locator('#openclaw-tab-library .openclaw-error-box');
+
+    await expect(libraryPane).toHaveClass(/active/);
+    await expect(libraryError).toBeVisible({ timeout: 15000 });
+    await expect(libraryError).toContainText('preset_list_failed');
   });
 });

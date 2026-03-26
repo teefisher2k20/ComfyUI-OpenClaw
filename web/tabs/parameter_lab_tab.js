@@ -2,6 +2,12 @@
 // Must resolve ComfyUI core app from /scripts/app.js via ../../../ prefix.
 import { app } from "../../../scripts/app.js";
 import { openclawApi } from "../openclaw_api.js";
+import {
+    findComparableWidget,
+    getGraphNodeCatalog,
+    getGraphWidgetCatalog,
+    getGraphWidgetValueCandidates,
+} from "../openclaw_graph_host.js";
 import { openclawUI } from "../openclaw_ui.js";
 
 /**
@@ -198,40 +204,33 @@ export const ParameterLabTab = {
 
     // --- Dynamic Data Helpers ---
 
+    _coerceSelectedNodeId(nodeId) {
+        if (nodeId === null || nodeId === undefined || nodeId === "") {
+            return null;
+        }
+        const raw = String(nodeId);
+        return /^\d+$/.test(raw) ? parseInt(raw, 10) : raw;
+    },
+
     getNodeCatalog() {
-        if (!app.graph || !app.graph._nodes) return [];
-        return app.graph._nodes.map(n => ({
-            id: n.id,
-            title: n.title || n.type,
-            type: n.type
-        })).sort((a, b) => a.id - b.id);
+        return getGraphNodeCatalog(app.graph).map((entry) => ({
+            id: entry.id,
+            title: entry.displayTitle,
+            type: entry.type,
+        }));
     },
 
     getWidgetCatalog(nodeId) {
-        if (!nodeId || !app.graph) return [];
-        const node = app.graph.getNodeById(nodeId);
-        if (!node || !node.widgets) return [];
-        return node.widgets.map(w => ({
-            name: w.name,
-            type: w.type,
-            value: w.value,
-            options: w.options
+        return getGraphWidgetCatalog(app.graph, nodeId).map((widget) => ({
+            name: widget.name,
+            type: widget.type,
+            value: widget.value,
+            options: widget.options,
         }));
     },
 
     getValueCandidates(nodeId, widgetName) {
-        if (!nodeId || !widgetName || !app.graph) return [];
-        const node = app.graph.getNodeById(nodeId);
-        if (!node) return [];
-        const widget = node.widgets.find(w => w.name === widgetName);
-        if (!widget) return [];
-
-        // Return options if available, plus current value
-        const opts = widget.options && widget.options.values ? [...widget.options.values] : [];
-        if (!opts.includes(widget.value)) {
-            opts.unshift(widget.value);
-        }
-        return opts;
+        return getGraphWidgetValueCandidates(app.graph, nodeId, widgetName);
     },
 
     addDimensionUI(defaults = null) {
@@ -313,15 +312,15 @@ export const ParameterLabTab = {
 
             nodeCatalog.forEach(n => {
                 const opt = document.createElement("option");
-                opt.value = n.id;
+                opt.value = String(n.id);
                 opt.textContent = `[${n.id}] ${n.title}`;
-                if (dim.node_id === n.id) opt.selected = true;
+                if (String(dim.node_id) === String(n.id)) opt.selected = true;
                 nodeSelect.appendChild(opt);
             });
 
             nodeSelect.onchange = (e) => {
-                const newVal = parseInt(e.target.value);
-                if (!isNaN(newVal)) {
+                const newVal = this._coerceSelectedNodeId(e.target.value);
+                if (newVal !== null) {
                     dim.node_id = newVal;
                     dim.widget_name = ""; // Reset widget on node change
                     dim.values = [];      // Reset values
@@ -486,26 +485,25 @@ export const ParameterLabTab = {
     // F50: Compare Models Wizard
     showCompareWizard(targetNode = null) {
         // 1. Scan for loader nodes if no target provided
-        let node = targetNode;
-        if (!node) {
-            const nodes = app.graph._nodes.filter(n => n.type === "CheckpointLoaderSimple" || n.type === "LORALoader" || n.type === "UNETLoader");
-            if (nodes.length === 0) {
+        let target = targetNode ? findComparableWidget(app.graph, targetNode) : null;
+        if (!target) {
+            const compareTargets = getGraphNodeCatalog(app.graph)
+                .filter((entry) =>
+                    entry.node?.type === "CheckpointLoaderSimple" ||
+                    entry.node?.type === "LORALoader" ||
+                    entry.node?.type === "UNETLoader"
+                )
+                .map((entry) => findComparableWidget(app.graph, entry.node))
+                .filter(Boolean);
+            if (compareTargets.length === 0) {
                 openclawUI.showBanner("warning", "No Checkpoint/LoRA loaders found in workflow.");
                 return;
             }
-            node = nodes[0];
+            [target] = compareTargets;
         }
 
-        // 2. Find acceptable widget
-        const widget = (node.widgets || []).find(
-            w =>
-                w.name === "ckpt_name" ||
-                w.name === "lora_name" ||
-                w.name === "unet_name"
-        );
-
-        if (!widget) {
-            openclawUI.showBanner("error", "Could not find model widget on node " + node.id);
+        if (!target?.widget) {
+            openclawUI.showBanner("error", `Could not find model widget on node ${targetNode?.id ?? "unknown"}`);
             return;
         }
 
@@ -516,7 +514,7 @@ export const ParameterLabTab = {
         this.dimensions = [];
 
         // Add dimension pre-filled
-        const options = widget.options?.values || [];
+        const options = target.widget.options?.values || [];
         let initialValues = [];
         if (options.length > 0) {
             // Pick top 2 as example
@@ -524,14 +522,17 @@ export const ParameterLabTab = {
         }
 
         this.addDimensionUI({
-            node_id: node.id,
-            widget_name: widget.name,
+            node_id: this._coerceSelectedNodeId(target.nodeId),
+            widget_name: target.widgetName,
             values: initialValues,
             values_str: initialValues.join(", "), // Legacy fallback
             strategy: "compare"
         });
 
-        openclawUI.showBanner("info", `Setup comparison for Node ${node.id} (${node.title}). Edit values to select models.`);
+        openclawUI.showBanner(
+            "info",
+            `Setup comparison for Node ${target.nodeId} (${target.nodeEntry.title}). Edit values to select models.`
+        );
     },
 
     async generatePlan() {

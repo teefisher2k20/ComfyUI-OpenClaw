@@ -86,6 +86,14 @@ report_precommit_repo_drift_and_exit() {
 require_cmd node
 require_cmd npm
 
+ensure_npm_deps() {
+  if [ -f "$ROOT_DIR/node_modules/@playwright/test/package.json" ]; then
+    return 0
+  fi
+  echo "[tests] Installing frontend dependencies via npm install ..."
+  npm install
+}
+
 # Always use project-local venv to avoid global interpreter / tool drift.
 VENV_DIR="$(select_venv_dir)"
 VENV_PY="$VENV_DIR/bin/python"
@@ -176,6 +184,8 @@ fi
 
 echo "[tests] Node version: $(node -v)"
 
+ensure_npm_deps
+
 echo "[tests] 0/9 R120 dependency preflight"
 "$VENV_PY" scripts/preflight_check.py --strict
 
@@ -229,6 +239,8 @@ MOLTBOT_STATE_DIR="$ROOT_DIR/moltbot_state/_local_adversarial" \
   "$VENV_PY" scripts/run_adversarial_gate.py --profile auto --seed 42 --artifact-dir .tmp/adversarial
 
 echo "[tests] 9/9 frontend E2E"
-npm test
+# IMPORTANT: full-gate acceptance must provision Playwright browsers itself; do
+# not assume a warmed local browser cache when running on fresh WSL/Linux hosts.
+OPENCLAW_PLAYWRIGHT_INSTALL=1 OPENCLAW_PLAYWRIGHT_BROWSERS=chromium npm test
 
 echo "[tests] PASS"
