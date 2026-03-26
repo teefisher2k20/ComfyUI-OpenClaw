@@ -183,10 +183,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
       - name: Install pip-audit
         run: pip install pip-audit
       - name: Backend Audit (pip)
-        run: pip-audit
+        run: |
+          # IMPORTANT: audit declared project deps, not the whole CI tool environment.
+          # Env-wide `pip-audit` also scans pip-audit's own transient dependencies and
+          # can fail on toolchain-only packages that are outside the repo dependency contract.
+          pip-audit -r requirements.txt
 
   adversarial-smoke:
     name: Adversarial Gate (adaptive)
