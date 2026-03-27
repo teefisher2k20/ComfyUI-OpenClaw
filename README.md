@@ -75,6 +75,18 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Frontend host compatibility, asset-backed output interop, and CI audit alignment completed</strong></summary>
+
+- Hardened frontend host compatibility against current standalone frontend and desktop bundle drift by moving graph/widget compatibility logic onto shared host helpers, adding explicit sidebar host-surface stamping, and surfacing desktop embedded-frontend parity through compatibility diagnostics instead of implicit assumptions.
+- Added a bounded asset-output interoperability seam so classic ComfyUI history refs and newer asset-backed refs both resolve through the existing `/view` contract, preserving current temp/output behavior while allowing hash-backed previews where upstream metadata provides them.
+- Updated output/history-facing frontend and backend parsers together, so `Jobs` previews, callback payload image refs, and history extraction follow one canonical path rather than duplicating view-URL assembly logic in separate layers.
+- Refreshed compatibility anchors against the current reference repos and fixed the CI Python dependency audit path so the enforced audit checks declared project requirements instead of scanning unrelated runner/toolchain packages.
+- Re-validated the implementation on WSL with the full SOP gate: detect-secrets, pre-commit, backend full suites, strict implementation-record lint, adaptive adversarial gate, and Playwright E2E.
+
+</details>
+
+<details>
+
 <summary><strong>Exception-fidelity cleanup and verification-governance baseline completed</strong></summary>
 
 - Preserved original traceback origins on the remaining planner/refiner/vision/config failure paths and aligned request-time default `LLMClient` refresh so runtime config hot-reload no longer mutates long-lived service state just to get a fresh client.
@@ -824,6 +836,8 @@ Current sidebar composition keeps `web/openclaw_ui.js` as the shell root and rou
 
 Canonical DOM/class ownership is now centered on `openclaw-*`; legacy `moltbot-*` class compatibility is still supported through shared runtime aliasing instead of duplicated markup in each tab template.
 
+The sidebar now also resolves and stamps its active host surface (`standalone_frontend` vs desktop-embedded host) at mount time so frontend-host drift is explicit and testable instead of inferred from runtime accidents.
+
 ### Sidebar Modules
 
 ![OpenClaw /sidebar ui example](assets/sidebar_modules.png)
@@ -833,7 +847,7 @@ The OpenClaw sidebar includes these built-in tabs. Some tabs are capability-gate
 | Tab | What it does | Related docs |
 | --- | --- | --- |
 | `Settings` | Health/config/log visibility, provider/model setup, model connectivity checks, and optional localhost key storage. | [Quick Start](#quick-start-minimal), [LLM config](#llm-config-non-secret), [Troubleshooting](#troubleshooting) |
-| `Jobs` | Tracks prompt IDs, polls trace/history, and shows output previews for recent jobs. | [Observability](#observability-read-only), [Remote Control (Connector)](#remote-control-connector) |
+| `Jobs` | Tracks prompt IDs, polls trace/history, and shows output previews for recent jobs across classic history refs and asset-backed output refs through the same `/view` contract. | [Observability](#observability-read-only), [Remote Control (Connector)](#remote-control-connector) |
 | `Planner` | Uses assist endpoint to generate structured prompt plans (positive/negative/params). | [Configure an LLM key](#1-configure-an-llm-key-for-plannerrefinervision-helpers), [Nodes](#nodes) |
 | `Refiner` | Refines existing prompts with optional image context and issue/goal input. | [Configure an LLM key](#1-configure-an-llm-key-for-plannerrefinervision-helpers), [Nodes](#nodes) |
 | `Variants` | Local helper for generating batch variant parameter JSON (seed/range-style sweeps). | [Nodes](#nodes), [Operator UX Features](#operator-ux-features) |
@@ -1085,7 +1099,7 @@ Full local acceptance gate (recommended before push):
 bash scripts/run_full_tests_linux.sh
 ```
 
-This full gate includes detect-secrets, pre-commit, coverage governance verification, backend suites, adaptive adversarial verification, and Playwright E2E.
+This full gate includes detect-secrets, pre-commit, coverage governance verification, backend suites, adaptive adversarial verification, Playwright E2E, and CI-parity dependency audit expectations scoped to declared project requirements.
 
 ## Updating
 

@@ -12,6 +12,8 @@ This document summarizes the current OpenClaw sidebar UI structure and how to ve
 - Banner runtime: `web/openclaw_banner_manager.js` owns transient banner state and shell-facing banner transitions.
 - Tabs: `web/openclaw_tabs.js` manages tab registration, rendering, and remount safety.
 - API: `web/openclaw_api.js` provides a normalized fetch wrapper and OpenClaw endpoints (legacy Moltbot endpoints still work).
+- Host surface: `web/openclaw_host_surface.js` resolves the active frontend host surface and stamps explicit metadata so standalone frontend vs desktop-embedded behavior stays testable.
+- Output refs: `web/openclaw_asset_refs.js` normalizes classic history refs and newer asset-backed output refs onto the same bounded `/view` preview contract.
 - Styles: `web/openclaw.css` provides shared design tokens and component classes.
 - Errors and compatibility helpers: `web/openclaw_utils.js` provides `showError()` / `clearError()` plus runtime legacy-class alias helpers used to keep canonical `openclaw-*` markup compatible with existing `moltbot-*` selectors.
 
@@ -19,6 +21,8 @@ Refactor note:
 - `web/openclaw_ui.js` should stay focused on shell composition, shared singleton ownership, and exports.
 - New shell behaviors should prefer the extracted action/queue modules unless they truly belong to top-level shell assembly.
 - New tab markup should use canonical `openclaw-*` classes; legacy `moltbot-*` aliases are generated centrally at runtime instead of being duplicated in each template.
+- Host-sensitive behaviors should consume the shared host-surface helper rather than inferring desktop vs standalone frontend from ad-hoc globals.
+- Output preview flows should consume the shared asset-ref normalizer rather than assembling `/view` URLs independently in each tab.
 
 ## Feature Gating (Capabilities)
 
@@ -33,6 +37,12 @@ Refactor note:
 
 If capabilities are unavailable, the full tab set is registered to surface actionable errors (instead of “missing tabs”).
 If `assist_streaming` is unavailable or the stream transport degrades, Planner/Refiner automatically fall back to the existing non-stream request path.
+
+## Host-Surface Contract
+
+- OpenClaw treats standalone `ComfyUI_frontend` and `desktop` as distinct frontend host surfaces.
+- The sidebar stamps its resolved host surface at mount time so desktop bundle drift is explicit in diagnostics and regression tests.
+- Graph/widget compatibility code should route through shared host helpers to keep nested-subgraph and promoted-widget behavior aligned with current upstream host semantics.
 
 ## Standalone Remote Admin Console
 
@@ -63,10 +73,12 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 
 1. Open ComfyUI and confirm OpenClaw appears in the sidebar.
 2. Switch between all visible tabs multiple times (and reopen the sidebar if possible) and ensure panes do not go blank.
-3. Planner: click **Plan Generation** with minimal input and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
-4. Refiner: click **Refine Prompts** (with or without image) and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
-5. Library/Approvals: if backend endpoints are not enabled, confirm the UI shows a clear error state (no crashes).
-6. If you simulate/fake a stream failure in dev tools, confirm Planner/Refiner retry through the classic non-stream path without duplicate submits or broken loading state.
+3. Confirm the sidebar host-surface metadata resolves correctly for the current environment instead of defaulting silently.
+4. Planner: click **Plan Generation** with minimal input and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
+5. Refiner: click **Refine Prompts** (with or without image) and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
+6. Jobs: verify output previews still resolve for both classic history refs and any asset-backed refs surfaced by callback/history payloads.
+7. Library/Approvals: if backend endpoints are not enabled, confirm the UI shows a clear error state (no crashes).
+8. If you simulate/fake a stream failure in dev tools, confirm Planner/Refiner retry through the classic non-stream path without duplicate submits or broken loading state.
 
 ## E2E (Playwright) Checks
 

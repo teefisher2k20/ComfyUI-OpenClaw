@@ -8,6 +8,8 @@ All pull requests must pass the repository SOP gate before merge.
 | --- | --- | --- |
 | Secret detection | `pre-commit run detect-secrets --all-files` | Prevent secret leakage |
 | Pre-commit hooks | `pre-commit run --all-files --show-diff-on-failure` | Enforce formatting and static checks |
+| Frontend dependency audit | `npm audit --production` | Fail on production dependency vulnerabilities in the shipped Node dependency surface |
+| Backend dependency audit | `pip-audit -r requirements.txt` | Audit declared Python project dependencies without scanning unrelated CI runner/toolchain packages |
 | Coverage governance | `python scripts/verify_quality_governance.py` | Fail closed on coverage-policy, mutation-threshold, SOP-guidance, and survivor-allowlist drift |
 | Backend unit tests | `python scripts/run_unittests.py --start-dir tests --pattern "test_*.py" --enforce-skip-policy tests/skip_policy.json` | Validate backend behavior and skip governance |
 | Adversarial gate | `python scripts/run_adversarial_gate.py --profile auto --seed 42` | Enforce adaptive fuzz/mutation verification with smoke=>extended escalation on high-risk diffs |
@@ -34,6 +36,9 @@ If a change intentionally modifies contract behavior:
 ## Governance Baseline
 
 - Coverage governance is part of the standard gate, not an optional reporting step.
+- Dependency-audit governance is part of CI parity:
+  - Node audit should continue to target production dependencies only.
+  - Python audit must stay scoped to `requirements.txt`; env-wide bare `pip-audit` is out of contract because it can fail on tool-only transient packages that are not part of the repo dependency surface.
 - `pyproject.toml` must keep:
   - `fail_under >= 35.0`
   - `show_missing = true`
