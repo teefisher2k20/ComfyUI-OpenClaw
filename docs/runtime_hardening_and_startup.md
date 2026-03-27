@@ -70,7 +70,7 @@ Gate behavior:
 
 Connector token/enable markers activate ingress posture checks for:
 
-- Telegram, Discord, LINE, WhatsApp, WeChat, KakaoTalk, Slack
+- Telegram, Discord, LINE, WhatsApp, WeChat, KakaoTalk, Slack, Feishu/Lark
 
 When a platform is active, at least one platform-specific allowlist variable must be configured.
 

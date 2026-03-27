@@ -1,19 +1,19 @@
 # OpenClaw Connector
 
-The **OpenClaw Connector** (`connector`) is a standalone process that allows you to control your local ComfyUI instance remotely via chat platforms like **Telegram**, **Discord**, **LINE**, **WhatsApp**, **WeChat Official Account**, and **KakaoTalk (Kakao i Open Builder)**.
+The **OpenClaw Connector** (`connector`) is a standalone process that allows you to control your local ComfyUI instance remotely via chat platforms like **Telegram**, **Discord**, **LINE**, **WhatsApp**, **WeChat Official Account**, **KakaoTalk (Kakao i Open Builder)**, **Slack**, and **Feishu/Lark**.
 
 ## How It Works
 
 The connector runs alongside ComfyUI on your machine.
 
 1. It connects outbound to Telegram/Discord (polling/gateway).
-2. LINE/WhatsApp/WeChat/KakaoTalk use inbound webhooks (HTTPS required).
+2. LINE/WhatsApp/WeChat/KakaoTalk/Slack use inbound webhooks (HTTPS required), while Feishu/Lark can run in webhook mode or long-connection mode with a separate callback ingress path for interactive actions.
 3. It talks to ComfyUI via `localhost`.
 4. It relays commands and status updates securely.
 
 **Security**:
 
-- **Transport Model**: Telegram/Discord are outbound. LINE/WhatsApp/WeChat/KakaoTalk/Slack require inbound HTTPS webhook endpoints.
+- **Transport Model**: Telegram/Discord are outbound. LINE/WhatsApp/WeChat/KakaoTalk/Slack require inbound HTTPS webhook endpoints. Feishu/Lark supports webhook ingress or long-connection transport, but interactive callbacks still use a bounded local HTTPS callback path.
 - **Allowlist/Trust Model**: Allowlists define trusted senders/channels. Non-allowlisted senders are treated as untrusted (for example, `/run` is approval-routed instead of auto-executed).
 - **Strict Profile Gate**: In `public` deployment or `hardened` runtime posture, enabling connector ingress without platform allowlist coverage is fail-closed at startup/deployment checks.
 - **Local Secrets**: Bot tokens are stored in your local environment, never sent to ComfyUI.
@@ -46,6 +46,13 @@ Slack multi-workspace notes:
 - Slack lifecycle events such as `tokens_revoked`, `app_uninstalled`, and rate-limit degradation update installation health so outbound replies fail closed or degrade predictably for the affected workspace.
 - In multi-workspace mode, outbound replies and delayed result deliveries resolve the bot token by workspace binding and keep Slack thread context when replying back to the originating conversation.
 
+Feishu / Lark notes:
+
+- Feishu bindings can be declared with a single app pair or a multi-account `OPENCLAW_CONNECTOR_FEISHU_BINDINGS_JSON` manifest; each binding resolves to one normalized installation record with account/workspace identity.
+- The connector supports both `feishu` and `lark` API domains through one shared binding contract, so region-specific app hosts do not require a different adapter.
+- Websocket-mode Feishu deployments still host a callback route so interactive approval cards and command buttons remain available when message ingress itself is long-connection based.
+- Feishu callback actions are signed, replay-guarded, tenant-aware, and deduplicated. Untrusted actors pressing run-affecting buttons are downgraded to approval flow instead of executing directly.
+
 ### Multi-tenant boundary behavior
 
 When backend multi-tenant mode is enabled (`OPENCLAW_MULTI_TENANT_ENABLED=1`):
@@ -64,6 +71,7 @@ When backend multi-tenant mode is enabled (`OPENCLAW_MULTI_TENANT_ENABLED=1`):
 - **WeChat Official Account**: Webhook (requires inbound HTTPS).
 - **KakaoTalk (Kakao i Open Builder)**: Webhook (requires inbound HTTPS).
 - **Slack (Events API)**: Webhook (requires inbound HTTPS).
+- **Feishu / Lark**: Webhook or long-connection transport; interactive callbacks require inbound HTTPS for the callback route.
 
 ## Setup
 
@@ -172,6 +180,30 @@ Set the following environment variables (or put them in a `.env` file if you use
 - `OPENCLAW_CONNECTOR_SLACK_REQUIRE_MENTION`: `true` (default) to require `@Bot` mention in public channels.
 - `OPENCLAW_CONNECTOR_SLACK_REPLY_IN_THREAD`: `true` (default) to reply in threads.
 
+**Feishu / Lark:**
+
+*(Long connection or webhook; callback ingress still requires inbound HTTPS if interactive cards are enabled)*
+
+- `OPENCLAW_CONNECTOR_FEISHU_APP_ID`: App ID for the default Feishu/Lark binding.
+- `OPENCLAW_CONNECTOR_FEISHU_APP_SECRET`: App secret for the default binding.
+- `OPENCLAW_CONNECTOR_FEISHU_VERIFICATION_TOKEN`: Verification token for webhook event ingress.
+- `OPENCLAW_CONNECTOR_FEISHU_ENCRYPT_KEY`: Optional encrypt key for encrypted webhook payloads.
+- `OPENCLAW_CONNECTOR_FEISHU_ACCOUNT_ID`: Explicit account ID for the default binding.
+- `OPENCLAW_CONNECTOR_FEISHU_DEFAULT_ACCOUNT_ID`: Fallback account ID when binding manifest entries omit one.
+- `OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_ID`: Workspace or tenant identifier associated with the default binding.
+- `OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_NAME`: Human-readable workspace name used in diagnostics.
+- `OPENCLAW_CONNECTOR_FEISHU_BINDINGS_JSON`: JSON list of account bindings for multi-account / multi-workspace setups.
+- `OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS`: Comma-separated trusted user IDs.
+- `OPENCLAW_CONNECTOR_FEISHU_ALLOWED_CHATS`: Comma-separated trusted chat IDs.
+- `OPENCLAW_CONNECTOR_FEISHU_BIND`: Host to bind (default `127.0.0.1`).
+- `OPENCLAW_CONNECTOR_FEISHU_PORT`: Port (default `8094`).
+- `OPENCLAW_CONNECTOR_FEISHU_PATH`: Event ingress route (default `/feishu/events`).
+- `OPENCLAW_CONNECTOR_FEISHU_CALLBACK_PATH`: Interactive callback route (default `/feishu/callback`).
+- `OPENCLAW_CONNECTOR_FEISHU_DOMAIN`: API domain selector (`feishu` or `lark`).
+- `OPENCLAW_CONNECTOR_FEISHU_MODE`: Transport mode (`websocket` default, or `webhook`).
+- `OPENCLAW_CONNECTOR_FEISHU_REQUIRE_MENTION`: Set `false` to allow commands without explicit mention in shared chats.
+- `OPENCLAW_CONNECTOR_FEISHU_REPLY_IN_THREAD`: Set `false` to disable reply threading when the source chat supports it.
+
 **Image Delivery:**
 
 - `OPENCLAW_CONNECTOR_PUBLIC_BASE_URL`: Public HTTPS URL of your connector (e.g. `https://your-tunnel.example.com`). Required for sending images.
@@ -185,6 +217,7 @@ Set the following environment variables (or put them in a `.env` file if you use
 > WeChat currently supports text-first control. Image/media upload delivery is not implemented in phase 1.
 > Kakao currently supports text-first control and quick replies. Rich media delivery is not enabled in the default Kakao webhook flow.
 > Slack supports text responses and image uploads (via `files.upload` API).
+> Feishu currently supports text replies plus interactive approval/command cards; richer card templates can be added on top of the same signed callback contract.
 
 ### Command authorization policy
 
@@ -483,6 +516,71 @@ Notes:
 - Startup is fail-closed if `OPENCLAW_CONNECTOR_SLACK_APP_TOKEN` is missing or does not start with `xapp-`.
 - In multi-workspace mode, outbound replies still resolve the workspace-specific bot token from the installation registry even though the WebSocket connection itself uses the app-level token.
 
+#### Feishu / Lark Setup (Detailed)
+
+Feishu support can run in either long-connection (`websocket`) mode or webhook mode. Long-connection is usually the simpler default for message ingress, but interactive cards still need a reachable callback route if you want approval buttons and other signed actions.
+
+1. **Create the Feishu or Lark app**
+   - Create a bot app in the Feishu or Lark developer console.
+   - Record the `App ID` and `App Secret`.
+   - If you want webhook ingress, also configure the event subscription verification token.
+   - If encrypted event delivery is enabled, record the encrypt key as well.
+
+2. **Choose transport mode**
+   - `OPENCLAW_CONNECTOR_FEISHU_MODE=websocket`
+     - Uses long connection for message ingress.
+     - Recommended when you do not want to expose the event route publicly.
+   - `OPENCLAW_CONNECTOR_FEISHU_MODE=webhook`
+     - Uses HTTPS webhook delivery for messages.
+     - Requires a public HTTPS route for `OPENCLAW_CONNECTOR_FEISHU_PATH`.
+
+3. **Configure the default binding**
+
+   ```bash
+   OPENCLAW_CONNECTOR_FEISHU_APP_ID=cli_xxx
+   OPENCLAW_CONNECTOR_FEISHU_APP_SECRET=sec_xxx
+   OPENCLAW_CONNECTOR_FEISHU_ACCOUNT_ID=acct-default
+   OPENCLAW_CONNECTOR_FEISHU_DEFAULT_ACCOUNT_ID=acct-default
+   OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_ID=tenant-alpha
+   OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_NAME="Alpha Workspace"
+   OPENCLAW_CONNECTOR_FEISHU_DOMAIN=feishu
+   OPENCLAW_CONNECTOR_FEISHU_MODE=websocket
+   OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS=ou_xxx,ou_yyy
+   OPENCLAW_CONNECTOR_FEISHU_ALLOWED_CHATS=oc_xxx,oc_yyy
+   ```
+
+4. **Optional: multi-account binding manifest**
+   - Use `OPENCLAW_CONNECTOR_FEISHU_BINDINGS_JSON` when one connector runtime should host more than one Feishu/Lark app or workspace binding.
+   - Each entry may include:
+     - `account_id`
+     - `app_id`
+     - `app_secret`
+     - `workspace_id`
+     - `workspace_name`
+     - `verification_token`
+     - `encrypt_key`
+     - `domain`
+     - `mode`
+
+5. **Configure interactive callback ingress**
+   - Set `OPENCLAW_CONNECTOR_PUBLIC_BASE_URL` to your public HTTPS origin.
+   - Expose `OPENCLAW_CONNECTOR_FEISHU_CALLBACK_PATH` (default `/feishu/callback`) through your reverse proxy or tunnel.
+   - In long-connection mode this callback route is still required for interactive approval cards; message ingress transport does not remove callback security requirements.
+
+6. **Start connector**
+   - `python -m connector`
+   - Expect logs showing the chosen Feishu mode and callback/event route bindings.
+
+7. **Verify runtime behavior**
+   - Run `/status` from an allowlisted Feishu/Lark user.
+   - Run `/approvals` and confirm the reply renders approval buttons as an interactive card.
+   - Click `Approve` or `Reject` on a test approval and verify the callback succeeds once, then duplicate clicks are deduped.
+
+Notes:
+- `OPENCLAW_CONNECTOR_FEISHU_DOMAIN=lark` switches outbound API host behavior without changing the rest of the connector contract.
+- Untrusted users can still see bounded command responses, but run-affecting interactive actions are downgraded to approval flow instead of auto-executing.
+- Callback signing secrets are resolved from the bound Feishu installation record; diagnostics expose binding state, not raw secret material.
+
 ## Commands
 
 **General:**
@@ -564,3 +662,15 @@ Notes:
 - **Slack commands ignored in channels**:
   - `OPENCLAW_CONNECTOR_SLACK_REQUIRE_MENTION=true` and message does not mention the bot.
   - Fix: mention bot explicitly (`@Bot /status`) or set `OPENCLAW_CONNECTOR_SLACK_REQUIRE_MENTION=false` if policy allows.
+
+- **Feishu callback buttons fail with signature or stale-action errors**:
+  - Callback route is not using the same bound app secret, request arrived too late, or the button payload was replayed.
+  - Fix: verify binding diagnostics, public callback route, connector clock, and that the same action is not being resent by proxy/retry middleware.
+
+- **Feishu long-connection messages work but card actions do nothing**:
+  - `OPENCLAW_CONNECTOR_FEISHU_CALLBACK_PATH` is not exposed publicly, or the callback URL is not routed to the connector bind host/port.
+  - Fix: expose the callback route over HTTPS even when `OPENCLAW_CONNECTOR_FEISHU_MODE=websocket`.
+
+- **Feishu `/run` action becomes approval instead of executing immediately**:
+  - Callback actor is untrusted under current allowlist/policy mapping.
+  - Fix: add the user/chat to `OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS` or `_ALLOWED_CHATS`, or keep the approval downgrade as the intended posture.

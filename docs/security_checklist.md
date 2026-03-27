@@ -15,6 +15,7 @@
   - WeChat: `OPENCLAW_CONNECTOR_WECHAT_ALLOWED_USERS`
   - KakaoTalk: `OPENCLAW_CONNECTOR_KAKAO_ALLOWED_USERS`
   - Slack: `OPENCLAW_CONNECTOR_SLACK_ALLOWED_USERS` / `_ALLOWED_CHANNELS`
+  - Feishu/Lark: `OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS` / `_ALLOWED_CHATS`
 - [ ] Verify startup banner shows "No trusted users" warning if allowlists are empty.
 - [ ] For strict posture (`OPENCLAW_DEPLOYMENT_PROFILE=public` or `OPENCLAW_RUNTIME_PROFILE=hardened`), do not enable connector ingress without allowlists; startup/deployment checks fail closed.
 
@@ -66,6 +67,7 @@
 | Rate limiting | Enabled | 10 req/min/user, 30 req/min/channel |
 | Debug mode | Disabled | No sensitive logging |
 | Replay protection | Enabled | LINE webhooks reject replays >5min old |
+| Feishu interactive callbacks | Signed + deduped | Callback actions reject stale/replayed envelopes and degrade untrusted run actions to approval flow |
 
 ## 📞 Support
 

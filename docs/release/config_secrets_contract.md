@@ -140,11 +140,26 @@ Controls the `connector` sidecar process and outbound delivery.
 | `OPENCLAW_CONNECTOR_SLACK_OAUTH_STATE_TTL_SEC` | Slack | TTL for single-use OAuth state tokens (default `600`). |
 | `OPENCLAW_CONNECTOR_SLACK_ALLOWED_USERS` | Slack | Comma-separated trusted user IDs. |
 | `OPENCLAW_CONNECTOR_SLACK_ALLOWED_CHANNELS` | Slack | Comma-separated trusted channel IDs. |
+| `OPENCLAW_CONNECTOR_FEISHU_APP_ID` | Feishu/Lark | App ID for the default binding. |
+| `OPENCLAW_CONNECTOR_FEISHU_APP_SECRET` | Feishu/Lark | App secret for the default binding. |
+| `OPENCLAW_CONNECTOR_FEISHU_VERIFICATION_TOKEN` | Feishu/Lark | Verification token for webhook event ingress. |
+| `OPENCLAW_CONNECTOR_FEISHU_ENCRYPT_KEY` | Feishu/Lark | Optional encrypt key for encrypted webhook payloads. |
+| `OPENCLAW_CONNECTOR_FEISHU_ACCOUNT_ID` | Feishu/Lark | Explicit account ID for the default binding. |
+| `OPENCLAW_CONNECTOR_FEISHU_DEFAULT_ACCOUNT_ID` | Feishu/Lark | Fallback account ID for multi-binding setups. |
+| `OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_ID` | Feishu/Lark | Workspace or tenant identifier associated with the binding. |
+| `OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_NAME` | Feishu/Lark | Human-readable workspace name surfaced in diagnostics. |
+| `OPENCLAW_CONNECTOR_FEISHU_BINDINGS_JSON` | Feishu/Lark | JSON list of account/workspace binding records for multi-account setups. |
+| `OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS` | Feishu/Lark | Comma-separated trusted user IDs. |
+| `OPENCLAW_CONNECTOR_FEISHU_ALLOWED_CHATS` | Feishu/Lark | Comma-separated trusted chat IDs. |
+| `OPENCLAW_CONNECTOR_FEISHU_DOMAIN` | Feishu/Lark | API domain selector (`feishu` or `lark`). |
+| `OPENCLAW_CONNECTOR_FEISHU_MODE` | Feishu/Lark | Transport mode (`websocket` or `webhook`). |
+| `OPENCLAW_CONNECTOR_FEISHU_CALLBACK_PATH` | Feishu/Lark | Local interactive callback route path (default `/feishu/callback`). |
 
 Connector posture rules:
 - In strict posture (`OPENCLAW_DEPLOYMENT_PROFILE=public` or `OPENCLAW_RUNTIME_PROFILE=hardened`), active connector platforms without allowlist coverage are fail-closed.
 - Public deployment profile check surfaces this as `DP-PUBLIC-009`.
 - Slack multi-workspace installs persist only encrypted token refs in `connector_installations.json`; raw bot/app tokens remain in encrypted secret storage and must not appear in diagnostics or exported config surfaces.
+- Feishu/Lark bindings persist normalized installation identity plus secret references only; app secrets and callback signing material must stay in encrypted/local secret storage and must not appear in diagnostics or exported config surfaces.
 
 **Delivery & Media:**
 

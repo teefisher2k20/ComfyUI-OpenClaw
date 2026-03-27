@@ -10,7 +10,7 @@ ComfyUI-OpenClaw is a **security-first orchestration layer** for ComfyUI that co
 - **A secure-by-default HTTP API** for automation (webhooks, triggers, schedules, approvals, presets, rewrite recipes, model manager)
 - **Public-ready control-plane split architecture** (embedded UX + externalized high-risk control surfaces)
 - **Verification-first hardening lanes** (coverage governance, route drift, real-backend E2E, adversarial fuzz/mutation gates)
-- **Now supports 7 major messaging platforms, including Discord, Telegram, WhatsApp, LINE, WeChat, KakaoTalk, and Slack.**
+- **Now supports 8 major messaging platforms, including Discord, Telegram, WhatsApp, LINE, WeChat, KakaoTalk, Slack, and Feishu/Lark.**
 - **And more exciting features being added continuously**
 
 ---
@@ -42,7 +42,7 @@ ComfyUI Process (single Python process + shared aiohttp app)
     └── ComfyUI nodes exported by this pack (planner/refiner/image-to-prompt/batch variants)
 
 Optional companion process (outside the ComfyUI process):
-└── Connector sidecar (Telegram/Discord/LINE/WhatsApp/WeChat/Kakao/Slack) -> calls OpenClaw HTTP APIs
+└── Connector sidecar (Telegram/Discord/LINE/WhatsApp/WeChat/Kakao/Slack/Feishu) -> calls OpenClaw HTTP APIs
 ```
 
 This project is designed to make **ComfyUI a reliable automation target** with an explicit admin boundary and hardened defaults.
@@ -53,9 +53,11 @@ This project is designed to make **ComfyUI a reliable automation target** with a
 - Public and hardened deployment postures are fail-closed by design: shared-surface acknowledgement, startup gates, route-plane governance, and control-plane split all aim to reduce accidental exposure.
 - Admin writes, webhook ingress, and bridge worker paths are protected as explicit trust boundaries rather than convenience-only localhost helpers.
 - Connector ingress keeps allowlist and policy checks as first-class controls, with degraded/public posture handled deliberately instead of silently widening access.
+- Interactive connector actions are treated as a security boundary too: callback-capable platforms use signed envelopes, timestamp/replay guards, dedupe, and explicit policy mapping instead of trusting button actions as implicit admin intent.
 - Outbound egress is constrained: callback delivery and custom LLM base URLs stay behind SSRF-safe validation, exact-host policy, and explicit insecure overrides.
 - Secret handling stays server-side: browser storage is not used for secrets, local secret-manager integration is opt-in, and secrets-at-rest / token lifecycle controls are treated as operational boundaries.
 - Multi-tenant mode is isolation-first: tenant mismatches fail closed across config, secret sources, connector installations, approvals, visibility, and execution budgets.
+- Connector multi-workspace and multi-account bindings are secret-ref-only and fail-closed by design, so tenant/binding mismatches degrade to explicit rejection paths instead of silently reusing the wrong installation context.
 - Operator-facing payloads default to redaction for provider reasoning-like content, while audit trails, diagnostics, and runtime guardrails remain explicit and tamper-evident.
 - Verification is part of the security model: route drift checks, coverage governance, adversarial gates, and doctor/compatibility diagnostics are all wired into CI-parity workflows.
 
@@ -72,6 +74,18 @@ Deployment profiles and hardening references:
 
 
 <details><summary><h2>Latest Updates - Click to expand</h2></summary>
+
+<details>
+
+<summary><strong>Feishu connector chain completed with long-connection transport, tenant-aware bindings, and interactive approval callbacks</strong></summary>
+
+- Added a Feishu/Lark connector baseline that supports both long-connection and webhook ingress modes, keeps transport behavior aligned through the shared connector authorization model, and makes host-domain differences explicit through `feishu` vs `lark` account binding metadata instead of ad hoc runtime branching.
+- Added Feishu account/workspace installation bindings with fail-closed resolution, tenant-aware diagnostics, normalized installation records, and support for multi-account binding manifests so one connector runtime can host more than one Feishu workspace contract safely.
+- Added Feishu interactive-card callback handling for approval and command actions, including signed callback envelopes, stale/replay rejection, duplicate-action dedupe, actor-context mapping, and explicit approval downgrade when untrusted users press run-affecting actions.
+- Updated the connector runtime so websocket-mode Feishu deployments also host the callback ingress surface, keeping interactive-card approvals available even when message ingress is handled over long connection instead of pure webhook mode.
+- Re-validated the full Feishu batch on WSL with the full SOP gate: detect-secrets, pre-commit, governance verification, backend full suites, strict implementation-record lint, real-backend lanes, adaptive adversarial gate, and Playwright E2E.
+
+</details>
 
 <details>
 
@@ -864,7 +878,7 @@ The OpenClaw sidebar includes these built-in tabs. Some tabs are capability-gate
 | `Refiner` | Refines existing prompts with optional image context and issue/goal input. | [Configure an LLM key](#1-configure-an-llm-key-for-plannerrefinervision-helpers), [Nodes](#nodes) |
 | `Variants` | Local helper for generating batch variant parameter JSON (seed/range-style sweeps). | [Nodes](#nodes), [Operator UX Features](#operator-ux-features) |
 | `Library` | Manages reusable prompt/params presets and provides pack-oriented library operations in one place. | [Presets](#presets-admin), [Packs](#packs-admin) |
-| `Approvals` | Lists approval gates and supports approve/reject operations. | [Triggers + approvals](#triggers--approvals-admin), [Remote Control (Connector)](#remote-control-connector) |
+| `Approvals` | Lists approval gates and supports approve/reject operations, including the same approval objects now surfaced through Slack and Feishu interactive connector actions. | [Triggers + approvals](#triggers--approvals-admin), [Remote Control (Connector)](#remote-control-connector) |
 | `Explorer` | Inventory/preflight diagnostics and snapshot/checkpoint troubleshooting workflows, including snapshot-first inventory refresh state (`snapshot_ts`, `scan_state`, `stale`, `last_error`). | [Operator UX Features](#operator-ux-features), [Troubleshooting](#troubleshooting) |
 | `Packs` | Dedicated pack lifecycle tab for import/export/delete under admin boundary. | [Packs](#packs-admin) |
 | `Model Manager` | Searches model catalog/install records, queues managed downloads, and imports completed tasks into the managed install root. | [Model manager](#model-manager-admin-f54), [Model Manager tab (F64)](#model-manager-tab-f64) |
@@ -952,7 +966,7 @@ Main API families:
 - Observability: health, capabilities, logs, traces, event feeds
 - Admin diagnostics: preflight inventory snapshot/status, doctor-facing readiness views
 - Config + LLM: effective config, provider tests, model lists, assist planner/refiner
-- Connector installation diagnostics: installation state, resolution, audit views
+- Connector installation diagnostics: installation state, resolution, callback/tenant binding evidence, audit views
 - Webhooks + events: validate, submit, callback delivery, SSE/polling status
 - Admin operations: approvals, schedules, presets, rewrite recipes
 - Model Manager + Packs: search, download/import lifecycle, pack import/export
@@ -1124,15 +1138,16 @@ It also includes backend regressions that pin snapshot-first diagnostics, delta 
 
 ## Remote Control (Connector)
 
-OpenClaw includes a standalone **Connector** process that allows you to control your local instance securely via **Telegram**, **Discord**, **LINE**, **WhatsApp**, **WeChat**, **KakaoTalk**, and **Slack**.
+OpenClaw includes a standalone **Connector** process that allows you to control your local instance securely via **Telegram**, **Discord**, **LINE**, **WhatsApp**, **WeChat**, **KakaoTalk**, **Slack**, and **Feishu/Lark**.
 
 - **Status & Queue**: Check job progress remotely.
 - **Run Jobs**: Submit templates via chat commands.
 - **Approvals**: Approve/Reject paused workflows from your phone.
-- **Secure**: Outbound-only for Telegram/Discord. LINE/WhatsApp/WeChat/KakaoTalk/Slack require inbound HTTPS (webhook), while Slack can also use Socket Mode.
+- **Secure**: Outbound-only for Telegram/Discord. LINE/WhatsApp/WeChat/KakaoTalk/Slack require inbound HTTPS (webhook), while Slack can also use Socket Mode and Feishu can run in either webhook or long-connection mode with a dedicated callback ingress path.
 - **WeChat encrypted mode**: Official Account encrypted webhook mode is supported when AES settings are configured.
 - **KakaoTalk response safety**: QuickReply limits and safe fallback handling are enforced for reliable payload behavior.
 - **Slack multi-workspace mode**: Workspace installs can be handled through connector-managed OAuth install/callback routes with per-workspace token binding and fail-closed health diagnostics.
+- **Feishu/Lark multi-account mode**: Connector-managed account/workspace bindings support tenant-aware installation resolution, interactive approval cards, and signed callback handling without exposing raw app secrets or widening command trust implicitly.
 
 - [See Setup Guide (`docs/connector.md`)](docs/connector.md)
 
