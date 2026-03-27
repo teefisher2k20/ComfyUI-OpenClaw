@@ -15,11 +15,11 @@ Endpoints:
 - DELETE /openclaw/secrets/{provider}: Clear provider secret
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from typing import Optional
-
-from aiohttp import web
 
 # Import discipline:
 # - ComfyUI runtime: package-relative imports only.
@@ -27,6 +27,7 @@ from aiohttp import web
 if __package__ and "." in __package__:
     from ..models.schemas import MAX_BODY_SIZE
     from ..services.access_control import require_admin_token, resolve_token_info
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.audit import emit_audit_event
     from ..services.csrf_protection import require_same_origin_if_no_token
     from ..services.metrics import metrics
@@ -38,6 +39,7 @@ else:  # pragma: no cover (test-only import mode)
     from models.schemas import MAX_BODY_SIZE  # type: ignore
     from services.access_control import require_admin_token  # type: ignore
     from services.access_control import resolve_token_info  # type: ignore
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.audit import emit_audit_event  # type: ignore
     from services.csrf_protection import require_same_origin_if_no_token  # type: ignore
     from services.metrics import metrics  # type: ignore
@@ -49,6 +51,8 @@ else:  # pragma: no cover (test-only import mode)
     from services.runtime_config import get_admin_token  # type: ignore
     from services.runtime_config import is_loopback_client
     from services.secret_store import get_secret_store  # type: ignore
+
+web = import_aiohttp_web()
 
 # R98: Endpoint Metadata
 if __package__ and "." in __package__:

@@ -7,9 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aiohttp import web
-
 if __package__ and "." in __package__:
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.endpoint_manifest import (
         AuthTier,
         RiskTier,
@@ -17,12 +16,15 @@ if __package__ and "." in __package__:
         endpoint_metadata,
     )
 else:  # pragma: no cover (test-only import mode)
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.endpoint_manifest import (  # type: ignore
         AuthTier,
         RiskTier,
         RoutePlane,
         endpoint_metadata,
     )
+
+web = import_aiohttp_web()
 
 
 # CRITICAL: resolve HTML path relative to this module's package root.

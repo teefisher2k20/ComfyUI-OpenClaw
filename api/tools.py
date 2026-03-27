@@ -3,18 +3,20 @@ S12: API Handlers for External Tools.
 Protected by Admin Token and Feature Flag.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 
-from aiohttp import web
-
 try:
     from ..services.access_control import require_admin_token, resolve_token_info
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.audit import emit_audit_event
     from ..services.tool_runner import get_tool_runner, is_tools_enabled
 except ImportError:
     from services.access_control import require_admin_token  # type: ignore
     from services.access_control import resolve_token_info  # type: ignore
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.audit import emit_audit_event  # type: ignore
     from services.tool_runner import get_tool_runner, is_tools_enabled
 
@@ -35,6 +37,7 @@ else:
     )
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.tools")
+web = import_aiohttp_web()
 
 
 @endpoint_metadata(

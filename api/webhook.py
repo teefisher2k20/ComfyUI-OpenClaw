@@ -9,10 +9,10 @@ POST /moltbot/webhook
 - Returns normalized internal request
 """
 
+from __future__ import annotations
+
 import json
 import logging
-
-from aiohttp import web
 
 try:
     from .errors import APIError, ErrorCode, create_error_response
@@ -22,12 +22,14 @@ except ImportError:
 
 try:
     from ..models.schemas import MAX_BODY_SIZE, WebhookJobRequest
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.metrics import metrics
     from ..services.rate_limit import build_rate_limit_response, check_rate_limit
     from ..services.trace import get_effective_trace_id
     from ..services.webhook_auth import get_auth_summary, require_auth
 except ImportError:
     from models.schemas import MAX_BODY_SIZE, WebhookJobRequest
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.metrics import metrics
     from services.rate_limit import build_rate_limit_response, check_rate_limit
     from services.trace import get_effective_trace_id
@@ -52,6 +54,7 @@ except ImportError:
 
 # R46: Scoped logger for safe-by-default redaction
 logger = diagnostics.get_logger("ComfyUI-OpenClaw.api.webhook", "webhook")
+web = import_aiohttp_web()
 
 
 @endpoint_metadata(

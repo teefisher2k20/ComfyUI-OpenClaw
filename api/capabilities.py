@@ -3,12 +3,14 @@ Capabilities API Handler (R19).
 GET /openclaw/capabilities (legacy: /moltbot/capabilities)
 """
 
-from aiohttp import web
+from __future__ import annotations
 
 # Import discipline
 if __package__ and "." in __package__:
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.capabilities import get_capabilities
 else:
+    from services.aiohttp_compat import import_aiohttp_web
     from services.capabilities import get_capabilities
 
 
@@ -26,6 +28,8 @@ else:
         RoutePlane,
         endpoint_metadata,
     )
+
+web = import_aiohttp_web()
 
 
 @endpoint_metadata(

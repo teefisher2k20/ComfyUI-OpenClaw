@@ -1,13 +1,14 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import json
 import logging
 from typing import Any, Dict, Optional
 
-from aiohttp import web
-
 try:
     from ..services.access_control import require_admin_token
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.async_utils import run_in_thread
     from ..services.automation_composer import AutomationComposerService
     from ..services.planner import PlannerService
@@ -22,6 +23,7 @@ try:
 except ImportError:
     # Fallback for ComfyUI's non-package loader or ad-hoc imports.
     from services.access_control import require_admin_token
+    from services.aiohttp_compat import import_aiohttp_web
     from services.async_utils import run_in_thread
     from services.automation_composer import AutomationComposerService
     from services.planner import PlannerService
@@ -51,6 +53,7 @@ else:
     )
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.assist")
+web = import_aiohttp_web()
 
 # Payload size limits (character count for strings, base64 length for images)
 MAX_REQUIREMENTS_LEN = 8000

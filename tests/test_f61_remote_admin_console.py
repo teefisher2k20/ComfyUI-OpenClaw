@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from api.remote_admin import remote_admin_page_handler
+import api.remote_admin as remote_admin
 
 
 class TestF61RemoteAdminConsole(unittest.IsolatedAsyncioTestCase):
@@ -16,7 +16,7 @@ class TestF61RemoteAdminConsole(unittest.IsolatedAsyncioTestCase):
             with patch(
                 "api.remote_admin._admin_console_html_path", return_value=html_path
             ):
-                resp = await remote_admin_page_handler(request)
+                resp = await remote_admin.remote_admin_page_handler(request)
 
             self.assertEqual(resp.status, 200)
             self.assertIn("text/html", resp.content_type)
@@ -28,7 +28,7 @@ class TestF61RemoteAdminConsole(unittest.IsolatedAsyncioTestCase):
             "api.remote_admin._admin_console_html_path",
             return_value=Path("__missing_admin_console__.html"),
         ):
-            resp = await remote_admin_page_handler(request)
+            resp = await remote_admin.remote_admin_page_handler(request)
 
         self.assertEqual(resp.status, 500)
         self.assertIn("remote_admin_console_not_found", resp.text)

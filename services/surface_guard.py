@@ -10,10 +10,17 @@ Security policy:
 - profile=public/hardened: fail-CLOSED on errors (security-first)
 """
 
+from __future__ import annotations
+
 import logging
 import os
 
-from aiohttp import web
+try:
+    from .aiohttp_compat import import_aiohttp_web
+except ImportError:
+    from aiohttp_compat import import_aiohttp_web  # type: ignore
+
+web = import_aiohttp_web()
 
 logger = logging.getLogger(__name__)
 

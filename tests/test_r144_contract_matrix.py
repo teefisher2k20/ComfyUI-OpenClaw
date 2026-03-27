@@ -14,8 +14,7 @@ class TestR144ContractMatrix(unittest.TestCase):
 
     def test_documented_routes_cover_r144_fixture_paths(self):
         documented = {
-            (route.method, route.path)
-            for route in parse_api_contract_markdown()
+            (route.method, route.path) for route in parse_api_contract_markdown()
         }
         bundle = get_serializable_contract_bundle()
         missing = []

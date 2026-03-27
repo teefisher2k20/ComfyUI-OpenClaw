@@ -4,13 +4,13 @@ Endpoint for firing workflow triggers from external systems.
 With S7 approval gate support.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
 import os
 from typing import Optional
-
-from aiohttp import web
 
 # Import discipline:
 # - ComfyUI runtime: this pack is loaded as a package; MUST use package-relative imports to avoid
@@ -23,6 +23,7 @@ from aiohttp import web
 # can silently import the WRONG module (another custom node or ComfyUI-adjacent package), causing
 # template allowlists to appear "missing" even when `data/templates/manifest.json` is correct.
 if __package__ and "." in __package__:
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.endpoint_manifest import (
         AuthTier,
         RiskTier,
@@ -34,6 +35,7 @@ if __package__ and "." in __package__:
     from ..services.trace import generate_trace_id
     from ..services.webhook_auth import AuthError
 else:  # pragma: no cover (test-only import mode)
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.endpoint_manifest import (  # type: ignore
         AuthTier,
         RiskTier,
@@ -46,6 +48,7 @@ else:  # pragma: no cover (test-only import mode)
     from services.webhook_auth import AuthError  # type: ignore
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.triggers")
+web = import_aiohttp_web()
 
 # Default: require approval for external triggers (secure-by-default)
 REQUIRE_APPROVAL_DEFAULT = (

@@ -13,10 +13,9 @@ import logging
 import time
 from typing import Any, Dict
 
-from aiohttp import web
-
 try:
     from ..services.access_control import require_admin_token, resolve_token_info
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.endpoint_manifest import (
         AuthTier,
         RiskTier,
@@ -39,6 +38,7 @@ except ImportError:
         require_admin_token,
         resolve_token_info,
     )
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.endpoint_manifest import (  # type: ignore
         AuthTier,
         RiskTier,
@@ -61,6 +61,7 @@ except ImportError:
     )
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.rewrite_recipes")
+web = import_aiohttp_web()
 
 
 def _json(data: Dict[str, Any], status: int = 200) -> web.Response:

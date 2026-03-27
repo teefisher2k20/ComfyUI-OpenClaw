@@ -3,13 +3,14 @@ Approval API Endpoints (S7/F12).
 REST endpoints for managing approval requests.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Callable, Optional
 
-from aiohttp import web
-
 try:
     from ..services.access_control import resolve_token_info
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.approvals.models import ApprovalStatus
     from ..services.approvals.service import get_approval_service
     from ..services.audit import emit_audit_event
@@ -19,6 +20,7 @@ try:
 except ImportError:
     # Fallback for ComfyUI's non-package loader or ad-hoc imports.
     from services.access_control import resolve_token_info  # type: ignore
+    from services.aiohttp_compat import import_aiohttp_web
     from services.approvals.models import ApprovalStatus
     from services.approvals.service import get_approval_service
     from services.audit import emit_audit_event  # type: ignore
@@ -33,6 +35,7 @@ except ImportError:
     from services.webhook_auth import AuthError
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.approvals")
+web = import_aiohttp_web()
 
 
 class ApprovalHandlers:

@@ -8,10 +8,9 @@ import os
 import time
 from typing import Optional
 
-from aiohttp import web
-
 try:
     from ..services.access_control import require_admin_token, resolve_token_info
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.endpoint_manifest import (
         AuthTier,
         RiskTier,
@@ -23,6 +22,7 @@ try:
 except ImportError:
     # Fallback for ComfyUI's non-package loader or ad-hoc imports.
     from services.access_control import require_admin_token, resolve_token_info
+    from services.aiohttp_compat import import_aiohttp_web
     from services.endpoint_manifest import (
         AuthTier,
         RiskTier,
@@ -33,6 +33,7 @@ except ImportError:
     from services.tenant_context import TenantBoundaryError, request_tenant_scope
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.presets")
+web = import_aiohttp_web()
 
 
 class PresetHandlers:

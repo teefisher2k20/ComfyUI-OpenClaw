@@ -6,8 +6,6 @@ Connects S2 (Auth) -> R8 (Normalization) -> R3 (Idempotency) -> F5 (Execution).
 import json
 import logging
 
-from aiohttp import web
-
 # Import discipline:
 # - ComfyUI runtime: package-relative imports only (prevents collisions with other custom nodes).
 # - Unit tests: allow top-level fallbacks.
@@ -17,6 +15,7 @@ from aiohttp import web
 # import another pack's top-level `services` module and break allowlists/auth in surprising ways.
 if __package__ and "." in __package__:
     from ..models.schemas import MAX_BODY_SIZE, WebhookJobRequest
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.callback_delivery import start_callback_watch
     from ..services.execution_budgets import BudgetExceededError
     from ..services.idempotency_store import IdempotencyStore
@@ -35,6 +34,7 @@ if __package__ and "." in __package__:
     )
 else:  # pragma: no cover (test-only import mode)
     from models.schemas import MAX_BODY_SIZE, WebhookJobRequest
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.callback_delivery import start_callback_watch  # type: ignore
     from services.execution_budgets import BudgetExceededError  # type: ignore
     from services.idempotency_store import IdempotencyStore  # type: ignore
@@ -72,6 +72,7 @@ else:
     )
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.webhook_submit")
+web = import_aiohttp_web()
 
 
 def safe_error_response(status: int, error: str, detail: str = "") -> web.Response:

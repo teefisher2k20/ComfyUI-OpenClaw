@@ -3,10 +3,10 @@ Scheduler CRUD API (R4).
 REST endpoints for managing persistent schedules.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Optional
-
-from aiohttp import web
 
 # Import discipline:
 # - ComfyUI runtime: package-relative imports only (prevents collisions with other custom nodes).
@@ -15,17 +15,20 @@ from aiohttp import web
 # IMPORTANT: Avoid a broad `try/except ImportError` here. Falling back to `services.*` in ComfyUI
 # can silently import another pack's module and break auth/approval semantics.
 if __package__ and "." in __package__:
+    from ..services.aiohttp_compat import import_aiohttp_web
     from ..services.scheduler.models import Schedule, TriggerType
     from ..services.scheduler.storage import get_schedule_store
     from ..services.templates import is_template_allowed
     from ..services.webhook_auth import AuthError
 else:  # pragma: no cover (test-only import mode)
+    from services.aiohttp_compat import import_aiohttp_web  # type: ignore
     from services.scheduler.models import Schedule, TriggerType  # type: ignore
     from services.scheduler.storage import get_schedule_store  # type: ignore
     from services.templates import is_template_allowed  # type: ignore
     from services.webhook_auth import AuthError  # type: ignore
 
 logger = logging.getLogger("ComfyUI-OpenClaw.api.schedules")
+web = import_aiohttp_web()
 
 
 def _get_scheduler_runner():
