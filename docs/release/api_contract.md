@@ -1,8 +1,8 @@
 # OpenClaw API Contract (v1)
 
 > **Status**: normative
-> **Version**: 1.0.5
-> **Date**: 2026-03-12
+> **Version**: 1.0.6
+> **Date**: 2026-03-27
 
 This document defines the public API contract for OpenClaw. It serves as the authoritative baseline for client compatibility and breaking change policies.
 
@@ -46,6 +46,7 @@ All new integrations should use the `/openclaw/` prefix. Use of `/moltbot/` is d
 | `GET` | `/config` | `/moltbot/config` | Observability | Read-only view of sanitized provider config. |
 | `PUT` | `/config` | `/moltbot/config` | Admin | Update system configuration. |
 | `GET` | `/jobs` | `/moltbot/jobs` | Observability | List recent jobs (Stub/Not Implemented). |
+| `GET` | `/preflight/inventory` | `/moltbot/preflight/inventory` | Admin | Snapshot-first inventory of nodes/models for operator diagnostics, including refresh-state metadata. |
 
 Reasoning-content redaction contract:
 
@@ -58,6 +59,11 @@ Reasoning-content redaction contract:
   - non-hardened runtime profile
   - deployment profile `local` or `lan`
 - clients MUST treat reveal behavior as debug-only and MUST NOT depend on reasoning payload presence in normal operation
+
+Inventory diagnostics contract:
+
+- `/preflight/inventory` is snapshot-first and may return before deep scan work finishes
+- clients SHOULD treat `snapshot_ts`, `scan_state`, `stale`, and `last_error` as first-class diagnostics fields rather than assuming a blocking full-rescan model
 
 ### 1.2 Webhooks & Triggers
 
@@ -244,6 +250,10 @@ Tenant-boundary error notes:
   - normalized limit/offset/cursor values
   - stale/future cursor resets
   - bounded scan truncation or malformed-record skips
+- `GET /openclaw/preflight/inventory` may return snapshot-state diagnostics so clients/operators can detect:
+  - whether the response came from a previous cached snapshot
+  - whether a background refresh is currently running
+  - whether the current snapshot is stale or the last deep scan failed
 - Backend/runtime errors outside pagination normalization are still surfaced explicitly (not silently swallowed).
 
 ---

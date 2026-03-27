@@ -1,7 +1,7 @@
 openapi: "3.0.3"
 info:
   title: "ComfyUI-OpenClaw API"
-  version: "1.0.5"
+  version: "1.0.6"
   description: "Generated from docs/release/api_contract.md (R66 baseline)."
 servers:
   - url: "/openclaw"
@@ -155,6 +155,21 @@ paths:
       x-openclaw-auth-tier: "observability"
       security:
         - OpenClawObservabilityToken:
+            []
+  /preflight/inventory:
+    get:
+      operationId: "get_preflight_inventory"
+      summary: "Snapshot-first inventory of nodes/models for operator diagnostics, including refresh-state metadata."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.1 Core Observability & System"
+      description: "Inventory responses may return cached snapshot diagnostics (`snapshot_ts`, `scan_state`, `stale`, `last_error`) while a background refresh continues."
+      x-openclaw-legacy-path: "/moltbot/preflight/inventory"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
             []
   /webhook:
     post:

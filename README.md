@@ -75,6 +75,18 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Snapshot-first diagnostics, delta polling contracts, schema alignment, and optional-dependency import hardening completed</strong></summary>
+
+- Moved Explorer inventory diagnostics onto a snapshot-first contract so `/openclaw/preflight/inventory` returns quickly with explicit `snapshot_ts`, `scan_state`, `stale`, and `last_error` metadata while deep refresh continues in the background.
+- Hardened event and managed-download polling around deterministic cursor metadata, so operator surfaces can resume from `effective` and `next` sequence markers instead of relying on duplicate-prone full refresh loops.
+- Unified webhook and managed-model request/documentation fixtures around one shared contract bundle, tightened model-import destination validation to reject traversal markers fail-closed, and kept the published API/OpenAPI surfaces aligned with the runtime validators.
+- Removed the remaining import-time `aiohttp` traps from high-impact route/service modules by moving them onto one bounded compatibility seam, so minimal environments degrade deterministically at call time instead of crashing on module import.
+- Re-validated the full batch on WSL with the full SOP gate: detect-secrets, pre-commit, governance verification, backend full suites, strict implementation-record lint, real-backend lanes, adaptive adversarial gate, and Playwright E2E.
+
+</details>
+
+<details>
+
 <summary><strong>Frontend host compatibility, asset-backed output interop, and CI audit alignment completed</strong></summary>
 
 - Hardened frontend host compatibility against current standalone frontend and desktop bundle drift by moving graph/widget compatibility logic onto shared host helpers, adding explicit sidebar host-surface stamping, and surfacing desktop embedded-frontend parity through compatibility diagnostics instead of implicit assumptions.
@@ -847,13 +859,13 @@ The OpenClaw sidebar includes these built-in tabs. Some tabs are capability-gate
 | Tab | What it does | Related docs |
 | --- | --- | --- |
 | `Settings` | Health/config/log visibility, provider/model setup, model connectivity checks, and optional localhost key storage. | [Quick Start](#quick-start-minimal), [LLM config](#llm-config-non-secret), [Troubleshooting](#troubleshooting) |
-| `Jobs` | Tracks prompt IDs, polls trace/history, and shows output previews for recent jobs across classic history refs and asset-backed output refs through the same `/view` contract. | [Observability](#observability-read-only), [Remote Control (Connector)](#remote-control-connector) |
+| `Jobs` | Tracks prompt IDs, consumes deterministic event/task cursor metadata for polling, and shows output previews for recent jobs across classic history refs and asset-backed output refs through the same `/view` contract. | [Observability](#observability-read-only), [Remote Control (Connector)](#remote-control-connector) |
 | `Planner` | Uses assist endpoint to generate structured prompt plans (positive/negative/params). | [Configure an LLM key](#1-configure-an-llm-key-for-plannerrefinervision-helpers), [Nodes](#nodes) |
 | `Refiner` | Refines existing prompts with optional image context and issue/goal input. | [Configure an LLM key](#1-configure-an-llm-key-for-plannerrefinervision-helpers), [Nodes](#nodes) |
 | `Variants` | Local helper for generating batch variant parameter JSON (seed/range-style sweeps). | [Nodes](#nodes), [Operator UX Features](#operator-ux-features) |
 | `Library` | Manages reusable prompt/params presets and provides pack-oriented library operations in one place. | [Presets](#presets-admin), [Packs](#packs-admin) |
 | `Approvals` | Lists approval gates and supports approve/reject operations. | [Triggers + approvals](#triggers--approvals-admin), [Remote Control (Connector)](#remote-control-connector) |
-| `Explorer` | Inventory/preflight diagnostics and snapshot/checkpoint troubleshooting workflows. | [Operator UX Features](#operator-ux-features), [Troubleshooting](#troubleshooting) |
+| `Explorer` | Inventory/preflight diagnostics and snapshot/checkpoint troubleshooting workflows, including snapshot-first inventory refresh state (`snapshot_ts`, `scan_state`, `stale`, `last_error`). | [Operator UX Features](#operator-ux-features), [Troubleshooting](#troubleshooting) |
 | `Packs` | Dedicated pack lifecycle tab for import/export/delete under admin boundary. | [Packs](#packs-admin) |
 | `Model Manager` | Searches model catalog/install records, queues managed downloads, and imports completed tasks into the managed install root. | [Model manager](#model-manager-admin-f54), [Model Manager tab (F64)](#model-manager-tab-f64) |
 | `Parameter Lab` | Runs bounded sweep/compare experiments, stores history, and replays parameters back into the graph. | [Operator UX Features](#operator-ux-features) |
@@ -938,6 +950,7 @@ Base path notes:
 Main API families:
 
 - Observability: health, capabilities, logs, traces, event feeds
+- Admin diagnostics: preflight inventory snapshot/status, doctor-facing readiness views
 - Config + LLM: effective config, provider tests, model lists, assist planner/refiner
 - Connector installation diagnostics: installation state, resolution, audit views
 - Webhooks + events: validate, submit, callback delivery, SSE/polling status
@@ -956,6 +969,8 @@ Primary references:
 Operational notes:
 
 - Observability remains token-gated for remote access and redacts provider reasoning-like content by default.
+- Event and managed-download polling now expose deterministic cursor metadata so reconnect/backfill behavior can stay incremental instead of falling back to full-list refreshes on every poll.
+- Preflight inventory is snapshot-first: clients should treat `snapshot_ts`, `scan_state`, `stale`, and `last_error` as part of the normal operator-diagnostics contract.
 - Config/assist/model-management paths inherit the unified config precedence contract and SSRF-safe outbound policy.
 - Connector installation diagnostics expose redacted token references only, never raw token material.
 - Webhook and rate-limit error paths expose machine-readable diagnostics; client integrations should consume codes and structured fields instead of free-form text.
@@ -1100,6 +1115,7 @@ bash scripts/run_full_tests_linux.sh
 ```
 
 This full gate includes detect-secrets, pre-commit, coverage governance verification, backend suites, adaptive adversarial verification, Playwright E2E, and CI-parity dependency audit expectations scoped to declared project requirements.
+It also includes backend regressions that pin snapshot-first diagnostics, delta cursor semantics, schema/OpenAPI drift checks, and minimal-environment optional-dependency import behavior.
 
 ## Updating
 

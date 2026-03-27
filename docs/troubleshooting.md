@@ -38,6 +38,12 @@ python scripts/operator_doctor.py
 python scripts/operator_doctor.py --json
 ```
 
+Explorer / inventory note:
+
+- `/openclaw/preflight/inventory` is snapshot-first on current builds.
+- A response showing `scan_state=refreshing` or `stale=true` does not necessarily mean the inventory path is broken; it can mean the cached snapshot was returned quickly while a deeper model scan continues in the background.
+- Treat `last_error` as the primary signal that the background scan actually failed.
+
 ## Webhooks return `403 auth_not_configured`
 
 Set webhook auth environment variables as described in the README quick-start section, then restart ComfyUI.

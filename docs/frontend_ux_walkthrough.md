@@ -8,6 +8,7 @@ This document summarizes the current OpenClaw sidebar UI structure and how to ve
 - Shell: `web/openclaw_ui.js` now acts as the composition root for the sidebar shell and public singleton exports.
 - Actions: `web/openclaw_actions.js` owns submit/cancel/retry wiring and guarded action routing for the shell.
 - Queue monitor: `web/openclaw_queue_monitor.js` owns queue polling lifecycle and transient banner/status updates used by the shell.
+- Event/task polling: admin-console and model/task views consume deterministic delta metadata (`effective_since_seq`, `next_since_seq`, reset/truncation hints) instead of assuming every refresh is a full snapshot.
 - Notification center: `web/openclaw_notification_center.js` owns persistent in-app notification storage, dedupe, acknowledge, dismiss, and deep-link behavior.
 - Banner runtime: `web/openclaw_banner_manager.js` owns transient banner state and shell-facing banner transitions.
 - Tabs: `web/openclaw_tabs.js` manages tab registration, rendering, and remount safety.
@@ -23,6 +24,7 @@ Refactor note:
 - New tab markup should use canonical `openclaw-*` classes; legacy `moltbot-*` aliases are generated centrally at runtime instead of being duplicated in each template.
 - Host-sensitive behaviors should consume the shared host-surface helper rather than inferring desktop vs standalone frontend from ad-hoc globals.
 - Output preview flows should consume the shared asset-ref normalizer rather than assembling `/view` URLs independently in each tab.
+- Explorer/preflight consumers should treat inventory diagnostics as snapshot-first and surface `snapshot_ts`, `scan_state`, `stale`, and `last_error` instead of blocking the UI on full rescans.
 
 ## Feature Gating (Capabilities)
 
@@ -57,6 +59,7 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 - Runtime behaviors:
   - Dashboard summary + health/config snapshots
   - Jobs/Events polling + SSE stream connect/fallback
+  - Delta-aware polling cursors for events and managed-task refresh loops
   - Approvals/Schedules/Triggers control actions
   - Config read/partial write and diagnostics access
   - Quick Actions (retry/refresh/drill) remain backend-authorized
@@ -76,9 +79,10 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 3. Confirm the sidebar host-surface metadata resolves correctly for the current environment instead of defaulting silently.
 4. Planner: click **Plan Generation** with minimal input and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
 5. Refiner: click **Refine Prompts** (with or without image) and confirm either live preview/stage updates appear (when streaming is supported) or a readable fallback result/error appears.
-6. Jobs: verify output previews still resolve for both classic history refs and any asset-backed refs surfaced by callback/history payloads.
-7. Library/Approvals: if backend endpoints are not enabled, confirm the UI shows a clear error state (no crashes).
-8. If you simulate/fake a stream failure in dev tools, confirm Planner/Refiner retry through the classic non-stream path without duplicate submits or broken loading state.
+6. Jobs: verify output previews still resolve for both classic history refs and any asset-backed refs surfaced by callback/history payloads, and that repeated polls do not duplicate rows after reconnect/resume.
+7. Explorer: verify preflight inventory can show `refreshing` / `stale` / `error` state without freezing the tab while deep scan work continues.
+8. Library/Approvals: if backend endpoints are not enabled, confirm the UI shows a clear error state (no crashes).
+9. If you simulate/fake a stream failure in dev tools, confirm Planner/Refiner retry through the classic non-stream path without duplicate submits or broken loading state.
 
 ## E2E (Playwright) Checks
 
