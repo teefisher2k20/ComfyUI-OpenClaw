@@ -114,7 +114,9 @@ class TestR145OptionalDependencyParity(unittest.TestCase):
 
     def test_surface_guard_stays_importable_in_local_mode(self):
         surface_guard = _import_without_aiohttp("services.surface_guard")
-        with patch.dict(os.environ, {"OPENCLAW_DEPLOYMENT_PROFILE": "local"}, clear=False):
+        with patch.dict(
+            os.environ, {"OPENCLAW_DEPLOYMENT_PROFILE": "local"}, clear=False
+        ):
             self.assertIsNone(surface_guard.check_surface("nonexistent-surface"))
 
     def test_remote_admin_fixture_exists(self):
