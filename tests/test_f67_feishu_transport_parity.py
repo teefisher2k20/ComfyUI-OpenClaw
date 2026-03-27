@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,11 +9,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from connector.config import ConnectorConfig
 from connector.contract import CommandResponse
+from connector.platforms.feishu_installation_manager import FeishuInstallationManager
 from connector.platforms.feishu_long_connection import FeishuLongConnectionClient
 from connector.platforms.feishu_webhook import (
     FeishuWebhookServer,
     _build_multipart_form,
 )
+from services.connector_installation_registry import ConnectorInstallationRegistry
+from services.secret_store import SecretStore
 
 
 def _event_payload(
@@ -60,14 +64,37 @@ class _FakeRequest:
 
 class TestF67FeishuTransportParity(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.state_dir = self.tmpdir.name
+        self.secret_store = SecretStore(state_dir=self.state_dir)
+        self.registry = ConnectorInstallationRegistry(
+            state_dir=self.state_dir,
+            secret_store=self.secret_store,
+        )
         self.config = ConnectorConfig()
         self.config.feishu_app_id = "cli_test"
         self.config.feishu_app_secret = "sec_test"
+        self.config.feishu_account_id = "acct-default"
+        self.config.feishu_default_account_id = "acct-default"
         self.config.feishu_verification_token = "verify-token"
+        self.config.feishu_workspace_id = "tenant-1"
         self.config.feishu_mode = "webhook"
         self.router = MagicMock()
         self.router.handle = AsyncMock(return_value=CommandResponse(text="OK"))
-        self.server = FeishuWebhookServer(self.config, self.router)
+        self.manager = FeishuInstallationManager(
+            self.config,
+            registry=self.registry,
+            secret_store=self.secret_store,
+            state_dir=self.state_dir,
+        )
+        self.server = FeishuWebhookServer(
+            self.config,
+            self.router,
+            installation_manager=self.manager,
+        )
+
+    async def asyncTearDown(self):
+        self.tmpdir.cleanup()
 
     async def test_webhook_challenge_returns_challenge(self):
         response = await self.server.handle_event(
@@ -118,13 +145,21 @@ class TestF67FeishuTransportParity(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(req.text, "/status")
 
     async def test_long_connection_reuses_event_path(self):
-        client = FeishuLongConnectionClient(self.config, self.router)
+        client = FeishuLongConnectionClient(
+            self.config,
+            self.router,
+            installation_manager=self.manager,
+        )
         client._send_reply = AsyncMock()
         await client._handle_long_connection_event(_event_payload())
         self.router.handle.assert_called_once()
 
     async def test_long_connection_start_skips_without_sdk(self):
-        client = FeishuLongConnectionClient(self.config, self.router)
+        client = FeishuLongConnectionClient(
+            self.config,
+            self.router,
+            installation_manager=self.manager,
+        )
         with patch(
             "connector.platforms.feishu_long_connection._import_feishu_sdk",
             return_value=None,
@@ -160,7 +195,11 @@ class TestF67FeishuTransportParity(unittest.IsolatedAsyncioTestCase):
                 return_value={"code": 0, "data": {}},
             ) as mock_safe,
         ):
-            await self.server.send_message("oc_dm_1", "hello")
+            await self.server.send_message(
+                "oc_dm_1",
+                "hello",
+                delivery_context={"workspace_id": "tenant-1"},
+            )
         kwargs = mock_safe.call_args.kwargs
         self.assertEqual(kwargs["method"], "POST")
         self.assertIn("/open-apis/im/v1/messages", kwargs["url"])
@@ -183,7 +222,7 @@ class TestF67FeishuTransportParity(unittest.IsolatedAsyncioTestCase):
             await self.server.send_image(
                 "oc_dm_1",
                 b"png-bytes",
-                delivery_context={"thread_id": "om_1"},
+                delivery_context={"thread_id": "om_1", "workspace_id": "tenant-1"},
             )
         self.assertEqual(mock_safe.call_count, 2)
         upload_kwargs = mock_safe.call_args_list[0].kwargs

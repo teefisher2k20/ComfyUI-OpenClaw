@@ -125,6 +125,11 @@ class ConnectorConfig:
     feishu_app_secret: Optional[str] = None
     feishu_verification_token: Optional[str] = None
     feishu_encrypt_key: Optional[str] = None
+    feishu_account_id: Optional[str] = None
+    feishu_default_account_id: Optional[str] = None
+    feishu_workspace_id: Optional[str] = None
+    feishu_workspace_name: Optional[str] = None
+    feishu_bindings_json: Optional[str] = None
     feishu_allowed_users: List[str] = field(default_factory=list)
     feishu_allowed_chats: List[str] = field(default_factory=list)
     feishu_bind_host: str = "127.0.0.1"
@@ -342,6 +347,15 @@ def load_config() -> ConnectorConfig:
         "OPENCLAW_CONNECTOR_FEISHU_VERIFICATION_TOKEN"
     )
     cfg.feishu_encrypt_key = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_ENCRYPT_KEY")
+    cfg.feishu_account_id = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_ACCOUNT_ID")
+    cfg.feishu_default_account_id = os.environ.get(
+        "OPENCLAW_CONNECTOR_FEISHU_DEFAULT_ACCOUNT_ID"
+    )
+    cfg.feishu_workspace_id = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_ID")
+    cfg.feishu_workspace_name = os.environ.get(
+        "OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_NAME"
+    )
+    cfg.feishu_bindings_json = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_BINDINGS_JSON")
     if fu := os.environ.get("OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS"):
         cfg.feishu_allowed_users = [u.strip() for u in fu.split(",") if u.strip()]
     if fc := os.environ.get("OPENCLAW_CONNECTOR_FEISHU_ALLOWED_CHATS"):

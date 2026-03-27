@@ -27,9 +27,14 @@ from ..config import ConnectorConfig
 from ..contract import CommandRequest
 from ..router import CommandRouter
 from ..security_profile import AllowlistPolicy, ReplayGuard
+from .feishu_installation_manager import FeishuBinding, FeishuInstallationManager
 
 try:
-    from services.safe_io import STANDARD_OUTBOUND_POLICY, SafeIOHTTPError, safe_request_json
+    from services.safe_io import (
+        STANDARD_OUTBOUND_POLICY,
+        SafeIOHTTPError,
+        safe_request_json,
+    )
 except ImportError:  # pragma: no cover
     from services.safe_io import (  # type: ignore
         STANDARD_OUTBOUND_POLICY,
@@ -123,9 +128,9 @@ def _build_multipart_form(
         parts.extend(
             [
                 f"--{boundary}\r\n".encode("utf-8"),
-                (
-                    f'Content-Disposition: form-data; name="{key}"\r\n\r\n'
-                ).encode("utf-8"),
+                (f'Content-Disposition: form-data; name="{key}"\r\n\r\n').encode(
+                    "utf-8"
+                ),
                 str(value).encode("utf-8"),
                 b"\r\n",
             ]
@@ -213,15 +218,27 @@ class FeishuDeliveryTarget:
     channel_id: str
     reply_to_message_id: str = ""
     workspace_id: str = ""
+    account_id: str = ""
 
 
 class FeishuWebhookServer:
     REPLAY_WINDOW_SEC = 300
     NONCE_CACHE_SIZE = 5000
 
-    def __init__(self, config: ConnectorConfig, router: CommandRouter):
+    def __init__(
+        self,
+        config: ConnectorConfig,
+        router: CommandRouter,
+        *,
+        installation_manager: Optional[FeishuInstallationManager] = None,
+        bound_account_id: str = "",
+    ):
         self.config = config
         self.router = router
+        self._installation_manager = installation_manager or FeishuInstallationManager(
+            config
+        )
+        self._bound_account_id = str(bound_account_id or "").strip()
         self.app = None
         self.runner = None
         self.site = None
@@ -229,10 +246,15 @@ class FeishuWebhookServer:
             window_sec=self.REPLAY_WINDOW_SEC,
             max_entries=self.NONCE_CACHE_SIZE,
         )
-        self._user_allowlist = AllowlistPolicy(config.feishu_allowed_users, strict=False)
-        self._chat_allowlist = AllowlistPolicy(config.feishu_allowed_chats, strict=False)
-        self._tenant_access_token: str = ""
-        self._tenant_access_token_expires_at: float = 0.0
+        self._user_allowlist = AllowlistPolicy(
+            config.feishu_allowed_users, strict=False
+        )
+        self._chat_allowlist = AllowlistPolicy(
+            config.feishu_allowed_chats, strict=False
+        )
+        self._tenant_access_tokens: Dict[str, str] = {}
+        self._tenant_access_token_expires_at: Dict[str, float] = {}
+        self._bot_open_ids: Dict[str, str] = {}
         self._bot_open_id: str = ""
 
     async def start(self):
@@ -240,13 +262,16 @@ class FeishuWebhookServer:
         if aiohttp is None or web is None:
             logger.warning("aiohttp not installed. Skipping Feishu webhook adapter.")
             return
-        if not self.config.feishu_app_id or not self.config.feishu_app_secret:
+        if not self._installation_manager.has_bindings():
             logger.info(
                 "Feishu adapter disabled "
                 "(OPENCLAW_CONNECTOR_FEISHU_APP_ID / APP_SECRET missing)"
             )
             return
-        if not self.config.feishu_verification_token:
+        if not any(
+            binding.verification_token
+            for binding in self._installation_manager.bindings()
+        ):
             logger.info(
                 "Feishu webhook adapter disabled "
                 "(OPENCLAW_CONNECTOR_FEISHU_VERIFICATION_TOKEN missing)"
@@ -290,7 +315,9 @@ class FeishuWebhookServer:
             return _make_response(web, status=400, text="Bad JSON")
         if self._is_challenge(payload):
             if not self._verify_request_token(payload):
-                return _make_response(web, status=401, text="Invalid verification token")
+                return _make_response(
+                    web, status=401, text="Invalid verification token"
+                )
             return _make_json_response(
                 web, {"challenge": str(payload.get("challenge", "") or "")}
             )
@@ -310,20 +337,47 @@ class FeishuWebhookServer:
         )
 
     def _verify_request_token(self, payload: Dict[str, Any]) -> bool:
-        expected = str(self.config.feishu_verification_token or "").strip()
-        if not expected:
+        try:
+            self._resolve_inbound_binding(payload)
+            return True
+        except ValueError:
             return False
-        header = payload.get("header") or {}
-        candidates = [
-            payload.get("token"),
-            header.get("token"),
-            (payload.get("event") or {}).get("token"),
-        ]
-        return any(str(value or "").strip() == expected for value in candidates)
 
-    def _build_request(self, payload: Dict[str, Any]) -> Optional[CommandRequest]:
+    def _resolve_inbound_binding(self, payload: Dict[str, Any]) -> FeishuBinding:
         header = payload.get("header") or {}
-        if str(header.get("event_type", "") or "").strip() not in _SUPPORTED_EVENT_TYPES:
+        verification_token = (
+            str(payload.get("token", "") or "").strip()
+            or str(header.get("token", "") or "").strip()
+            or str(((payload.get("event") or {}).get("token")) or "").strip()
+        )
+        workspace_id = str(header.get("tenant_key", "") or "").strip()
+        return self._installation_manager.resolve_inbound_binding(
+            verification_token=verification_token,
+            workspace_id=workspace_id,
+            account_id=self._bound_account_id,
+        )
+
+    def _cache_key_for_binding(self, binding: FeishuBinding) -> str:
+        return binding.installation_id or binding.account_id
+
+    def _cached_bot_open_id(self, binding: FeishuBinding) -> str:
+        return (
+            self._bot_open_ids.get(self._cache_key_for_binding(binding), "")
+            or self._bot_open_id
+        )
+
+    def _build_request(
+        self,
+        payload: Dict[str, Any],
+        *,
+        binding: FeishuBinding,
+        bot_open_id: str,
+    ) -> Optional[CommandRequest]:
+        header = payload.get("header") or {}
+        if (
+            str(header.get("event_type", "") or "").strip()
+            not in _SUPPORTED_EVENT_TYPES
+        ):
             return None
         event = payload.get("event") or {}
         message = event.get("message") or {}
@@ -335,25 +389,31 @@ class FeishuWebhookServer:
         chat_id = str(message.get("chat_id", "") or "").strip()
         chat_type = str(message.get("chat_type", "") or "").strip().lower()
         message_id = str(message.get("message_id", "") or "").strip()
-        workspace_id = str(header.get("tenant_key", "") or "").strip()
+        workspace_id = (
+            str(header.get("tenant_key", "") or "").strip() or binding.workspace_id
+        )
         if not sender_user_id and not sender_open_id:
             return None
         if not chat_id or not message_id:
             return None
-        if sender_open_id and self._bot_open_id and sender_open_id == self._bot_open_id:
+        if sender_open_id and bot_open_id and sender_open_id == bot_open_id:
             return None
         raw_text = parse_feishu_message_text(message)
         if not raw_text:
             return None
         mentioned_bot = False
-        if self._bot_open_id:
+        if bot_open_id:
             for mention in mentions:
                 open_id = str(((mention.get("id") or {}).get("open_id")) or "").strip()
-                if open_id and open_id == self._bot_open_id:
+                if open_id and open_id == bot_open_id:
                     mentioned_bot = True
                     break
-        text = _strip_bot_mention(raw_text, mentions, self._bot_open_id)
-        if chat_type == "group" and self.config.feishu_require_mention and not mentioned_bot:
+        text = _strip_bot_mention(raw_text, mentions, bot_open_id)
+        if (
+            chat_type == "group"
+            and self.config.feishu_require_mention
+            and not mentioned_bot
+        ):
             return None
         effective_sender = sender_user_id or sender_open_id
         return CommandRequest(
@@ -370,20 +430,38 @@ class FeishuWebhookServer:
                 or (message_id if self.config.feishu_reply_in_thread else "")
             ),
             metadata={
+                "account_id": binding.account_id,
                 "chat_type": chat_type,
                 "message_type": str(message.get("message_type", "") or "").strip(),
                 "sender_open_id": sender_open_id,
             },
         )
 
-    async def process_event_payload(self, payload: Dict[str, Any]) -> None:
+    async def process_event_payload(
+        self,
+        payload: Dict[str, Any],
+        *,
+        binding: Optional[FeishuBinding] = None,
+    ) -> None:
         header = payload.get("header") or {}
         event_id = str(header.get("event_id", "") or "").strip()
         if not event_id:
             raise ValueError("Missing event_id")
         if not self._replay_guard.check_and_record(event_id):
             return
-        request = self._build_request(payload)
+        effective_binding = binding or self._resolve_inbound_binding(payload)
+        bot_open_id = self._cached_bot_open_id(effective_binding)
+        message = (payload.get("event") or {}).get("message") or {}
+        chat_type = str(message.get("chat_type", "") or "").strip().lower()
+        if not bot_open_id and chat_type == "group":
+            bot_open_id = await self._fetch_bot_open_id(
+                binding=effective_binding, allow_degrade=True
+            )
+        request = self._build_request(
+            payload,
+            binding=effective_binding,
+            bot_open_id=bot_open_id,
+        )
         if request is None:
             return
         if self._user_allowlist.entries:
@@ -402,21 +480,49 @@ class FeishuWebhookServer:
                     channel_id=request.channel_id,
                     reply_to_message_id=request.thread_id,
                     workspace_id=request.workspace_id,
+                    account_id=str(request.metadata.get("account_id", "") or ""),
                 ),
                 resp_text,
             )
 
-    async def _get_tenant_access_token(self) -> str:
-        if (
-            self._tenant_access_token
-            and self._tenant_access_token_expires_at > (time.time() + 30)
+    def _resolve_delivery_binding(
+        self, *, workspace_id: str = "", account_id: str = ""
+    ) -> Tuple[InstallationResolution, Optional[FeishuBinding], Dict[str, str]]:
+        return self._installation_manager.resolve_binding(
+            workspace_id=workspace_id,
+            account_id=account_id or self._bound_account_id,
+        )
+
+    async def _get_tenant_access_token(
+        self,
+        *,
+        binding: Optional[FeishuBinding] = None,
+        workspace_id: str = "",
+        account_id: str = "",
+    ) -> str:
+        resolution, effective_binding, secrets = self._resolve_delivery_binding(
+            workspace_id=workspace_id,
+            account_id=account_id or (binding.account_id if binding else ""),
+        )
+        if effective_binding is None or not resolution.ok:
+            raise RuntimeError(
+                f"feishu_binding_resolution_failed:{resolution.reject_reason or 'missing_binding'}"
+            )
+        cache_key = self._cache_key_for_binding(effective_binding)
+        if self._tenant_access_tokens.get(
+            cache_key
+        ) and self._tenant_access_token_expires_at.get(cache_key, 0.0) > (
+            time.time() + 30
         ):
-            return self._tenant_access_token
-        url = f"{_resolve_domain_base(self.config.feishu_domain)}/open-apis/auth/v3/tenant_access_token/internal"
+            return self._tenant_access_tokens[cache_key]
+        app_secret = str(
+            secrets.get("app_secret", "") or effective_binding.app_secret
+        ).strip()
         payload = {
-            "app_id": self.config.feishu_app_id,
-            "app_secret": self.config.feishu_app_secret,
+            "app_id": effective_binding.app_id,
+            "app_secret": app_secret,
         }
+        url = f"{_resolve_domain_base(effective_binding.domain)}/open-apis/auth/v3/tenant_access_token/internal"
         try:
             data = safe_request_json(
                 method="POST",
@@ -425,14 +531,28 @@ class FeishuWebhookServer:
                 headers={"Accept": "application/json"},
                 content_type="application/json; charset=utf-8",
                 timeout_sec=15,
-                allow_hosts=_allowed_api_hosts(self.config.feishu_domain),
+                allow_hosts=_allowed_api_hosts(effective_binding.domain),
                 policy=STANDARD_OUTBOUND_POLICY,
             )
         except SafeIOHTTPError as exc:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=exc.reason,
+                    status_code=exc.status_code,
+                    details={"phase": "tenant_access_token"},
+                )
             raise RuntimeError(
                 f"feishu_token_fetch_failed:{exc.status_code}:{exc.reason}"
             ) from exc
         if data.get("code", 0) != 0:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=str(data.get("msg", "unknown") or "unknown"),
+                    status_code=200,
+                    details={"phase": "tenant_access_token"},
+                )
             raise RuntimeError(
                 f"feishu_token_fetch_failed:200:{data.get('msg', 'unknown')}"
             )
@@ -440,15 +560,34 @@ class FeishuWebhookServer:
         if not token:
             raise RuntimeError("feishu_token_fetch_failed:missing_token")
         expire = int(data.get("expire", FEISHU_TOKEN_TTL_SEC) or FEISHU_TOKEN_TTL_SEC)
-        self._tenant_access_token = token
-        self._tenant_access_token_expires_at = time.time() + max(60, expire)
+        self._tenant_access_tokens[cache_key] = token
+        self._tenant_access_token_expires_at[cache_key] = time.time() + max(60, expire)
+        if resolution.installation is not None:
+            self._installation_manager.mark_resolution_success(
+                resolution.installation.installation_id,
+                effective_binding.workspace_id,
+            )
         return token
 
-    async def _fetch_bot_open_id(self) -> str:
-        if self._bot_open_id:
-            return self._bot_open_id
-        token = await self._get_tenant_access_token()
-        url = f"{_resolve_domain_base(self.config.feishu_domain)}/open-apis/bot/v3/info"
+    async def _fetch_bot_open_id(
+        self,
+        *,
+        binding: Optional[FeishuBinding] = None,
+        workspace_id: str = "",
+        account_id: str = "",
+        allow_degrade: bool = False,
+    ) -> str:
+        resolution, effective_binding, _ = self._resolve_delivery_binding(
+            workspace_id=workspace_id,
+            account_id=account_id or (binding.account_id if binding else ""),
+        )
+        if effective_binding is None or not resolution.ok:
+            return ""
+        cache_key = self._cache_key_for_binding(effective_binding)
+        if self._bot_open_ids.get(cache_key):
+            return self._bot_open_ids[cache_key]
+        token = await self._get_tenant_access_token(binding=effective_binding)
+        url = f"{_resolve_domain_base(effective_binding.domain)}/open-apis/bot/v3/info"
         try:
             data = safe_request_json(
                 method="GET",
@@ -458,21 +597,55 @@ class FeishuWebhookServer:
                     "Authorization": f"Bearer {token}",
                 },
                 timeout_sec=15,
-                allow_hosts=_allowed_api_hosts(self.config.feishu_domain),
+                allow_hosts=_allowed_api_hosts(effective_binding.domain),
                 policy=STANDARD_OUTBOUND_POLICY,
             )
-        except SafeIOHTTPError:
+        except SafeIOHTTPError as exc:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=exc.reason,
+                    status_code=exc.status_code,
+                    details={"phase": "bot_info"},
+                )
+            if allow_degrade:
+                return ""
             return ""
         if data.get("code", 0) != 0:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=str(data.get("msg", "unknown") or "unknown"),
+                    status_code=200,
+                    details={"phase": "bot_info"},
+                )
             return ""
-        self._bot_open_id = str(
+        bot_open_id = str(
             (((data.get("data") or {}).get("bot") or {}).get("open_id")) or ""
         ).strip()
-        return self._bot_open_id
+        if bot_open_id:
+            self._bot_open_ids[cache_key] = bot_open_id
+            self._bot_open_id = bot_open_id
+        return bot_open_id
 
     async def _send_reply(self, target: FeishuDeliveryTarget, text: str) -> None:
-        token = await self._get_tenant_access_token()
-        api_base = _resolve_domain_base(self.config.feishu_domain)
+        resolution, binding, _ = self._resolve_delivery_binding(
+            workspace_id=target.workspace_id,
+            account_id=target.account_id,
+        )
+        if binding is None or not resolution.ok:
+            logger.warning(
+                "Feishu reply dropped: no workspace binding available (%s / %s)",
+                target.workspace_id or "no-workspace",
+                target.account_id or "no-account",
+            )
+            return
+        token = await self._get_tenant_access_token(
+            binding=binding,
+            workspace_id=target.workspace_id,
+            account_id=target.account_id,
+        )
+        api_base = _resolve_domain_base(binding.domain)
         payload = {
             "content": json.dumps({"text": text}, ensure_ascii=False),
             "msg_type": "text",
@@ -497,13 +670,27 @@ class FeishuWebhookServer:
                 headers=headers,
                 content_type="application/json; charset=utf-8",
                 timeout_sec=15,
-                allow_hosts=_allowed_api_hosts(self.config.feishu_domain),
+                allow_hosts=_allowed_api_hosts(binding.domain),
                 policy=STANDARD_OUTBOUND_POLICY,
             )
         except SafeIOHTTPError as exc:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=exc.reason,
+                    status_code=exc.status_code,
+                    details={"phase": "reply"},
+                )
             logger.warning("Feishu reply failed: status=%s", exc.status_code)
             return
         if data.get("code", 0) != 0:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=str(data.get("msg", "unknown") or "unknown"),
+                    status_code=200,
+                    details={"phase": "reply"},
+                )
             logger.warning(
                 "Feishu reply failed: %s",
                 data.get("msg", "unknown"),
@@ -521,6 +708,7 @@ class FeishuWebhookServer:
                 channel_id=channel_id,
                 reply_to_message_id=str(ctx.get("thread_id", "") or "").strip(),
                 workspace_id=str(ctx.get("workspace_id", "") or "").strip(),
+                account_id=str(ctx.get("account_id", "") or "").strip(),
             ),
             text,
         )
@@ -533,8 +721,24 @@ class FeishuWebhookServer:
         caption: Optional[str] = None,
         delivery_context: Optional[Dict[str, Any]] = None,
     ):
-        token = await self._get_tenant_access_token()
-        api_base = _resolve_domain_base(self.config.feishu_domain)
+        ctx = dict(delivery_context or {})
+        resolution, binding, _ = self._resolve_delivery_binding(
+            workspace_id=str(ctx.get("workspace_id", "") or "").strip(),
+            account_id=str(ctx.get("account_id", "") or "").strip(),
+        )
+        if binding is None or not resolution.ok:
+            logger.warning(
+                "Feishu image dropped: no workspace binding available (%s / %s)",
+                str(ctx.get("workspace_id", "") or "").strip() or "no-workspace",
+                str(ctx.get("account_id", "") or "").strip() or "no-account",
+            )
+            return
+        token = await self._get_tenant_access_token(
+            binding=binding,
+            workspace_id=str(ctx.get("workspace_id", "") or "").strip(),
+            account_id=str(ctx.get("account_id", "") or "").strip(),
+        )
+        api_base = _resolve_domain_base(binding.domain)
         upload_headers = {
             "Accept": "application/json",
             "Authorization": f"Bearer {token}",
@@ -554,20 +758,35 @@ class FeishuWebhookServer:
                 headers=upload_headers,
                 content_type=upload_content_type,
                 timeout_sec=30,
-                allow_hosts=_allowed_api_hosts(self.config.feishu_domain),
+                allow_hosts=_allowed_api_hosts(binding.domain),
                 policy=STANDARD_OUTBOUND_POLICY,
             )
         except SafeIOHTTPError as exc:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=exc.reason,
+                    status_code=exc.status_code,
+                    details={"phase": "image_upload"},
+                )
             logger.warning("Feishu image upload failed: status=%s", exc.status_code)
             return
-        image_key = str((upload_payload.get("data") or {}).get("image_key", "") or "").strip()
+        image_key = str(
+            (upload_payload.get("data") or {}).get("image_key", "") or ""
+        ).strip()
         if upload_payload.get("code", 0) != 0 or not image_key:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=str(upload_payload.get("msg", "unknown") or "unknown"),
+                    status_code=200,
+                    details={"phase": "image_upload"},
+                )
             logger.warning(
                 "Feishu image upload failed: %s",
                 upload_payload.get("msg", "unknown"),
             )
             return
-        ctx = dict(delivery_context or {})
         message_payload = {
             "content": json.dumps({"image_key": image_key}, ensure_ascii=False),
             "msg_type": "image",
@@ -589,20 +808,33 @@ class FeishuWebhookServer:
                 },
                 content_type="application/json; charset=utf-8",
                 timeout_sec=30,
-                allow_hosts=_allowed_api_hosts(self.config.feishu_domain),
+                allow_hosts=_allowed_api_hosts(binding.domain),
                 policy=STANDARD_OUTBOUND_POLICY,
             )
         except SafeIOHTTPError as exc:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=exc.reason,
+                    status_code=exc.status_code,
+                    details={"phase": "image_send"},
+                )
             logger.warning("Feishu image send failed: status=%s", exc.status_code)
         if caption:
             await self.send_message(
                 channel_id,
                 caption,
-                delivery_context=delivery_context,
+                delivery_context=ctx,
             )
 
     async def prime_bot_identity(self) -> None:
         try:
-            await self._fetch_bot_open_id()
+            await self._fetch_bot_open_id(
+                account_id=self._bound_account_id
+                or str(self.config.feishu_account_id or "").strip()
+                or str(self.config.feishu_default_account_id or "").strip(),
+                workspace_id=str(self.config.feishu_workspace_id or "").strip(),
+                allow_degrade=True,
+            )
         except Exception as exc:
             logger.debug("Feishu bot identity fetch failed: %s", exc)

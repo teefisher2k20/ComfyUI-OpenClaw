@@ -10,6 +10,7 @@ import sys
 from .config import load_config
 from .openclaw_client import OpenClawClient
 from .platforms.discord_gateway import DiscordGateway
+from .platforms.feishu_installation_manager import FeishuInstallationManager
 from .platforms.feishu_long_connection import FeishuLongConnectionClient
 from .platforms.feishu_webhook import FeishuWebhookServer
 from .platforms.kakao_webhook import KakaoWebhookServer
@@ -111,6 +112,7 @@ async def main():
     kakao_server = None
     slack_server = None
     feishu_server = None
+    feishu_long_clients = []
 
     # 3. Platforms
     if config.telegram_bot_token:
@@ -210,13 +212,44 @@ async def main():
     else:
         logger.info("Slack not configured (OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN missing)")
 
-    if config.feishu_app_id and config.feishu_app_secret:
+    if config.feishu_bindings_json or (
+        config.feishu_app_id and config.feishu_app_secret
+    ):
+        try:
+            feishu_installation_manager = FeishuInstallationManager(config)
+        except Exception as exc:
+            logger.error("Feishu adapter startup aborted (fail-closed): %s", exc)
+            feishu_installation_manager = None
         if config.feishu_mode == "webhook":
-            feishu_server = FeishuWebhookServer(config, router)
+            if feishu_installation_manager is not None:
+                feishu_server = FeishuWebhookServer(
+                    config,
+                    router,
+                    installation_manager=feishu_installation_manager,
+                )
         elif config.feishu_mode == "websocket":
             # CRITICAL: Feishu long-connection remains explicit opt-in; do not
             # auto-fallback across transports or ingress verification can drift.
-            feishu_server = FeishuLongConnectionClient(config, router)
+            if feishu_installation_manager is not None:
+                feishu_server = FeishuWebhookServer(
+                    config,
+                    router,
+                    installation_manager=feishu_installation_manager,
+                )
+                binding_configs = feishu_installation_manager.binding_configs()
+                if not binding_configs:
+                    binding_configs = [config]
+                for binding_config in binding_configs:
+                    feishu_long_clients.append(
+                        FeishuLongConnectionClient(
+                            binding_config,
+                            router,
+                            installation_manager=feishu_installation_manager,
+                            bound_account_id=str(
+                                binding_config.feishu_account_id or ""
+                            ).strip(),
+                        )
+                    )
         else:
             logger.error(
                 "Invalid OPENCLAW_CONNECTOR_FEISHU_MODE=%r. Expected 'websocket' or 'webhook'.",
@@ -225,11 +258,14 @@ async def main():
             feishu_server = None
             logger.error("Feishu adapter startup aborted (fail-closed).")
 
-        if feishu_server is None:
+        if feishu_server is None and not feishu_long_clients:
             logger.warning("Feishu adapter disabled due to invalid mode config.")
         else:
-            platforms["feishu"] = feishu_server
-            await feishu_server.start()
+            platforms["feishu"] = feishu_server or feishu_long_clients[0]
+            if config.feishu_mode == "webhook" and feishu_server is not None:
+                await feishu_server.start()
+            for feishu_long_client in feishu_long_clients:
+                await feishu_long_client.start()
             if not tasks:
                 tasks.append(asyncio.create_task(asyncio.sleep(3600 * 24 * 365)))
     elif config.feishu_app_id:
@@ -245,6 +281,7 @@ async def main():
         and not kakao_server
         and not slack_server
         and not feishu_server
+        and not feishu_long_clients
     ):
         logger.error(
             "No platforms configured! Set TELEGRAM_TOKEN, DISCORD_TOKEN, "
@@ -278,6 +315,8 @@ async def main():
             await kakao_server.stop()
         if slack_server:
             await slack_server.stop()
+        for feishu_long_client in feishu_long_clients:
+            await feishu_long_client.stop()
         if feishu_server:
             await feishu_server.stop()
         if poller:

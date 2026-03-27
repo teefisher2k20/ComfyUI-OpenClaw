@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 from ..config import ConnectorConfig
 from ..router import CommandRouter
+from .feishu_installation_manager import FeishuInstallationManager
 from .feishu_webhook import FeishuWebhookServer
 
 logger = logging.getLogger(__name__)
@@ -33,8 +34,20 @@ def _import_feishu_sdk():
 
 
 class FeishuLongConnectionClient(FeishuWebhookServer):
-    def __init__(self, config: ConnectorConfig, router: CommandRouter):
-        super().__init__(config, router)
+    def __init__(
+        self,
+        config: ConnectorConfig,
+        router: CommandRouter,
+        *,
+        installation_manager: Optional[FeishuInstallationManager] = None,
+        bound_account_id: str = "",
+    ):
+        super().__init__(
+            config,
+            router,
+            installation_manager=installation_manager,
+            bound_account_id=bound_account_id,
+        )
         self._ws_client: Any = None
         self._run_task: Optional[asyncio.Task] = None
 
@@ -58,7 +71,9 @@ class FeishuLongConnectionClient(FeishuWebhookServer):
             logger.error("Feishu SDK client does not expose a start() method.")
             self._ws_client = None
             return
-        logger.info("Starting Feishu long-connection client (%s)", self.config.feishu_domain)
+        logger.info(
+            "Starting Feishu long-connection client (%s)", self.config.feishu_domain
+        )
         maybe = self._start_client(starter)
         if inspect.isawaitable(maybe):
             self._run_task = asyncio.create_task(maybe)
