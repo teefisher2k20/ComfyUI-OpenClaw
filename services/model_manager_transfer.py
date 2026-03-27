@@ -126,6 +126,7 @@ def create_download_task(
     )
     with manager._lock:
         manager._tasks[task.task_id] = task
+        manager._bump_task_change_seq_locked(task)
         manager._cancel_events[task.task_id] = manager._threading_event_factory()
         manager._futures[task.task_id] = manager._executor.submit(
             manager._run_task, task.task_id
@@ -145,6 +146,7 @@ def run_task(*, manager: Any, task_id: str) -> None:
         task.started_at = time.time()
         task.updated_at = task.started_at
         task.resume_status = task.resume_status or "running"
+        manager._bump_task_change_seq_locked(task)
         manager._emit(task)
         manager._persist_tasks_locked(force=True)
     try:
@@ -159,6 +161,7 @@ def run_task(*, manager: Any, task_id: str) -> None:
             current.progress = 1.0
             current.staged_path = staged_path
             current.computed_sha256 = digest
+            manager._bump_task_change_seq_locked(current)
             manager._emit(current)
             manager._persist_tasks_locked(force=True)
     except manager._download_cancelled_cls:
@@ -170,6 +173,7 @@ def run_task(*, manager: Any, task_id: str) -> None:
             current.error = "cancelled"
             current.updated_at = time.time()
             current.finished_at = current.updated_at
+            manager._bump_task_change_seq_locked(current)
             manager._emit(current)
             manager._persist_tasks_locked(force=True)
     except Exception as exc:
@@ -181,6 +185,7 @@ def run_task(*, manager: Any, task_id: str) -> None:
             current.error = str(exc)
             current.updated_at = time.time()
             current.finished_at = current.updated_at
+            manager._bump_task_change_seq_locked(current)
             manager._emit(current)
             manager._persist_tasks_locked(force=True)
 
@@ -482,6 +487,7 @@ def import_downloaded_model(
             current.installation_path = rec["installation_path"]
             current.installation_record_id = rec["id"]
             current.updated_at = time.time()
+            manager._bump_task_change_seq_locked(current)
             manager._emit(current)
             manager._persist_tasks_locked(force=True)
     return rec

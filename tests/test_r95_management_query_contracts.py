@@ -144,6 +144,10 @@ class TestR95EventsApi(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["pagination"]["cursor_status"], "stale_cursor_reset")
         self.assertEqual(payload["pagination"]["since_requested"], 3)
         self.assertEqual(payload["pagination"]["since_effective"], 49)
+        self.assertEqual(payload["delta"]["requested_since_seq"], 3)
+        self.assertEqual(payload["delta"]["effective_since_seq"], 49)
+        self.assertEqual(payload["delta"]["next_since_seq"], 51)
+        self.assertTrue(payload["delta"]["truncated"])
         self.assertEqual([e["seq"] for e in payload["events"]], [50, 51])
         self.assertEqual(len(store.calls), 2)
 
@@ -181,6 +185,8 @@ class TestR95EventsApi(unittest.IsolatedAsyncioTestCase):
         payload = fake_web.json_response.call_args.args[0]
         self.assertEqual(payload["pagination"]["cursor_status"], "future_cursor_reset")
         self.assertEqual(payload["pagination"]["since_effective"], 10)
+        self.assertEqual(payload["delta"]["next_since_seq"], 10)
+        self.assertFalse(payload["delta"]["truncated"])
         codes = {w["code"] for w in payload["pagination"]["warnings"]}
         self.assertIn("R95_INVALID_LIMIT", codes)
         self.assertIn("R95_STALE_CURSOR_FUTURE", codes)

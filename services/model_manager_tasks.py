@@ -51,6 +51,10 @@ def load_tasks_from_disk(
             if not task.task_id:
                 continue
             manager._tasks[task.task_id] = task
+            manager._task_change_seq = max(
+                int(getattr(manager, "_task_change_seq", 0)),
+                int(getattr(task, "change_seq", 0)),
+            )
             if not task.is_terminal():
                 manager._cancel_events[task.task_id] = (
                     manager._threading_event_factory()
@@ -72,6 +76,7 @@ def recover_incomplete_tasks(*, manager: Any) -> None:
             task.error = "restart_recovery_pending"
             task.recovery_attempts += 1
             task.resume_status = "restart_recovering"
+            manager._bump_task_change_seq_locked(task)
         replayable = recoverable[: manager.recovery_replay_limit]
         overflow = recoverable[manager.recovery_replay_limit :]
         for task in overflow:
@@ -80,6 +85,7 @@ def recover_incomplete_tasks(*, manager: Any) -> None:
             task.resume_status = "recovery_replay_limit_exceeded"
             task.finished_at = now
             task.updated_at = now
+            manager._bump_task_change_seq_locked(task)
             manager._emit(task)
         for task in replayable:
             event = manager._cancel_events.setdefault(
@@ -91,6 +97,7 @@ def recover_incomplete_tasks(*, manager: Any) -> None:
             task.error = ""
             task.updated_at = now
             task.resume_status = "restart_replay_queued"
+            manager._bump_task_change_seq_locked(task)
             manager._futures[task.task_id] = manager._executor.submit(
                 manager._run_task, task.task_id
             )
@@ -194,6 +201,7 @@ def set_resume_status(*, manager: Any, task_id: str, status: str) -> None:
             return
         current.resume_status = str(status or "not_started")[:120]
         current.updated_at = time.time()
+        manager._bump_task_change_seq_locked(current)
         manager._persist_tasks_locked(force=True)
 
 
@@ -266,6 +274,7 @@ def progress(*, manager: Any, task_id: str, downloaded: int, total: int) -> None
             else 0.0
         )
         task.updated_at = time.time()
+        manager._bump_task_change_seq_locked(task)
         manager._emit(task)
         manager._persist_tasks_locked(force=False)
 
@@ -277,12 +286,14 @@ def list_download_tasks(
     state: str = "",
     limit: int = 100,
     offset: int = 0,
+    since_seq: Optional[int] = None,
 ) -> Dict[str, Any]:
     limit = max(1, min(200, int(limit)))
     offset = max(0, int(offset))
     state_filter = str(state or "").strip().lower()
     with manager._lock:
         tasks = list(manager._tasks.values())
+        latest_change_seq = int(getattr(manager, "_task_change_seq", 0))
     out = []
     for task in tasks:
         if not manager._tenant_ok(task.tenant_id, tenant_id):
@@ -290,13 +301,75 @@ def list_download_tasks(
         if state_filter and task.state != state_filter:
             continue
         out.append(task)
-    out.sort(key=lambda x: x.created_at, reverse=True)
+    if since_seq is None:
+        out.sort(key=lambda x: x.created_at, reverse=True)
+        total = len(out)
+        page = [item.to_dict() for item in out[offset : offset + limit]]
+        return {
+            "tasks": page,
+            "pagination": {"limit": limit, "offset": offset, "total": total},
+            "filters": {"state": state_filter or None},
+        }
+
+    requested_since_seq = max(0, int(since_seq))
+    effective_since_seq = requested_since_seq
+    cursor_status = "ok"
+    if requested_since_seq > latest_change_seq:
+        cursor_status = "future_cursor_reset"
+        effective_since_seq = latest_change_seq
+
+    available_change_seqs = sorted(
+        int(getattr(task, "change_seq", 0))
+        for task in out
+        if int(getattr(task, "change_seq", 0)) > 0
+    )
+    earliest_available_seq = available_change_seqs[0] if available_change_seqs else None
+    latest_available_seq = available_change_seqs[-1] if available_change_seqs else None
+    if (
+        earliest_available_seq is not None
+        and effective_since_seq != 0
+        and effective_since_seq < (earliest_available_seq - 1)
+    ):
+        cursor_status = "stale_cursor_reset"
+        effective_since_seq = max(0, earliest_available_seq - 1)
+
+    out = [
+        task
+        for task in out
+        if int(getattr(task, "change_seq", 0)) > effective_since_seq
+    ]
+    out.sort(key=lambda x: (int(getattr(x, "change_seq", 0)), x.created_at))
     total = len(out)
-    page = [item.to_dict() for item in out[offset : offset + limit]]
+    page_items = out[:limit]
+    next_since_seq = (
+        int(getattr(page_items[-1], "change_seq", 0))
+        if page_items
+        else effective_since_seq
+    )
+    truncated = bool(
+        total > len(page_items)
+        or (
+            isinstance(latest_available_seq, int)
+            and latest_available_seq > next_since_seq
+        )
+    )
     return {
-        "tasks": page,
-        "pagination": {"limit": limit, "offset": offset, "total": total},
+        "tasks": [item.to_dict() for item in page_items],
+        "pagination": {"limit": limit, "offset": 0, "total": total},
         "filters": {"state": state_filter or None},
+        "delta": {
+            "cursor_key": "since_seq",
+            "requested_since_seq": requested_since_seq,
+            "effective_since_seq": effective_since_seq,
+            "next_since_seq": next_since_seq,
+            "latest_change_seq": latest_change_seq,
+            "earliest_available_seq": earliest_available_seq,
+            "latest_available_seq": latest_available_seq,
+            "cursor_status": cursor_status,
+            "snapshot": False,
+            "truncated": truncated,
+            "warnings": [],
+        },
     }
 
 
@@ -333,12 +406,14 @@ def cancel_download_task(
             return task.to_dict()
         task.cancel_requested = True
         task.updated_at = time.time()
+        manager._bump_task_change_seq_locked(task)
         event.set()
         if task.state == "queued" and future is not None and future.cancel():
             task.state = "cancelled"
             task.error = "cancelled_before_start"
             task.finished_at = time.time()
             task.updated_at = task.finished_at
+            manager._bump_task_change_seq_locked(task)
         manager._emit(task)
         manager._persist_tasks_locked(force=True)
         return task.to_dict()

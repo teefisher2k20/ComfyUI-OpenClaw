@@ -228,6 +228,111 @@ class TestModelManagerService(unittest.TestCase):
             self.manager.import_downloaded_model(task_id=task.task_id)
         self.assertEqual(ctx.exception.code, "sha256_mismatch")
 
+    def test_list_download_tasks_delta_cursor_contract(self):
+        first = DownloadTask(
+            task_id="task-1",
+            model_id="model-1",
+            name="Model 1",
+            model_type="checkpoint",
+            source="catalog",
+            source_label="Catalog",
+            download_url="https://example.com/model-1.safetensors",
+            destination_subdir="checkpoints",
+            filename="model-1.safetensors",
+            expected_sha256="a" * 64,
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model-1",
+            },
+            tenant_id="default",
+            created_at=10.0,
+            change_seq=4,
+        )
+        second = DownloadTask(
+            task_id="task-2",
+            model_id="model-2",
+            name="Model 2",
+            model_type="checkpoint",
+            source="catalog",
+            source_label="Catalog",
+            download_url="https://example.com/model-2.safetensors",
+            destination_subdir="checkpoints",
+            filename="model-2.safetensors",
+            expected_sha256="b" * 64,
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model-2",
+            },
+            tenant_id="default",
+            created_at=11.0,
+            change_seq=5,
+        )
+        self.manager._tasks[first.task_id] = first
+        self.manager._tasks[second.task_id] = second
+        self.manager._task_change_seq = 5
+
+        result = self.manager.list_download_tasks(limit=10, since_seq=4)
+        self.assertEqual([row["task_id"] for row in result["tasks"]], ["task-2"])
+        self.assertEqual(result["delta"]["requested_since_seq"], 4)
+        self.assertEqual(result["delta"]["effective_since_seq"], 4)
+        self.assertEqual(result["delta"]["next_since_seq"], 5)
+        self.assertEqual(result["delta"]["cursor_status"], "ok")
+        self.assertFalse(result["delta"]["truncated"])
+
+    def test_list_download_tasks_delta_resets_stale_cursor(self):
+        first = DownloadTask(
+            task_id="task-1",
+            model_id="model-1",
+            name="Model 1",
+            model_type="checkpoint",
+            source="catalog",
+            source_label="Catalog",
+            download_url="https://example.com/model-1.safetensors",
+            destination_subdir="checkpoints",
+            filename="model-1.safetensors",
+            expected_sha256="a" * 64,
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model-1",
+            },
+            tenant_id="default",
+            created_at=10.0,
+            change_seq=7,
+        )
+        second = DownloadTask(
+            task_id="task-2",
+            model_id="model-2",
+            name="Model 2",
+            model_type="checkpoint",
+            source="catalog",
+            source_label="Catalog",
+            download_url="https://example.com/model-2.safetensors",
+            destination_subdir="checkpoints",
+            filename="model-2.safetensors",
+            expected_sha256="b" * 64,
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model-2",
+            },
+            tenant_id="default",
+            created_at=11.0,
+            change_seq=8,
+        )
+        self.manager._tasks[first.task_id] = first
+        self.manager._tasks[second.task_id] = second
+        self.manager._task_change_seq = 8
+
+        result = self.manager.list_download_tasks(limit=1, since_seq=1)
+        self.assertEqual([row["task_id"] for row in result["tasks"]], ["task-1"])
+        self.assertEqual(result["delta"]["effective_since_seq"], 6)
+        self.assertEqual(result["delta"]["next_since_seq"], 7)
+        self.assertEqual(result["delta"]["cursor_status"], "stale_cursor_reset")
+        self.assertTrue(result["delta"]["truncated"])
+
     @patch(
         "services.model_manager.validate_outbound_url",
         return_value=("https", "example.com", 443, ["1.1.1.1"]),

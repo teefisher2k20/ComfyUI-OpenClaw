@@ -22,7 +22,7 @@ vi.mock("../../openclaw_api.js", () => ({
 
 vi.mock("../../openclaw_utils.js", () => utilsMock);
 
-import { ModelManagerTab } from "../../tabs/model_manager_tab.js";
+import { ModelManagerTab, mergeTaskDelta } from "../../tabs/model_manager_tab.js";
 
 describe("model_manager_tab", () => {
     beforeEach(() => {
@@ -68,5 +68,24 @@ describe("model_manager_tab", () => {
                 }),
             })
         );
+    });
+
+    it("merges task deltas without duplicating existing rows", () => {
+        const merged = mergeTaskDelta(
+            [
+                { task_id: "task-1", state: "running", created_at: 10, change_seq: 3 },
+                { task_id: "task-2", state: "queued", created_at: 11, change_seq: 4 },
+            ],
+            [
+                { task_id: "task-1", state: "completed", created_at: 10, change_seq: 5 },
+                { task_id: "task-3", state: "queued", created_at: 12, change_seq: 6 },
+            ]
+        );
+
+        expect(merged).toEqual([
+            expect.objectContaining({ task_id: "task-3", state: "queued" }),
+            expect.objectContaining({ task_id: "task-2", state: "queued" }),
+            expect.objectContaining({ task_id: "task-1", state: "completed" }),
+        ]);
     });
 });

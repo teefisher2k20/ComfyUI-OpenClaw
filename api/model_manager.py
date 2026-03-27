@@ -17,6 +17,7 @@ try:
         RoutePlane,
         endpoint_metadata,
     )
+    from ..services.management_query import normalize_cursor_limit
     from ..services.model_manager import ModelManagerError, model_manager
     from ..services.tenant_context import TenantBoundaryError, request_tenant_scope
 except ImportError:  # pragma: no cover
@@ -30,6 +31,7 @@ except ImportError:  # pragma: no cover
         RoutePlane,
         endpoint_metadata,
     )
+    from services.management_query import normalize_cursor_limit  # type: ignore
     from services.model_manager import ModelManagerError, model_manager  # type: ignore
     from services.tenant_context import (  # type: ignore
         TenantBoundaryError,
@@ -159,6 +161,22 @@ async def model_download_list_handler(request: web.Request) -> web.Response:
     if deny:
         return deny
     token_info = resolve_token_info(request)
+    since_seq = None
+    delta_warnings = []
+    if "since_seq" in request.query:
+        page = normalize_cursor_limit(
+            request.query,
+            cursor_key="since_seq",
+            default_cursor=0,
+            min_cursor=0,
+            default_limit=100,
+            max_limit=200,
+        )
+        since_seq = int(page.cursor or 0)
+        delta_warnings = list(page.warnings)
+        limit = page.limit
+    else:
+        limit = _parse_int(request.query.get("limit"), 100, 1, 200)
     try:
         with request_tenant_scope(
             request=request, token_info=token_info, allow_default_when_missing=True
@@ -166,9 +184,14 @@ async def model_download_list_handler(request: web.Request) -> web.Response:
             result = model_manager.list_download_tasks(
                 tenant_id=tenant.tenant_id,
                 state=request.query.get("state", ""),
-                limit=_parse_int(request.query.get("limit"), 100, 1, 200),
+                limit=limit,
                 offset=_parse_int(request.query.get("offset"), 0, 0, 10_000),
+                since_seq=since_seq,
             )
+            if since_seq is not None:
+                result.setdefault("pagination", {})["warnings"] = delta_warnings
+                if "delta" in result:
+                    result["delta"]["warnings"] = delta_warnings
             return _json({"ok": True, **result})
     except TenantBoundaryError as exc:
         return _json({"ok": False, "error": exc.code, "detail": str(exc)}, 403)

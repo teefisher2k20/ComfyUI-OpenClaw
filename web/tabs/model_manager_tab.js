@@ -128,6 +128,40 @@ function buildInstallationCard(item) {
     `;
 }
 
+function sortTasksForDisplay(tasks) {
+    return [...tasks].sort((left, right) => Number(right?.created_at || 0) - Number(left?.created_at || 0));
+}
+
+export function mergeTaskDelta(existingTasks, deltaTasks) {
+    const merged = new Map();
+    for (const task of Array.isArray(existingTasks) ? existingTasks : []) {
+        if (task?.task_id) {
+            merged.set(task.task_id, task);
+        }
+    }
+    for (const task of Array.isArray(deltaTasks) ? deltaTasks : []) {
+        if (task?.task_id) {
+            merged.set(task.task_id, task);
+        }
+    }
+    return sortTasksForDisplay([...merged.values()]);
+}
+
+function resolveNextTaskCursor(payload, fallbackCursor = 0) {
+    const delta = payload?.delta || {};
+    const nextSinceSeq = Number(delta?.next_since_seq);
+    if (Number.isFinite(nextSinceSeq) && nextSinceSeq >= 0) {
+        return nextSinceSeq;
+    }
+    const taskSeqs = Array.isArray(payload?.tasks)
+        ? payload.tasks.map((task) => Number(task?.change_seq)).filter((seq) => Number.isFinite(seq) && seq >= 0)
+        : [];
+    if (!taskSeqs.length) {
+        return fallbackCursor;
+    }
+    return Math.max(fallbackCursor, ...taskSeqs);
+}
+
 export const ModelManagerTab = {
     id: "model-manager",
     title: "Model Manager",
@@ -211,6 +245,7 @@ export const ModelManagerTab = {
             tasks: [],
             installations: [],
             pollingTimer: null,
+            taskSinceSeq: 0,
         };
         const modelManagerAction = {
             label: "Open Model Manager",
@@ -296,12 +331,20 @@ export const ModelManagerTab = {
             renderResults();
         };
 
-        const loadTasks = async () => {
-            const res = await openclawApi.listModelDownloadTasks({ limit: 100, offset: 0 });
+        const loadTasks = async ({ delta = false } = {}) => {
+            const params = { limit: 100, offset: 0 };
+            if (delta && state.taskSinceSeq > 0) {
+                params.since_seq = state.taskSinceSeq;
+            }
+            const res = await openclawApi.listModelDownloadTasks(params);
             if (!res.ok) {
                 throw new Error(res.error || "tasks_list_failed");
             }
-            state.tasks = Array.isArray(res.data?.tasks) ? res.data.tasks : [];
+            const incomingTasks = Array.isArray(res.data?.tasks) ? res.data.tasks : [];
+            state.tasks = params.since_seq != null
+                ? mergeTaskDelta(state.tasks, incomingTasks)
+                : sortTasksForDisplay(incomingTasks);
+            state.taskSinceSeq = resolveNextTaskCursor(res.data, state.taskSinceSeq);
             renderTasks();
         };
 
@@ -358,7 +401,7 @@ export const ModelManagerTab = {
                 dedupeKey: "model-manager:queue-success",
                 action: modelManagerAction,
             });
-            await loadTasks();
+            await loadTasks({ delta: false });
         };
 
         const cancelTask = async (taskId) => {
@@ -368,7 +411,7 @@ export const ModelManagerTab = {
                 reportIssue(`cancel failed: ${res.error || "request_failed"}`, "model-manager:cancel");
                 return;
             }
-            await loadTasks();
+            await loadTasks({ delta: false });
         };
 
         const importTask = async (taskId) => {
@@ -388,7 +431,7 @@ export const ModelManagerTab = {
                 dedupeKey: "model-manager:import-success",
                 action: modelManagerAction,
             });
-            await loadTasks();
+            await loadTasks({ delta: false });
             await loadInstallations();
             await loadSearch();
         };
@@ -429,7 +472,7 @@ export const ModelManagerTab = {
             }
             const pane = container.closest(".openclaw-tab-pane");
             if (pane && !pane.classList.contains("active")) return;
-            loadTasks().catch(() => {
+            loadTasks({ delta: true }).catch(() => {
                 // Poll refresh errors are surfaced by explicit refresh actions.
             });
         }, 3000);

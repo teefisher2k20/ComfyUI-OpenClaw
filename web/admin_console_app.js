@@ -71,15 +71,18 @@ export function mountAdminConsole(root = document) {
     elements.token.value = api.getToken();
 
     function appendEvent(obj) {
+        const seq = Number(obj?.seq);
+        if (!Number.isNaN(seq)) {
+            if (seq <= api.state.lastSeq) {
+                return;
+            }
+            api.state.lastSeq = seq;
+        }
         const line = `[${now()}] ${JSON.stringify(obj)}`;
         const lines = elements.eventsBox.textContent ? elements.eventsBox.textContent.split("\n") : [];
         lines.push(line);
         elements.eventsBox.textContent = lines.slice(-120).join("\n");
         elements.eventsBox.scrollTop = elements.eventsBox.scrollHeight;
-        const seq = Number(obj?.seq);
-        if (!Number.isNaN(seq) && seq > api.state.lastSeq) {
-            api.state.lastSeq = seq;
-        }
     }
 
     async function loadDashboard() {
@@ -179,14 +182,24 @@ export function mountAdminConsole(root = document) {
     }
 
     async function pollEvents() {
-        const response = await api.request(`/events?since=${encodeURIComponent(String(api.state.lastSeq))}&limit=50`);
-        if (!response.ok) {
-            setStatus(elements.eventsStatus, `Events poll failed: ${response.error || "unknown"}`, "err");
-            return;
+        let polls = 0;
+        let totalEvents = 0;
+        let cursor = api.state.lastSeq;
+        while (polls < 4) {
+            const response = await api.request(`/events?since=${encodeURIComponent(String(cursor))}&limit=50`);
+            if (!response.ok) {
+                setStatus(elements.eventsStatus, `Events poll failed: ${response.error || "unknown"}`, "err");
+                return;
+            }
+            const events = Array.isArray(response.data?.events) ? response.data.events : [];
+            events.forEach(appendEvent);
+            totalEvents += events.length;
+            const nextSinceSeq = Number(response.data?.delta?.next_since_seq);
+            cursor = Number.isFinite(nextSinceSeq) ? nextSinceSeq : api.state.lastSeq;
+            polls += 1;
+            if (!response.data?.delta?.truncated) break;
         }
-        const events = response.data?.events || [];
-        events.forEach(appendEvent);
-        setStatus(elements.eventsStatus, `Polled ${events.length} events`, "ok");
+        setStatus(elements.eventsStatus, `Polled ${totalEvents} events`, "ok");
     }
 
     function disconnectSse() {

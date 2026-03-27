@@ -323,6 +323,26 @@ async def events_poll_handler(request: web.Request) -> web.Response:
                 "cursor_status": cursor_status,
                 "warnings": page.warnings,
             },
+            "delta": {
+                "cursor_key": "since",
+                "requested_since_seq": since_requested,
+                "effective_since_seq": since_effective,
+                "next_since_seq": (events[-1].seq if events else since_effective),
+                "latest_seq": latest_seq,
+                "earliest_retained_seq": scan.get("earliest_retained_seq"),
+                "latest_retained_seq": scan.get("latest_retained_seq"),
+                "cursor_status": cursor_status,
+                "snapshot": since_requested == 0,
+                "truncated": bool(
+                    scan.get("truncated")
+                    or (
+                        events
+                        and isinstance(scan.get("latest_retained_seq"), int)
+                        and int(scan.get("latest_retained_seq")) > int(events[-1].seq)
+                    )
+                ),
+                "warnings": page.warnings,
+            },
             "scan": scan,
         }
     )

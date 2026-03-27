@@ -138,6 +138,7 @@ class DownloadTask:
     resume_status: str = "not_started"
     recovery_attempts: int = 0
     last_checkpoint_at: float = 0.0
+    change_seq: int = 0
 
     def is_terminal(self) -> bool:
         return self.state in {"completed", "failed", "cancelled"}
@@ -174,6 +175,7 @@ class DownloadTask:
             "resume_status": self.resume_status,
             "recovery_attempts": self.recovery_attempts,
             "last_checkpoint_at": self.last_checkpoint_at,
+            "change_seq": self.change_seq,
         }
 
     @classmethod
@@ -211,6 +213,7 @@ class DownloadTask:
             resume_status=str(payload.get("resume_status") or "not_started"),
             recovery_attempts=max(0, int(payload.get("recovery_attempts") or 0)),
             last_checkpoint_at=float(payload.get("last_checkpoint_at") or 0.0),
+            change_seq=max(0, int(payload.get("change_seq") or 0)),
         )
 
 
@@ -433,6 +436,7 @@ class ModelManager:
         self._tasks: Dict[str, DownloadTask] = {}
         self._futures: Dict[str, Future] = {}
         self._cancel_events: Dict[str, threading.Event] = {}
+        self._task_change_seq = 0
         self._last_tasks_persist_at = 0.0
         self._download_task_cls = DownloadTask
         self._download_cancelled_cls = DownloadCancelled
@@ -619,6 +623,11 @@ class ModelManager:
             event_store_getter=get_job_event_store,
         )
 
+    def _bump_task_change_seq_locked(self, task: DownloadTask) -> int:
+        self._task_change_seq += 1
+        task.change_seq = self._task_change_seq
+        return task.change_seq
+
     def _load_installations(self) -> List[Dict[str, Any]]:
         return _load_installations_impl(installations_path=self.installations_path)
 
@@ -762,6 +771,7 @@ class ModelManager:
         state: str = "",
         limit: int = 100,
         offset: int = 0,
+        since_seq: Optional[int] = None,
     ) -> Dict[str, Any]:
         return _list_download_tasks_impl(
             manager=self,
@@ -769,6 +779,7 @@ class ModelManager:
             state=state,
             limit=limit,
             offset=offset,
+            since_seq=since_seq,
         )
 
     def get_download_task(

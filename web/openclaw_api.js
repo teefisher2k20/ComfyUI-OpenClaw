@@ -813,6 +813,7 @@ export class OpenClawAPI {
         if (params.state) qs.set("state", String(params.state));
         if (params.limit != null) qs.set("limit", String(params.limit));
         if (params.offset != null) qs.set("offset", String(params.offset));
+        if (params.since_seq != null) qs.set("since_seq", String(params.since_seq));
         const suffix = qs.toString() ? `?${qs.toString()}` : "";
         return this.fetch(`${this._path("/models/downloads")}${suffix}`, {
             headers: { ...this._adminTokenHeaders() }
