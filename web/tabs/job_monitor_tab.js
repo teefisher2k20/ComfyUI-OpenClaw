@@ -3,6 +3,7 @@
  * Tracks prompt execution and displays outputs.
  */
 import { openclawApi } from "../openclaw_api.js";
+import { extractHistoryImageRefs } from "../openclaw_asset_refs.js";
 import { parseJsonSafe } from "../openclaw_utils.js";
 
 const POLL_INTERVAL_MS = 2000;
@@ -264,26 +265,11 @@ async function startPolling(promptId, onUpdate) {
 }
 
 function extractImages(historyItem) {
-    const results = [];
-    const outputs = historyItem.outputs || {};
-
-    for (const nodeId in outputs) {
-        const images = outputs[nodeId].images || [];
-        for (const img of images) {
-            if (!img.filename) continue;
-            const params = new URLSearchParams({
-                filename: img.filename,
-                type: img.type || "output",
-            });
-            if (img.subfolder) params.set("subfolder", img.subfolder);
-
-            results.push({
-                filename: img.filename,
-                subfolder: img.subfolder || "",
-                type: img.type || "output",
-                view_url: openclawApi.buildViewUrl(img.filename, img.subfolder || "", img.type || "output"),
-            });
-        }
-    }
-    return results;
+    return extractHistoryImageRefs(historyItem).map((img) => ({
+        filename: img.filename,
+        subfolder: img.subfolder,
+        type: img.type,
+        asset_hash: img.asset_hash,
+        view_url: openclawApi.buildViewUrlForRef(img),
+    }));
 }

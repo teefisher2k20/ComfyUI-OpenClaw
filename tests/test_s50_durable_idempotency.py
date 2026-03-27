@@ -61,16 +61,21 @@ class TestSQLiteDurableBackend(unittest.TestCase):
 
     def test_ttl_expiry(self):
         """Test TTL expiry."""
-        # Insert with short TTL
-        self.backend.check_and_record("key_ttl", 1)
-        time.sleep(2)  # Wait for expiry
+        # IMPORTANT: drive the backend clock explicitly so this regression stays
+        # deterministic under the full suite instead of depending on wall time.
+        with patch(
+            "services.idempotency_store.time.time",
+            side_effect=[100.0, 102.0, 102.0],
+        ):
+            # Insert with short TTL
+            self.backend.check_and_record("key_ttl", 1)
 
-        # Cleanup should remove it
-        self.backend.cleanup()
+            # Cleanup should remove it
+            self.backend.cleanup()
 
-        # Should be fresh again
-        # Impl: if fresh, returns (False, None) -> is_dup=False
-        is_dup, pid = self.backend.check_and_record("key_ttl", 3600)
+            # Should be fresh again
+            # Impl: if fresh, returns (False, None) -> is_dup=False
+            is_dup, pid = self.backend.check_and_record("key_ttl", 3600)
         self.assertFalse(is_dup)
 
 

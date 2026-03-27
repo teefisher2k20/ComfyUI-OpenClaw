@@ -75,6 +75,33 @@ class TestComfyUIHistoryParsing(unittest.TestCase):
         images = extract_images(history_item)
         self.assertEqual(len(images), 0)
 
+    def test_extract_images_prefers_asset_hash_view_url(self):
+        from services.comfyui_history import extract_images
+
+        history_item = {
+            "outputs": {
+                "2": {
+                    "images": [
+                        {
+                            "filename": "preview.png",
+                            "subfolder": "nested",
+                            "type": "temp",
+                            "asset_hash": "blake3:abc123",
+                        }
+                    ]
+                }
+            }
+        }
+
+        images = extract_images(history_item)
+        self.assertEqual(len(images), 1)
+        self.assertEqual(images[0]["filename"], "preview.png")
+        self.assertEqual(images[0]["type"], "temp")
+        self.assertEqual(images[0]["asset_hash"], "blake3:abc123")
+        self.assertIn("filename=blake3%3Aabc123", images[0]["view_url"])
+        self.assertNotIn("subfolder=nested", images[0]["view_url"])
+        self.assertNotIn("type=temp", images[0]["view_url"])
+
     def test_get_job_status(self):
         from services.comfyui_history import get_job_status
 

@@ -55,17 +55,27 @@ def extract_images(history_item: Dict[str, Any]) -> List[Dict[str, str]]:
     for node_id, node_output in outputs.items():
         images = node_output.get("images", [])
         for img in images:
-            filename = img.get("filename", "")
+            asset_hash = ""
+            if isinstance(img.get("asset_hash"), str):
+                asset_hash = img.get("asset_hash", "").strip()
+            elif isinstance(img.get("asset"), dict):
+                asset_hash = str(img.get("asset", {}).get("asset_hash", "")).strip()
+
+            filename = img.get("filename") or img.get("name") or asset_hash
             subfolder = img.get("subfolder", "")
             img_type = img.get("type", "output")
 
             if not filename:
                 continue
 
-            # Build /view URL
-            params = {"filename": filename, "type": img_type}
-            if subfolder:
-                params["subfolder"] = subfolder
+            # IMPORTANT: asset-backed refs must still resolve through /view so
+            # callback consumers stay compatible with classic history behavior.
+            if asset_hash:
+                params = {"filename": asset_hash}
+            else:
+                params = {"filename": filename, "type": img_type}
+                if subfolder:
+                    params["subfolder"] = subfolder
 
             view_url = f"{COMFYUI_URL}/view?{urlencode(params)}"
 
@@ -74,6 +84,7 @@ def extract_images(history_item: Dict[str, Any]) -> List[Dict[str, str]]:
                     "filename": filename,
                     "subfolder": subfolder,
                     "type": img_type,
+                    "asset_hash": asset_hash,
                     "view_url": view_url,
                 }
             )

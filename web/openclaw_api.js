@@ -6,6 +6,7 @@ import { OpenClawSession } from "./openclaw_session.js";
 import { fetchApi, apiURL, fileURL } from "./openclaw_comfy_api.js";
 import { API_PREFIXES, buildAdminTokenHeaders, getApiPathCandidates } from "./openclaw_compat.js";
 import { isAbortError, linkAbortSignal, parseJsonSafe } from "./openclaw_utils.js";
+import { normalizeComfyOutputRef } from "./openclaw_asset_refs.js";
 import {
     composeFetchWrappersOnce,
     withAbortPassthrough,
@@ -232,6 +233,14 @@ export class OpenClawAPI {
         if (subfolder) params.set("subfolder", subfolder);
         // apiURL returns the full path including standard base
         return apiURL(`/view?${params.toString()}`);
+    }
+
+    buildViewUrlForRef(imageRef) {
+        const normalized = normalizeComfyOutputRef(imageRef);
+        if (!normalized) {
+            return "";
+        }
+        return apiURL(`/view?${new URLSearchParams(normalized.viewParams).toString()}`);
     }
 
     // R21/F20: Get config
