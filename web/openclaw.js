@@ -11,6 +11,7 @@ import { openclawApi } from "./openclaw_api.js";
 // and this whole extension never reaches setup(), which makes the OpenClaw sidebar disappear.
 import { registerContextToolbox } from "./extensions/context_toolbox.js"; // F51
 import { getCompatibleSettingValue } from "./openclaw_compat.js";
+import { stampHostSurfaceMetadata } from "./openclaw_host_surface.js";
 
 // Tabs
 import { tabManager } from "./openclaw_tabs.js";
@@ -204,6 +205,9 @@ app.registerExtension({
                     type: "custom",
                     render: (container) => {
                         try {
+                            // IMPORTANT: desktop bundles may lag standalone frontend; stamp
+                            // the resolved host surface so host-sensitive regressions stay explicit.
+                            stampHostSurfaceMetadata(container, { app, win: window });
                             openclawUI.mount(container);
                         } catch (renderError) {
                             console.error("[OpenClaw] UI Mount Error:", renderError);

@@ -25,6 +25,10 @@ META_BLOCK_RE = re.compile(
     r"```" + re.escape(META_BLOCK_TAG) + r"\s*\n(?P<body>.*?)\n```",
     re.DOTALL,
 )
+SEMVER_RE = re.compile(r"(?P<version>\d+\.\d+\.\d+)")
+DESKTOP_ANCHOR_RE = re.compile(
+    r"^(?P<desktop>\d+\.\d+\.\d+)\s+\(core\s+(?P<core>\d+\.\d+\.\d+)\s+/\s+frontend\s+(?P<frontend>\d+\.\d+\.\d+)\)$"
+)
 
 
 def _utc_now() -> datetime:
@@ -257,6 +261,100 @@ def normalize_observed_anchors(
         "comfyui": (comfyui or "").strip() or "unknown",
         "comfyui_frontend": (comfyui_frontend or "").strip() or "unknown",
         "desktop": (desktop or "").strip() or "unknown",
+    }
+
+
+def _extract_semver(anchor: Optional[str]) -> Optional[str]:
+    if not isinstance(anchor, str):
+        return None
+    match = SEMVER_RE.search(anchor)
+    if not match:
+        return None
+    return match.group("version")
+
+
+def _parse_semver(version: Optional[str]) -> Optional[Tuple[int, int, int]]:
+    if not isinstance(version, str):
+        return None
+    try:
+        major, minor, patch = version.split(".")
+        return int(major), int(minor), int(patch)
+    except Exception:
+        return None
+
+
+def _compare_semver(left: Optional[str], right: Optional[str]) -> Optional[int]:
+    left_tuple = _parse_semver(left)
+    right_tuple = _parse_semver(right)
+    if left_tuple is None or right_tuple is None:
+        return None
+    if left_tuple == right_tuple:
+        return 0
+    return 1 if left_tuple > right_tuple else -1
+
+
+def build_host_surface_contract(
+    published_anchors: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    anchors = dict(published_anchors or {})
+    standalone_anchor = str(anchors.get("comfyui_frontend", "unknown"))
+    desktop_anchor = str(anchors.get("desktop", "unknown"))
+    standalone_frontend_version = _extract_semver(standalone_anchor)
+
+    desktop_match = DESKTOP_ANCHOR_RE.match(desktop_anchor)
+    desktop_version = None
+    desktop_core_version = None
+    desktop_embedded_frontend_version = None
+    violations: List[Dict[str, str]] = []
+
+    if desktop_anchor != "unknown" and desktop_match is None:
+        violations.append(
+            {
+                "code": "R164_DESKTOP_ANCHOR_PARSE",
+                "message": "Desktop anchor did not match the expected bundle format",
+            }
+        )
+    elif desktop_match is not None:
+        desktop_version = desktop_match.group("desktop")
+        desktop_core_version = desktop_match.group("core")
+        desktop_embedded_frontend_version = desktop_match.group("frontend")
+
+    compare_result = _compare_semver(
+        desktop_embedded_frontend_version, standalone_frontend_version
+    )
+    if compare_result is None:
+        desktop_frontend_status = "unknown"
+    elif compare_result == 0:
+        desktop_frontend_status = "in_sync"
+    elif compare_result < 0:
+        desktop_frontend_status = "lagging"
+    else:
+        desktop_frontend_status = "ahead"
+
+    return {
+        "ok": len(violations) == 0,
+        "code": (
+            "R164_HOST_SURFACES_READY"
+            if not violations
+            else "R164_HOST_SURFACE_CONTRACT_INVALID"
+        ),
+        "surfaces": {
+            "standalone_frontend": {
+                "anchor": standalone_anchor,
+                "frontend_version": standalone_frontend_version,
+            },
+            "desktop": {
+                "anchor": desktop_anchor,
+                "desktop_version": desktop_version,
+                "core_version": desktop_core_version,
+                "embedded_frontend_version": desktop_embedded_frontend_version,
+                "frontend_parity": {
+                    "status": desktop_frontend_status,
+                    "reference_frontend_version": standalone_frontend_version,
+                },
+            },
+        },
+        "violations": violations,
     }
 
 

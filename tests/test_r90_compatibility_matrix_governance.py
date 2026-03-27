@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 from services.compatibility_matrix_governance import (
+    build_host_surface_contract,
     detect_anchor_drift,
     read_matrix_document,
     run_refresh_workflow,
@@ -47,6 +48,34 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
         self.assertFalse(drift["ok"])
         self.assertEqual(drift["code"], "R90_ANCHOR_DRIFT")
         self.assertEqual(drift["drift"][0]["anchor"], "comfyui_frontend")
+
+    def test_build_host_surface_contract_tracks_desktop_embedded_frontend_lag(self):
+        contract = build_host_surface_contract(
+            {
+                "comfyui": "v0.18.1",
+                "comfyui_frontend": "1.43.6+bcb39b1bf",
+                "desktop": "0.8.26 (core 0.18.2 / frontend 1.41.21)",
+            }
+        )
+        self.assertTrue(contract["ok"], msg=contract)
+        self.assertEqual(contract["code"], "R164_HOST_SURFACES_READY")
+        self.assertEqual(
+            contract["surfaces"]["desktop"]["embedded_frontend_version"], "1.41.21"
+        )
+        self.assertEqual(
+            contract["surfaces"]["desktop"]["frontend_parity"]["status"], "lagging"
+        )
+
+    def test_build_host_surface_contract_marks_invalid_desktop_anchor(self):
+        contract = build_host_surface_contract(
+            {
+                "comfyui_frontend": "1.43.6+bcb39b1bf",
+                "desktop": "desktop-head",
+            }
+        )
+        self.assertFalse(contract["ok"])
+        self.assertEqual(contract["code"], "R164_HOST_SURFACE_CONTRACT_INVALID")
+        self.assertEqual(contract["violations"][0]["code"], "R164_DESKTOP_ANCHOR_PARSE")
 
     def test_validate_stale_metadata(self):
         metadata = {
@@ -133,6 +162,18 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
             self.assertEqual(
                 report.environment["compat_matrix_validation_code"], "R90_MATRIX_STALE"
             )
+
+    def test_operator_doctor_reports_host_surface_contract(self):
+        report = DoctorReport()
+        check_compatibility_matrix_governance(report, REPO_ROOT)
+        checks = {c.name: c for c in report.checks}
+        self.assertIn("compatibility_matrix_host_surface_contract", checks)
+        self.assertEqual(
+            checks["compatibility_matrix_host_surface_contract"].severity, "pass"
+        )
+        self.assertEqual(
+            report.environment["compat_desktop_embedded_frontend_status"], "lagging"
+        )
 
     def test_script_smoke_emits_evidence(self):
         with tempfile.TemporaryDirectory() as td:

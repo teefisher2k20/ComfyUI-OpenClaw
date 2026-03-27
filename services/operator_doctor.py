@@ -302,6 +302,7 @@ def check_compatibility_matrix_governance(
 
     try:
         from .compatibility_matrix_governance import (
+            build_host_surface_contract,
             detect_anchor_drift,
             normalize_observed_anchors,
             read_matrix_document,
@@ -326,6 +327,9 @@ def check_compatibility_matrix_governance(
         desktop=os.environ.get("OPENCLAW_COMPAT_ANCHOR_DESKTOP"),
     )
     drift = detect_anchor_drift((doc.get("metadata") or {}).get("anchors"), observed)
+    host_contract = build_host_surface_contract(
+        (doc.get("metadata") or {}).get("anchors")
+    )
 
     report.environment["compat_matrix_validation_code"] = str(
         validation.get("code", "")
@@ -333,6 +337,15 @@ def check_compatibility_matrix_governance(
     if validation.get("age_days") is not None:
         report.environment["compat_matrix_age_days"] = str(validation["age_days"])
     report.environment["compat_matrix_drift_code"] = str(drift.get("code", ""))
+    report.environment["compat_host_surface_code"] = str(host_contract.get("code", ""))
+    report.environment["compat_desktop_embedded_frontend_status"] = str(
+        (
+            host_contract.get("surfaces", {})
+            .get("desktop", {})
+            .get("frontend_parity", {})
+            .get("status", "")
+        )
+    )
 
     if not validation.get("ok"):
         report.add(
@@ -386,6 +399,48 @@ def check_compatibility_matrix_governance(
                 name="compatibility_matrix_governance",
                 severity=Severity.PASS.value,
                 message=f"Compatibility matrix metadata fresh (age={age_days}d)",
+            )
+        )
+
+    if not host_contract.get("ok"):
+        report.add(
+            CheckResult(
+                name="compatibility_matrix_host_surface_contract",
+                severity=Severity.WARN.value,
+                message="Compatibility matrix host-surface contract is incomplete",
+                detail=json.dumps(
+                    host_contract.get("violations", []), ensure_ascii=False
+                ),
+                remediation=(
+                    "Record the desktop bundle anchor in the expected "
+                    "`<desktop> (core <core> / frontend <frontend>)` format."
+                ),
+            )
+        )
+    else:
+        desktop_surface = host_contract["surfaces"]["desktop"]
+        parity = desktop_surface["frontend_parity"]
+        report.add(
+            CheckResult(
+                name="compatibility_matrix_host_surface_contract",
+                severity=Severity.PASS.value,
+                message=(
+                    "Desktop host surface tracked separately "
+                    f"({parity['status']} vs standalone frontend)"
+                ),
+                detail=json.dumps(
+                    {
+                        "desktop_anchor": desktop_surface["anchor"],
+                        "desktop_version": desktop_surface["desktop_version"],
+                        "embedded_frontend_version": desktop_surface[
+                            "embedded_frontend_version"
+                        ],
+                        "reference_frontend_version": parity[
+                            "reference_frontend_version"
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
             )
         )
 
