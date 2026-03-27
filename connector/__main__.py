@@ -10,6 +10,8 @@ import sys
 from .config import load_config
 from .openclaw_client import OpenClawClient
 from .platforms.discord_gateway import DiscordGateway
+from .platforms.feishu_long_connection import FeishuLongConnectionClient
+from .platforms.feishu_webhook import FeishuWebhookServer
 from .platforms.kakao_webhook import KakaoWebhookServer
 from .platforms.line_webhook import LINEWebhookServer
 from .platforms.slack_webhook import SlackWebhookServer
@@ -44,6 +46,7 @@ def _print_security_banner(config):
         or config.wechat_allowed_users
         or config.kakao_allowed_users
         or config.slack_allowed_users
+        or config.feishu_allowed_users
     )
     has_admins = bool(config.admin_users)
 
@@ -107,6 +110,7 @@ async def main():
     wechat_server = None
     kakao_server = None
     slack_server = None
+    feishu_server = None
 
     # 3. Platforms
     if config.telegram_bot_token:
@@ -206,6 +210,33 @@ async def main():
     else:
         logger.info("Slack not configured (OPENCLAW_CONNECTOR_SLACK_BOT_TOKEN missing)")
 
+    if config.feishu_app_id and config.feishu_app_secret:
+        if config.feishu_mode == "webhook":
+            feishu_server = FeishuWebhookServer(config, router)
+        elif config.feishu_mode == "websocket":
+            # CRITICAL: Feishu long-connection remains explicit opt-in; do not
+            # auto-fallback across transports or ingress verification can drift.
+            feishu_server = FeishuLongConnectionClient(config, router)
+        else:
+            logger.error(
+                "Invalid OPENCLAW_CONNECTOR_FEISHU_MODE=%r. Expected 'websocket' or 'webhook'.",
+                config.feishu_mode,
+            )
+            feishu_server = None
+            logger.error("Feishu adapter startup aborted (fail-closed).")
+
+        if feishu_server is None:
+            logger.warning("Feishu adapter disabled due to invalid mode config.")
+        else:
+            platforms["feishu"] = feishu_server
+            await feishu_server.start()
+            if not tasks:
+                tasks.append(asyncio.create_task(asyncio.sleep(3600 * 24 * 365)))
+    elif config.feishu_app_id:
+        logger.warning("Feishu configured but App Secret missing. Skipping.")
+    else:
+        logger.info("Feishu not configured (OPENCLAW_CONNECTOR_FEISHU_APP_ID missing)")
+
     if (
         not tasks
         and not line_server
@@ -213,11 +244,12 @@ async def main():
         and not wechat_server
         and not kakao_server
         and not slack_server
+        and not feishu_server
     ):
         logger.error(
             "No platforms configured! Set TELEGRAM_TOKEN, DISCORD_TOKEN, "
             "LINE_SECRET, WHATSAPP_ACCESS_TOKEN, WECHAT_TOKEN, "
-            "KAKAO_ENABLED or SLACK_BOT_TOKEN."
+            "KAKAO_ENABLED, SLACK_BOT_TOKEN or FEISHU_APP_ID."
         )
         await client.close()
         return
@@ -246,6 +278,8 @@ async def main():
             await kakao_server.stop()
         if slack_server:
             await slack_server.stop()
+        if feishu_server:
+            await feishu_server.stop()
         if poller:
             await poller.stop()
         await client.close()

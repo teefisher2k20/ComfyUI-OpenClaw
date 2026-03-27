@@ -120,6 +120,21 @@ class ConnectorConfig:
     )
     slack_oauth_state_ttl_sec: int = 600
 
+    # Feishu / Lark (F67)
+    feishu_app_id: Optional[str] = None
+    feishu_app_secret: Optional[str] = None
+    feishu_verification_token: Optional[str] = None
+    feishu_encrypt_key: Optional[str] = None
+    feishu_allowed_users: List[str] = field(default_factory=list)
+    feishu_allowed_chats: List[str] = field(default_factory=list)
+    feishu_bind_host: str = "127.0.0.1"
+    feishu_bind_port: int = 8094
+    feishu_webhook_path: str = "/feishu/events"
+    feishu_domain: str = "feishu"  # feishu | lark
+    feishu_mode: str = "websocket"  # websocket | webhook
+    feishu_require_mention: bool = True
+    feishu_reply_in_thread: bool = True
+
     # Privileged Access (ID match across platforms; Telegram Int vs Discord Str handled by router)
     admin_users: List[str] = field(default_factory=list)
 
@@ -319,6 +334,41 @@ def load_config() -> ConnectorConfig:
     ):
         if slack_oauth_ttl.isdigit():
             cfg.slack_oauth_state_ttl_sec = max(60, int(slack_oauth_ttl))
+
+    # Feishu / Lark (F67)
+    cfg.feishu_app_id = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_APP_ID")
+    cfg.feishu_app_secret = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_APP_SECRET")
+    cfg.feishu_verification_token = os.environ.get(
+        "OPENCLAW_CONNECTOR_FEISHU_VERIFICATION_TOKEN"
+    )
+    cfg.feishu_encrypt_key = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_ENCRYPT_KEY")
+    if fu := os.environ.get("OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS"):
+        cfg.feishu_allowed_users = [u.strip() for u in fu.split(",") if u.strip()]
+    if fc := os.environ.get("OPENCLAW_CONNECTOR_FEISHU_ALLOWED_CHATS"):
+        cfg.feishu_allowed_chats = [u.strip() for u in fc.split(",") if u.strip()]
+    cfg.feishu_bind_host = os.environ.get("OPENCLAW_CONNECTOR_FEISHU_BIND", "127.0.0.1")
+    if fp := os.environ.get("OPENCLAW_CONNECTOR_FEISHU_PORT"):
+        if fp.isdigit():
+            cfg.feishu_bind_port = int(fp)
+    cfg.feishu_webhook_path = os.environ.get(
+        "OPENCLAW_CONNECTOR_FEISHU_PATH", "/feishu/events"
+    )
+    cfg.feishu_domain = (
+        os.environ.get("OPENCLAW_CONNECTOR_FEISHU_DOMAIN", "feishu").strip() or "feishu"
+    )
+    cfg.feishu_mode = os.environ.get(
+        "OPENCLAW_CONNECTOR_FEISHU_MODE", "websocket"
+    ).lower()
+    if (
+        os.environ.get("OPENCLAW_CONNECTOR_FEISHU_REQUIRE_MENTION", "").lower()
+        == "false"
+    ):
+        cfg.feishu_require_mention = False
+    if (
+        os.environ.get("OPENCLAW_CONNECTOR_FEISHU_REPLY_IN_THREAD", "").lower()
+        == "false"
+    ):
+        cfg.feishu_reply_in_thread = False
 
     # Admin
     if admins := os.environ.get("OPENCLAW_CONNECTOR_ADMIN_USERS"):

@@ -297,6 +297,13 @@ class CommandRouter:
                 return True
             return False
 
+        if platform == "feishu":
+            if sender_id in self.config.feishu_allowed_users:
+                return True
+            if channel_id in self.config.feishu_allowed_chats:
+                return True
+            return False
+
         # Unknown platform: trust only admins
         return False
 
