@@ -262,7 +262,7 @@ async def main():
             logger.warning("Feishu adapter disabled due to invalid mode config.")
         else:
             platforms["feishu"] = feishu_server or feishu_long_clients[0]
-            if config.feishu_mode == "webhook" and feishu_server is not None:
+            if feishu_server is not None:
                 await feishu_server.start()
             for feishu_long_client in feishu_long_clients:
                 await feishu_long_client.start()

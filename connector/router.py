@@ -524,6 +524,7 @@ class CommandRouter:
 
         pending_count = res.get("pending_count")
         lines = []
+        buttons = []
         for i in items:
             # IMPORTANT (stability): the backend approval schema uses:
             # `approval_id`, `template_id`, `status`, `requested_by`, `source`.
@@ -539,11 +540,35 @@ class CommandRouter:
             lines.append(
                 f"- {approval_id} [{status}] template={template_id} by={requested_by} source={source}"
             )
+        for i in items[:3]:
+            approval_id = i.get("approval_id") or i.get("id") or "unknown"
+            short_id = str(approval_id)[:8]
+            buttons.append(
+                {
+                    "label": f"Approve {short_id}",
+                    "value": f"/approve {approval_id}",
+                    "action_type": "approval.approve",
+                    "approval_id": approval_id,
+                    "style": "primary",
+                }
+            )
+            buttons.append(
+                {
+                    "label": f"Reject {short_id}",
+                    "value": f"/reject {approval_id}",
+                    "action_type": "approval.reject",
+                    "approval_id": approval_id,
+                    "style": "danger",
+                }
+            )
 
         header = "Pending Approvals"
         if isinstance(pending_count, int):
             header += f" ({pending_count})"
-        return CommandResponse(text=header + ":\n" + "\n".join(lines))
+        return CommandResponse(
+            text=header + ":\n" + "\n".join(lines),
+            buttons=buttons,
+        )
 
     async def _handle_approve(
         self, req: CommandRequest, args: List[str]

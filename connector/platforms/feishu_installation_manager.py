@@ -158,6 +158,10 @@ class FeishuInstallationManager:
     def binding_count(self) -> int:
         return len(self._bindings)
 
+    @property
+    def registry(self):
+        return self._registry
+
     def bindings(self) -> List[FeishuBinding]:
         return list(self._bindings.values())
 

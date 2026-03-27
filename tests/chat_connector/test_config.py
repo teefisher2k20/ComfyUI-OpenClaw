@@ -53,6 +53,7 @@ class TestConnectorConfig(unittest.TestCase):
                 "OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_ID": "tenant-alpha",
                 "OPENCLAW_CONNECTOR_FEISHU_WORKSPACE_NAME": "Alpha Workspace",
                 "OPENCLAW_CONNECTOR_FEISHU_BINDINGS_JSON": '[{"account_id":"acct-extra","workspace_id":"tenant-beta","app_id":"cli_extra","app_secret":"sec_extra"}]',
+                "OPENCLAW_CONNECTOR_FEISHU_CALLBACK_PATH": "/feishu/cards",
                 "OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS": "u1,u2",
                 "OPENCLAW_CONNECTOR_FEISHU_ALLOWED_CHATS": "oc_a,oc_b",
                 "OPENCLAW_CONNECTOR_FEISHU_DOMAIN": "lark",
@@ -71,6 +72,7 @@ class TestConnectorConfig(unittest.TestCase):
             self.assertEqual(cfg.feishu_workspace_id, "tenant-alpha")
             self.assertEqual(cfg.feishu_workspace_name, "Alpha Workspace")
             self.assertIn("acct-extra", cfg.feishu_bindings_json)
+            self.assertEqual(cfg.feishu_callback_path, "/feishu/cards")
             self.assertEqual(cfg.feishu_allowed_users, ["u1", "u2"])
             self.assertEqual(cfg.feishu_allowed_chats, ["oc_a", "oc_b"])
             self.assertEqual(cfg.feishu_domain, "lark")

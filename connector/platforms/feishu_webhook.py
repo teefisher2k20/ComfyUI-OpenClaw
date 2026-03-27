@@ -42,6 +42,19 @@ except ImportError:  # pragma: no cover
         safe_request_json,
     )
 
+try:
+    from services.connector_callback_contract import (
+        CallbackActorContext,
+        CallbackDecisionCode,
+        ConnectorCallbackContract,
+    )
+except ImportError:  # pragma: no cover
+    from services.connector_callback_contract import (  # type: ignore
+        CallbackActorContext,
+        CallbackDecisionCode,
+        ConnectorCallbackContract,
+    )
+
 logger = logging.getLogger(__name__)
 
 FEISHU_WEBHOOK_MAX_BODY_BYTES = 256 * 1024
@@ -57,6 +70,12 @@ _PLACEHOLDER_TYPES = {
     "file": "<file>",
     "media": "<media>",
     "sticker": "<sticker>",
+}
+_FEISHU_CALLBACK_POLICY_MAP = {
+    "approval.approve": "admin",
+    "approval.reject": "admin",
+    "command.status": "public",
+    "command.run": "run",
 }
 
 
@@ -213,6 +232,31 @@ def parse_feishu_message_text(message: Dict[str, Any]) -> str:
     return str(parsed.get("text", "") or "").strip()
 
 
+def _infer_callback_action_type(command_text: str, button: Dict[str, Any]) -> str:
+    explicit = str(button.get("action_type", "") or "").strip()
+    if explicit:
+        return explicit
+    normalized = str(command_text or "").strip().lower()
+    if normalized.startswith("/approve"):
+        return "approval.approve"
+    if normalized.startswith("/reject"):
+        return "approval.reject"
+    if normalized.startswith("/run"):
+        return "command.run"
+    if normalized.startswith("/status"):
+        return "command.status"
+    return "command.unknown"
+
+
+def _force_approval_command(command_text: str) -> str:
+    normalized = str(command_text or "").strip()
+    if not normalized:
+        return normalized
+    if normalized.startswith("/run") and "--approval" not in normalized:
+        return f"{normalized} --approval"
+    return normalized
+
+
 @dataclass
 class FeishuDeliveryTarget:
     channel_id: str
@@ -256,6 +300,8 @@ class FeishuWebhookServer:
         self._tenant_access_token_expires_at: Dict[str, float] = {}
         self._bot_open_ids: Dict[str, str] = {}
         self._bot_open_id: str = ""
+        self._callback_contracts: Dict[str, ConnectorCallbackContract] = {}
+        self._callback_contract_secrets: Dict[str, str] = {}
 
     async def start(self):
         aiohttp, web = _import_aiohttp_web()
@@ -268,13 +314,15 @@ class FeishuWebhookServer:
                 "(OPENCLAW_CONNECTOR_FEISHU_APP_ID / APP_SECRET missing)"
             )
             return
-        if not any(
+        has_event_ingress = any(
             binding.verification_token
             for binding in self._installation_manager.bindings()
-        ):
+        )
+        has_callback_ingress = bool(str(self.config.feishu_callback_path or "").strip())
+        if not has_event_ingress and not has_callback_ingress:
             logger.info(
                 "Feishu webhook adapter disabled "
-                "(OPENCLAW_CONNECTOR_FEISHU_VERIFICATION_TOKEN missing)"
+                "(verification token and callback path missing)"
             )
             return
         logger.info(
@@ -285,7 +333,13 @@ class FeishuWebhookServer:
             self.config.feishu_domain,
         )
         self.app = web.Application(client_max_size=FEISHU_WEBHOOK_MAX_BODY_BYTES)
-        self.app.router.add_post(self.config.feishu_webhook_path, self.handle_event)
+        if has_event_ingress:
+            self.app.router.add_post(self.config.feishu_webhook_path, self.handle_event)
+        if has_callback_ingress:
+            self.app.router.add_post(
+                self.config.feishu_callback_path,
+                self.handle_callback,
+            )
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
         self.site = web.TCPSite(
@@ -330,6 +384,29 @@ class FeishuWebhookServer:
             return _make_response(web, status=400, text=str(exc))
         return _make_response(web, status=200, text="OK")
 
+    async def handle_callback(self, request):
+        _, web = _import_aiohttp_web()
+        try:
+            body = await request.read()
+        except Exception:
+            return _make_response(web, status=400, text="Bad request")
+        if len(body) > FEISHU_WEBHOOK_MAX_BODY_BYTES:
+            return _make_response(web, status=413, text="Payload too large")
+        try:
+            payload = json.loads(body or b"{}")
+        except json.JSONDecodeError:
+            return _make_response(web, status=400, text="Bad JSON")
+        try:
+            response = await self.process_callback_payload(payload)
+        except ValueError as exc:
+            logger.warning("Feishu callback rejected: %s", exc)
+            return _make_json_response(
+                web,
+                {"ok": False, "error": str(exc)},
+                status=403,
+            )
+        return _make_json_response(web, response)
+
     def _is_challenge(self, payload: Dict[str, Any]) -> bool:
         return bool(
             payload.get("challenge")
@@ -342,6 +419,120 @@ class FeishuWebhookServer:
             return True
         except ValueError:
             return False
+
+    def _extract_callback_action(self, payload: Dict[str, Any]) -> Tuple[
+        Dict[str, Any],
+        Dict[str, Any],
+        Dict[str, Any],
+        Dict[str, Any],
+        str,
+        str,
+    ]:
+        header = payload.get("header") or {}
+        event = payload.get("event") or {}
+        action = payload.get("action") or event.get("action") or {}
+        if not action and isinstance(event.get("actions"), list):
+            first_action = event.get("actions")[0] if event.get("actions") else {}
+            if isinstance(first_action, dict):
+                action = first_action
+        if not isinstance(action, dict):
+            raise ValueError("invalid_callback_action")
+        raw_value = action.get("value") or {}
+        if isinstance(raw_value, str):
+            raw_value = _json_loads_safe(raw_value)
+        if not isinstance(raw_value, dict):
+            raise ValueError("invalid_callback_value")
+        envelope = raw_value.get("callback_envelope") or {}
+        callback_payload = raw_value.get("payload") or {}
+        if not isinstance(envelope, dict) or not isinstance(callback_payload, dict):
+            raise ValueError("invalid_callback_envelope")
+        workspace_id = str(
+            header.get("tenant_key")
+            or event.get("tenant_key")
+            or callback_payload.get("workspace_id")
+            or ""
+        ).strip()
+        account_id = str(callback_payload.get("account_id", "") or "").strip()
+        return header, event, envelope, callback_payload, workspace_id, account_id
+
+    def _callback_contract_for_binding(
+        self,
+        *,
+        binding: FeishuBinding,
+        signing_secret: str,
+    ) -> ConnectorCallbackContract:
+        cache_key = self._cache_key_for_binding(binding)
+        if (
+            self._callback_contracts.get(cache_key) is not None
+            and self._callback_contract_secrets.get(cache_key) == signing_secret
+        ):
+            return self._callback_contracts[cache_key]
+        contract = ConnectorCallbackContract(
+            signing_secret=signing_secret,
+            installation_registry=self._installation_manager.registry,
+            action_policy_map=_FEISHU_CALLBACK_POLICY_MAP,
+        )
+        self._callback_contracts[cache_key] = contract
+        self._callback_contract_secrets[cache_key] = signing_secret
+        return contract
+
+    def _actor_context_for_callback(
+        self,
+        *,
+        actor_id: str,
+        actor_open_id: str,
+        channel_id: str,
+        message_id: str,
+        workspace_id: str,
+        account_id: str,
+        command_text: str,
+    ) -> Tuple[CallbackActorContext, CommandRequest]:
+        request = CommandRequest(
+            platform="feishu",
+            sender_id=actor_id or actor_open_id,
+            channel_id=channel_id or actor_id or actor_open_id,
+            username=actor_id or actor_open_id,
+            message_id=message_id or f"cb-{secrets.token_hex(4)}",
+            text=command_text,
+            timestamp=time.time(),
+            workspace_id=workspace_id,
+            thread_id=message_id,
+            metadata={
+                "account_id": account_id,
+                "sender_open_id": actor_open_id,
+                "interactive_callback": True,
+            },
+        )
+        actor = CallbackActorContext(
+            is_admin=self.router._is_admin(request.sender_id),
+            is_trusted=self.router._is_trusted(request),
+            user_id=request.sender_id,
+            tenant_id=workspace_id or request.workspace_id or "",
+        )
+        return actor, request
+
+    def _build_callback_response(
+        self,
+        *,
+        ok: bool,
+        text: str,
+        response_type: str = "info",
+        card: Optional[Dict[str, Any]] = None,
+        duplicate: bool = False,
+        decision_code: str = "",
+    ) -> Dict[str, Any]:
+        response = {
+            "ok": ok,
+            "duplicate": duplicate,
+            "decision_code": decision_code,
+            "toast": {
+                "type": response_type,
+                "content": text[:500] if text else "",
+            },
+        }
+        if card is not None:
+            response["card"] = card
+        return response
 
     def _resolve_inbound_binding(self, payload: Dict[str, Any]) -> FeishuBinding:
         header = payload.get("header") or {}
@@ -474,16 +665,17 @@ class FeishuWebhookServer:
                 return
         response = await self.router.handle(request)
         resp_text = str(getattr(response, "text", "") or "").strip()
-        if resp_text:
-            await self._send_reply(
-                FeishuDeliveryTarget(
-                    channel_id=request.channel_id,
-                    reply_to_message_id=request.thread_id,
-                    workspace_id=request.workspace_id,
-                    account_id=str(request.metadata.get("account_id", "") or ""),
-                ),
-                resp_text,
-            )
+        buttons = getattr(response, "buttons", []) or []
+        target = FeishuDeliveryTarget(
+            channel_id=request.channel_id,
+            reply_to_message_id=request.thread_id,
+            workspace_id=request.workspace_id,
+            account_id=str(request.metadata.get("account_id", "") or ""),
+        )
+        if buttons:
+            await self._send_interactive_reply(target, resp_text, buttons)
+        elif resp_text:
+            await self._send_reply(target, resp_text)
 
     def _resolve_delivery_binding(
         self, *, workspace_id: str = "", account_id: str = ""
@@ -491,6 +683,110 @@ class FeishuWebhookServer:
         return self._installation_manager.resolve_binding(
             workspace_id=workspace_id,
             account_id=account_id or self._bound_account_id,
+        )
+
+    async def process_callback_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        _, _, envelope_dict, callback_payload, workspace_id, account_id = (
+            self._extract_callback_action(payload)
+        )
+        resolution, binding, secrets = self._resolve_delivery_binding(
+            workspace_id=workspace_id,
+            account_id=account_id,
+        )
+        if binding is None or not resolution.ok:
+            raise ValueError(resolution.reject_reason or "missing_binding")
+        signing_secret = str(
+            secrets.get("app_secret", "") or binding.app_secret or ""
+        ).strip()
+        if not signing_secret:
+            raise ValueError("missing_callback_signing_secret")
+        contract = self._callback_contract_for_binding(
+            binding=binding,
+            signing_secret=signing_secret,
+        )
+        event = payload.get("event") or {}
+        operator = payload.get("operator") or event.get("operator") or {}
+        operator_id = operator.get("operator_id") or operator.get("sender_id") or {}
+        actor_id = str(
+            operator.get("user_id")
+            or operator_id.get("user_id")
+            or callback_payload.get("actor_user_id")
+            or ""
+        ).strip()
+        actor_open_id = str(
+            operator.get("open_id")
+            or operator_id.get("open_id")
+            or callback_payload.get("actor_open_id")
+            or ""
+        ).strip()
+        command_text = str(callback_payload.get("command", "") or "").strip()
+        actor, request = self._actor_context_for_callback(
+            actor_id=actor_id,
+            actor_open_id=actor_open_id,
+            channel_id=str(
+                payload.get("open_chat_id")
+                or event.get("open_chat_id")
+                or callback_payload.get("channel_id")
+                or ""
+            ).strip(),
+            message_id=str(
+                payload.get("open_message_id")
+                or event.get("open_message_id")
+                or callback_payload.get("message_id")
+                or ""
+            ).strip(),
+            workspace_id=workspace_id or binding.workspace_id,
+            account_id=binding.account_id,
+            command_text=command_text,
+        )
+        decision = contract.evaluate(
+            platform="feishu",
+            envelope_dict=envelope_dict,
+            payload=callback_payload,
+            actor=actor,
+        )
+        if decision.decision_code == CallbackDecisionCode.REJECT_REPLAY.value:
+            return self._build_callback_response(
+                ok=True,
+                text="Action already processed.",
+                response_type="info",
+                duplicate=True,
+                decision_code=decision.decision_code,
+            )
+        if not decision.ok and not decision.requires_approval:
+            raise ValueError(decision.message or decision.decision_code)
+        request.text = (
+            _force_approval_command(request.text)
+            if decision.requires_approval
+            else request.text
+        )
+        contract.acknowledge_request(envelope_dict.get("request_id", ""))
+        response = await self.router.handle(request)
+        contract.complete_request(envelope_dict.get("request_id", ""))
+        response_text = str(getattr(response, "text", "") or "").strip() or (
+            "Action processed."
+        )
+        response_buttons = getattr(response, "buttons", []) or []
+        card = None
+        if response_buttons:
+            card = self._build_interactive_card(
+                FeishuDeliveryTarget(
+                    channel_id=request.channel_id,
+                    reply_to_message_id=request.thread_id,
+                    workspace_id=request.workspace_id,
+                    account_id=binding.account_id,
+                ),
+                response_text,
+                response_buttons,
+                binding=binding,
+                secrets=secrets,
+            )
+        return self._build_callback_response(
+            ok=True,
+            text=response_text,
+            response_type="success",
+            card=card,
+            decision_code=decision.decision_code,
         )
 
     async def _get_tenant_access_token(
@@ -627,6 +923,167 @@ class FeishuWebhookServer:
             self._bot_open_ids[cache_key] = bot_open_id
             self._bot_open_id = bot_open_id
         return bot_open_id
+
+    def _build_card_button_value(
+        self,
+        button: Dict[str, Any],
+        *,
+        target: FeishuDeliveryTarget,
+        binding: FeishuBinding,
+        signing_secret: str,
+    ) -> Dict[str, Any]:
+        contract = self._callback_contract_for_binding(
+            binding=binding,
+            signing_secret=signing_secret,
+        )
+        command_text = str(button.get("value", "") or "").strip()
+        callback_payload = {
+            "label": str(button.get("label", "") or "").strip(),
+            "command": command_text,
+            "approval_id": str(button.get("approval_id", "") or "").strip(),
+            "workspace_id": target.workspace_id or binding.workspace_id,
+            "account_id": target.account_id or binding.account_id,
+            "channel_id": target.channel_id,
+            "message_id": target.reply_to_message_id,
+        }
+        envelope = contract.build_envelope(
+            request_id=secrets.token_hex(12),
+            workspace_id=callback_payload["workspace_id"],
+            action_type=_infer_callback_action_type(command_text, button),
+            payload=callback_payload,
+        )
+        return {
+            "callback_envelope": dict(envelope.__dict__),
+            "payload": callback_payload,
+        }
+
+    def _build_interactive_card(
+        self,
+        target: FeishuDeliveryTarget,
+        text: str,
+        buttons: list[dict],
+        *,
+        binding: FeishuBinding,
+        secrets: Dict[str, str],
+    ) -> Dict[str, Any]:
+        signing_secret = str(
+            secrets.get("app_secret", "") or binding.app_secret or ""
+        ).strip()
+        if not signing_secret:
+            raise RuntimeError("feishu_callback_signing_secret_missing")
+        actions = []
+        for button in buttons[:6]:
+            command_text = str(button.get("value", "") or "").strip()
+            if not command_text:
+                continue
+            actions.append(
+                {
+                    "tag": "button",
+                    "type": str(button.get("style", "") or "default"),
+                    "text": {
+                        "tag": "plain_text",
+                        "content": str(button.get("label", "") or "OpenClaw"),
+                    },
+                    "value": self._build_card_button_value(
+                        button,
+                        target=target,
+                        binding=binding,
+                        signing_secret=signing_secret,
+                    ),
+                }
+            )
+        return {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "template": "blue",
+                "title": {"tag": "plain_text", "content": "OpenClaw"},
+            },
+            "elements": [
+                {"tag": "markdown", "content": text or "OpenClaw"},
+                {"tag": "action", "actions": actions},
+            ],
+        }
+
+    async def _send_interactive_reply(
+        self,
+        target: FeishuDeliveryTarget,
+        text: str,
+        buttons: list[dict],
+    ) -> None:
+        resolution, binding, secrets = self._resolve_delivery_binding(
+            workspace_id=target.workspace_id,
+            account_id=target.account_id,
+        )
+        if binding is None or not resolution.ok:
+            logger.warning(
+                "Feishu interactive reply dropped: no workspace binding available (%s / %s)",
+                target.workspace_id or "no-workspace",
+                target.account_id or "no-account",
+            )
+            return
+        token = await self._get_tenant_access_token(
+            binding=binding,
+            workspace_id=target.workspace_id,
+            account_id=target.account_id,
+        )
+        api_base = _resolve_domain_base(binding.domain)
+        card = self._build_interactive_card(
+            target,
+            text,
+            buttons,
+            binding=binding,
+            secrets=secrets,
+        )
+        payload = {
+            "content": json.dumps(card, ensure_ascii=False),
+            "msg_type": "interactive",
+        }
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        if target.reply_to_message_id:
+            url = (
+                f"{api_base}/open-apis/im/v1/messages/"
+                f"{target.reply_to_message_id}/reply"
+            )
+        else:
+            url = f"{api_base}/open-apis/im/v1/messages?receive_id_type=chat_id"
+            payload["receive_id"] = target.channel_id
+        try:
+            data = safe_request_json(
+                method="POST",
+                url=url,
+                json_body=payload,
+                headers=headers,
+                content_type="application/json; charset=utf-8",
+                timeout_sec=15,
+                allow_hosts=_allowed_api_hosts(binding.domain),
+                policy=STANDARD_OUTBOUND_POLICY,
+            )
+        except SafeIOHTTPError as exc:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=exc.reason,
+                    status_code=exc.status_code,
+                    details={"phase": "interactive_reply"},
+                )
+            logger.warning(
+                "Feishu interactive reply failed: status=%s", exc.status_code
+            )
+            return
+        if data.get("code", 0) != 0:
+            if resolution.installation is not None:
+                self._installation_manager.mark_api_error(
+                    resolution.installation.installation_id,
+                    error_code=str(data.get("msg", "unknown") or "unknown"),
+                    status_code=200,
+                    details={"phase": "interactive_reply"},
+                )
+            logger.warning(
+                "Feishu interactive reply failed: %s", data.get("msg", "unknown")
+            )
 
     async def _send_reply(self, target: FeishuDeliveryTarget, text: str) -> None:
         resolution, binding, _ = self._resolve_delivery_binding(

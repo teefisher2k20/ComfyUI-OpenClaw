@@ -135,6 +135,7 @@ class ConnectorConfig:
     feishu_bind_host: str = "127.0.0.1"
     feishu_bind_port: int = 8094
     feishu_webhook_path: str = "/feishu/events"
+    feishu_callback_path: str = "/feishu/callback"
     feishu_domain: str = "feishu"  # feishu | lark
     feishu_mode: str = "websocket"  # websocket | webhook
     feishu_require_mention: bool = True
@@ -366,6 +367,9 @@ def load_config() -> ConnectorConfig:
             cfg.feishu_bind_port = int(fp)
     cfg.feishu_webhook_path = os.environ.get(
         "OPENCLAW_CONNECTOR_FEISHU_PATH", "/feishu/events"
+    )
+    cfg.feishu_callback_path = os.environ.get(
+        "OPENCLAW_CONNECTOR_FEISHU_CALLBACK_PATH", "/feishu/callback"
     )
     cfg.feishu_domain = (
         os.environ.get("OPENCLAW_CONNECTOR_FEISHU_DOMAIN", "feishu").strip() or "feishu"
