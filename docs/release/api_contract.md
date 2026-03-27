@@ -104,7 +104,27 @@ Connector diagnostics contract notes:
 - `/connector/installations` diagnostics may include aggregate `health_counts` in addition to lifecycle `status_counts`
 - `/connector/installations/resolve` may expose a stable `health_code` alongside the legacy `reject_reason` so clients can distinguish `workspace_unbound` vs token-health failures without parsing status text
 
-### 1.3C LLM Management & Chat
+### 1.3C Model Management & Installations
+
+**Base Path**: `/openclaw/`
+**Auth**: Admin Token Required
+
+| Method | Path | Legacy Path | Auth | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/models/search` | `/moltbot/models/search` | Admin | Search normalized model entries across managed installs and catalog sources. |
+| `POST` | `/models/downloads` | `/moltbot/models/downloads` | Admin | Create a managed model download task with progress/cancel lifecycle. |
+| `GET` | `/models/downloads` | `/moltbot/models/downloads` | Admin | List model download tasks with snapshot or delta cursor semantics (`since_seq`). |
+| `GET` | `/models/downloads/{task_id}` | `/moltbot/models/downloads/{task_id}` | Admin | Get one model download task by id. |
+| `POST` | `/models/downloads/{task_id}/cancel` | `/moltbot/models/downloads/{task_id}/cancel` | Admin | Cancel a queued or running model download task. |
+| `POST` | `/models/import` | `/moltbot/models/import` | Admin | Import a completed managed download into the bounded install root after provenance and hash verification. |
+| `GET` | `/models/installations` | `/moltbot/models/installations` | Admin | List managed model installations. |
+
+Model-manager contract notes:
+- `/models/downloads` supports `since_seq` cursor polling and may return deterministic delta metadata (`requested_since_seq`, `effective_since_seq`, `next_since_seq`, truncation/reset hints) alongside the task list
+- download creation requires structured provenance metadata (`publisher`, `license`, `source_url`) and a 64-char `expected_sha256`
+- import keeps fail-closed destination/filename validation and re-checks the staged file hash before activation
+
+### 1.3D LLM Management & Chat
 
 **LLM Base Path**: `/openclaw/llm/`
 

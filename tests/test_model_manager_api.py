@@ -18,6 +18,7 @@ except Exception:  # pragma: no cover
 
 from api import model_manager as mm_api
 from services.model_manager import ModelManager
+from services.request_contracts import R144_IO_BOUNDARY_MATRIX
 
 
 @unittest.skipIf(web is None, "aiohttp not installed")
@@ -70,14 +71,8 @@ class TestModelManagerAPI(AioHTTPTestCase):
             time.sleep(0.02)
         self.fail(f"Task {task_id} did not finish")
 
-    @patch("api.model_manager.require_admin_token", return_value=(True, None))
-    @patch(
-        "services.model_manager.validate_outbound_url",
-        return_value=("https", "example.com", 443, ["1.1.1.1"]),
-    )
-    @unittest_run_loop
-    async def test_download_and_import_contract(self, _mock_validate, _mock_admin):
-        payload = b"api-model-bytes"
+    async def _create_completed_task(self, *, model_id: str = "api-model") -> str:
+        payload = f"{model_id}-bytes".encode("utf-8")
         digest = hashlib.sha256(payload).hexdigest()
 
         def fake_download(task, _cancel_event):
@@ -92,26 +87,35 @@ class TestModelManagerAPI(AioHTTPTestCase):
         create_resp = await self.client.post(
             "/openclaw/models/downloads",
             json={
-                "model_id": "api-model",
+                "model_id": model_id,
                 "name": "API Model",
                 "model_type": "checkpoint",
                 "source": "catalog",
                 "source_label": "Catalog",
-                "download_url": "https://example.com/api-model.safetensors",
+                "download_url": f"https://example.com/{model_id}.safetensors",
                 "expected_sha256": digest,
                 "provenance": {
                     "publisher": "OpenClaw",
                     "license": "OpenRAIL",
-                    "source_url": "https://example.com/api-model",
+                    "source_url": f"https://example.com/{model_id}",
                 },
             },
         )
         self.assertEqual(create_resp.status, 201)
         created = await create_resp.json()
         task_id = created["task"]["task_id"]
-
         done = await self._wait_task_terminal(task_id)
         self.assertEqual(done["state"], "completed")
+        return task_id
+
+    @patch("api.model_manager.require_admin_token", return_value=(True, None))
+    @patch(
+        "services.model_manager.validate_outbound_url",
+        return_value=("https", "example.com", 443, ["1.1.1.1"]),
+    )
+    @unittest_run_loop
+    async def test_download_and_import_contract(self, _mock_validate, _mock_admin):
+        task_id = await self._create_completed_task(model_id="api-model")
 
         import_resp = await self.client.post(
             "/openclaw/models/import", json={"task_id": task_id}
@@ -141,6 +145,62 @@ class TestModelManagerAPI(AioHTTPTestCase):
     async def test_admin_gating(self, _mock_admin):
         resp = await self.client.get("/openclaw/models/search")
         self.assertEqual(resp.status, 403)
+
+    @patch("api.model_manager.require_admin_token", return_value=(True, None))
+    @patch(
+        "services.model_manager.validate_outbound_url",
+        return_value=("https", "example.com", 443, ["1.1.1.1"]),
+    )
+    @unittest_run_loop
+    async def test_r144_download_create_boundary_matrix(
+        self, _mock_validate, _mock_admin
+    ):
+        case = R144_IO_BOUNDARY_MATRIX["model_manager_download_create"][0]
+        resp = await self.client.post(
+            "/openclaw/models/downloads",
+            json={
+                "model_id": "bad-provenance",
+                "name": "Bad Provenance",
+                "model_type": "checkpoint",
+                "source": "catalog",
+                "source_label": "Catalog",
+                "download_url": "https://example.com/bad-provenance.safetensors",
+                "expected_sha256": "a" * 64,
+                "provenance": "bad",
+            },
+        )
+        self.assertEqual(resp.status, case["expected_status"])
+        body = await resp.json()
+        self.assertEqual(body["error"], case["expected_error"])
+
+    @patch("api.model_manager.require_admin_token", return_value=(True, None))
+    @patch(
+        "services.model_manager.validate_outbound_url",
+        return_value=("https", "example.com", 443, ["1.1.1.1"]),
+    )
+    @unittest_run_loop
+    async def test_r144_import_boundary_matrix(self, _mock_validate, _mock_admin):
+        task_id = await self._create_completed_task(model_id="boundary-model")
+        cases = R144_IO_BOUNDARY_MATRIX["model_manager_import"]
+        payloads = {
+            "invalid_filename_extension_rejected": {
+                "task_id": task_id,
+                "filename": "bad.txt",
+            },
+            "invalid_destination_rejected": {
+                "task_id": task_id,
+                "destination_subdir": "../escape",
+            },
+        }
+        for case in cases:
+            with self.subTest(case=case["case_id"]):
+                resp = await self.client.post(
+                    "/openclaw/models/import",
+                    json=payloads[case["case_id"]],
+                )
+                self.assertEqual(resp.status, case["expected_status"])
+                body = await resp.json()
+                self.assertEqual(body["error"], case["expected_error"])
 
 
 if __name__ == "__main__":  # pragma: no cover

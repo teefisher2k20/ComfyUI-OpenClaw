@@ -362,6 +362,115 @@ paths:
       security:
         - OpenClawAdminToken:
             []
+  /models/search:
+    get:
+      operationId: "get_models_search"
+      summary: "Search normalized model entries across managed installs and catalog sources."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3C Model Management & Installations"
+      x-openclaw-legacy-path: "/moltbot/models/search"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+  /models/downloads:
+    post:
+      operationId: "post_models_downloads"
+      summary: "Create a managed model download task with progress/cancel lifecycle."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3C Model Management & Installations"
+      x-openclaw-legacy-path: "/moltbot/models/downloads"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+    get:
+      operationId: "get_models_downloads"
+      summary: "List model download tasks with snapshot or delta cursor semantics (`since_seq`)."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3C Model Management & Installations"
+      x-openclaw-legacy-path: "/moltbot/models/downloads"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+  /models/downloads/{task_id}:
+    get:
+      operationId: "get_models_downloads_task_id"
+      summary: "Get one model download task by id."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3C Model Management & Installations"
+      x-openclaw-legacy-path: "/moltbot/models/downloads/{task_id}"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+      parameters:
+        - name: "task_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+  /models/downloads/{task_id}/cancel:
+    post:
+      operationId: "post_models_downloads_task_id_cancel"
+      summary: "Cancel a queued or running model download task."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3C Model Management & Installations"
+      x-openclaw-legacy-path: "/moltbot/models/downloads/{task_id}/cancel"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+      parameters:
+        - name: "task_id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+  /models/import:
+    post:
+      operationId: "post_models_import"
+      summary: "Import a completed managed download into the bounded install root after provenance and hash verification."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3C Model Management & Installations"
+      x-openclaw-legacy-path: "/moltbot/models/import"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
+  /models/installations:
+    get:
+      operationId: "get_models_installations"
+      summary: "List managed model installations."
+      responses:
+        200:
+          description: "OK"
+      x-openclaw-auth: "Admin"
+      x-openclaw-section: "1.3C Model Management & Installations"
+      x-openclaw-legacy-path: "/moltbot/models/installations"
+      x-openclaw-auth-tier: "admin"
+      security:
+        - OpenClawAdminToken:
+            []
   /chat:
     post:
       operationId: "post_chat"
@@ -370,7 +479,7 @@ paths:
         200:
           description: "OK"
       x-openclaw-auth: "Admin/Local"
-      x-openclaw-section: "1.3C LLM Management & Chat"
+      x-openclaw-section: "1.3D LLM Management & Chat"
       x-openclaw-legacy-path: "/moltbot/llm/chat"
       x-openclaw-auth-tier: "admin"
       security:
@@ -384,7 +493,7 @@ paths:
         200:
           description: "OK"
       x-openclaw-auth: "Admin"
-      x-openclaw-section: "1.3C LLM Management & Chat"
+      x-openclaw-section: "1.3D LLM Management & Chat"
       x-openclaw-legacy-path: "/moltbot/llm/test"
       x-openclaw-auth-tier: "admin"
       security:
@@ -398,7 +507,7 @@ paths:
         200:
           description: "OK"
       x-openclaw-auth: "Admin"
-      x-openclaw-section: "1.3C LLM Management & Chat"
+      x-openclaw-section: "1.3D LLM Management & Chat"
       x-openclaw-legacy-path: "/moltbot/llm/models"
       x-openclaw-auth-tier: "admin"
       security:

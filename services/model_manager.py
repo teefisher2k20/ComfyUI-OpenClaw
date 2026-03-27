@@ -252,11 +252,14 @@ def _is_sha256(value: str) -> bool:
 
 
 def _sanitize_subdir(text: str) -> str:
-    parts = [
-        p
-        for p in str(text or "").replace("\\", "/").split("/")
-        if p not in {"", ".", ".."}
-    ]
+    raw_parts = str(text or "").replace("\\", "/").split("/")
+    if any(part in {".", ".."} for part in raw_parts if part):
+        # CRITICAL: reject traversal markers instead of stripping them; silent cleanup weakens import-boundary guarantees.
+        raise ModelManagerError(
+            "invalid_destination",
+            "destination_subdir must not contain traversal segments",
+        )
+    parts = [p for p in raw_parts if p]
     if not parts:
         raise ModelManagerError("invalid_destination", "destination_subdir is required")
     cleaned = []

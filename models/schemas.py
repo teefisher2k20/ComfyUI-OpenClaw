@@ -3,7 +3,28 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
-SCHEMA_VERSION = "260127"
+if __package__ and "." in __package__:
+    from ..services.request_contracts import (
+        MAX_BODY_SIZE,
+        MAX_INPUT_STRING_LENGTH,
+        MAX_JOB_ID_LENGTH,
+        MAX_PROFILE_ID_LENGTH,
+        MAX_TEMPLATE_ID_LENGTH,
+        MAX_TRACE_ID_LENGTH,
+        SCHEMA_VERSION,
+        WEBHOOK_JOB_REQUEST_CONTRACT,
+    )
+else:  # pragma: no cover - top-level test import mode
+    from services.request_contracts import (  # type: ignore
+        MAX_BODY_SIZE,
+        MAX_INPUT_STRING_LENGTH,
+        MAX_JOB_ID_LENGTH,
+        MAX_PROFILE_ID_LENGTH,
+        MAX_TEMPLATE_ID_LENGTH,
+        MAX_TRACE_ID_LENGTH,
+        SCHEMA_VERSION,
+        WEBHOOK_JOB_REQUEST_CONTRACT,
+    )
 
 
 @dataclass
@@ -93,16 +114,6 @@ class ParamPatch:
     reason: Optional[str] = None
 
 
-# S2: Webhook input schema
-# Maximum field lengths for security
-MAX_JOB_ID_LENGTH = 64
-MAX_TEMPLATE_ID_LENGTH = 64
-MAX_PROFILE_ID_LENGTH = 64
-MAX_INPUT_STRING_LENGTH = 2048
-MAX_BODY_SIZE = 65536  # 64KB
-MAX_TRACE_ID_LENGTH = 64
-
-
 @dataclass
 class WebhookJobRequest:
     """
@@ -138,13 +149,7 @@ class WebhookJobRequest:
             raise ValueError(f"profile_id exceeds max length ({MAX_PROFILE_ID_LENGTH})")
 
         # Validate inputs (only allowed keys, string length limits)
-        allowed_input_keys = {
-            "requirements",
-            "goal",
-            "seed",
-            "positive_prompt",
-            "negative_prompt",
-        }
+        allowed_input_keys = set(WEBHOOK_JOB_REQUEST_CONTRACT["allowed_input_keys"])
         for key, value in self.inputs.items():
             if key not in allowed_input_keys:
                 raise ValueError(f"Unknown input key: {key}")
@@ -157,21 +162,13 @@ class WebhookJobRequest:
     def from_dict(cls, data: Dict[str, Any]) -> "WebhookJobRequest":
         """Parse and validate from dict."""
         # 1. Check for unknown keys (Strict validation)
-        allowed_top_level = {
-            "version",
-            "template_id",
-            "profile_id",
-            "inputs",
-            "job_id",
-            "trace_id",
-            "callback",
-        }
+        allowed_top_level = set(WEBHOOK_JOB_REQUEST_CONTRACT["allowed_top_level"])
         unknown = set(data.keys()) - allowed_top_level
         if unknown:
             raise ValueError(f"Unknown fields: {unknown}")
 
         # 2. Check required fields
-        required = {"version", "template_id", "profile_id"}
+        required = set(WEBHOOK_JOB_REQUEST_CONTRACT["required_top_level"])
         missing = required - set(data.keys())
         if missing:
             raise ValueError(f"Missing required fields: {missing}")

@@ -14,6 +14,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .request_contracts import (
+    MODEL_MANAGER_IMPORT_CONTRACT,
+    MODEL_MANAGER_PROVENANCE_CONTRACT,
+)
+
 
 def validate_url_policy(*, manager: Any, url: str) -> None:
     if not str(url or "").strip():
@@ -37,13 +42,15 @@ def validate_url_policy(*, manager: Any, url: str) -> None:
 def validate_provenance(*, manager: Any, provenance: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(provenance, dict):
         raise manager._error("invalid_provenance", "provenance must be an object")
+    note_max_chars = int(MODEL_MANAGER_PROVENANCE_CONTRACT["note_max_chars"])
     out = {
         "publisher": str(provenance.get("publisher") or "").strip(),
         "license": str(provenance.get("license") or "").strip(),
         "source_url": str(provenance.get("source_url") or "").strip(),
-        "note": str(provenance.get("note") or "").strip()[:500],
+        "note": str(provenance.get("note") or "").strip()[:note_max_chars],
     }
-    if not out["publisher"] or not out["license"] or not out["source_url"]:
+    required_fields = list(MODEL_MANAGER_PROVENANCE_CONTRACT["required_fields"])
+    if any(not out[field] for field in required_fields):
         raise manager._error(
             "invalid_provenance",
             "provenance.publisher, provenance.license, provenance.source_url are required",
@@ -450,6 +457,7 @@ def import_downloaded_model(
             pass
         raise
     safe_tags: List[str] = []
+    max_tags = int(MODEL_MANAGER_IMPORT_CONTRACT["tags"]["max_items"])
     for item in tags or []:
         if not isinstance(item, str):
             continue
@@ -457,7 +465,7 @@ def import_downloaded_model(
         if not clean or clean in safe_tags:
             continue
         safe_tags.append(clean)
-        if len(safe_tags) >= 24:
+        if len(safe_tags) >= max_tags:
             break
     rec = {
         "id": str(uuid.uuid4()),

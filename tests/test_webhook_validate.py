@@ -37,6 +37,26 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from api.webhook_validate import webhook_validate_handler
 from models.schemas import WebhookJobRequest
 from services.execution_budgets import BudgetExceededError
+from services.request_contracts import MAX_BODY_SIZE, R144_IO_BOUNDARY_MATRIX
+
+
+def _json_payload_with_exact_size(target_bytes: int) -> str:
+    base = {"version": 1, "template_id": "t", "profile_id": "p", "pad": ""}
+    text = json.dumps(base, separators=(",", ":"))
+    overhead = len(text.encode("utf-8"))
+    filler = max(0, target_bytes - overhead)
+    base["pad"] = "x" * filler
+    text = json.dumps(base, separators=(",", ":"))
+    delta = target_bytes - len(text.encode("utf-8"))
+    if delta > 0:
+        base["pad"] += "x" * delta
+        text = json.dumps(base, separators=(",", ":"))
+    elif delta < 0:
+        base["pad"] = base["pad"][:delta]
+        text = json.dumps(base, separators=(",", ":"))
+    if len(text.encode("utf-8")) != target_bytes:
+        raise AssertionError("failed to build exact-size JSON payload")
+    return text
 
 
 @unittest.skipUnless(_AIOHTTP_AVAILABLE, "aiohttp not installed")
@@ -157,9 +177,10 @@ class TestWebhookValidateContract(AioHTTPTestCase):
     @unittest_run_loop
     async def test_payload_too_large_413_body(self):
         """Should return 413 for large body."""
+        case = R144_IO_BOUNDARY_MATRIX["webhook_validate"][0]
         with patch("api.webhook_validate.require_auth", return_value=(True, None)):
             with patch("api.webhook_validate.check_rate_limit", return_value=True):
-                large_payload = {"data": "x" * (2 * 1024 * 1024)}  # > MAX_BODY_SIZE
+                large_payload = {"data": "x" * (2 * MAX_BODY_SIZE)}
                 resp = await self.client.post(
                     "/validate",
                     json=large_payload,
@@ -169,10 +190,30 @@ class TestWebhookValidateContract(AioHTTPTestCase):
                     },
                 )
 
-                self.assertEqual(resp.status, 413)
+                self.assertEqual(resp.status, case["expected_status"])
                 data = await resp.json()
                 self.assertFalse(data["ok"])
-                self.assertEqual(data["error"], "payload_too_large")
+                self.assertEqual(data["error"], case["expected_error"])
+
+    @unittest_run_loop
+    async def test_r144_boundary_equal_body_is_not_rejected_by_size_gate(self):
+        """R144: payload exactly at the byte cap should pass the size gate."""
+        case = R144_IO_BOUNDARY_MATRIX["webhook_validate"][1]
+        with patch("api.webhook_validate.require_auth", return_value=(True, None)):
+            with patch("api.webhook_validate.check_rate_limit", return_value=True):
+                payload = _json_payload_with_exact_size(case["limit_bytes"])
+                resp = await self.client.post(
+                    "/validate",
+                    data=payload.encode("utf-8"),
+                    headers={
+                        "Authorization": "Bearer token",
+                        "Content-Type": "application/json",
+                    },
+                )
+
+                self.assertEqual(resp.status, case["expected_status"])
+                data = await resp.json()
+                self.assertEqual(data["error"], case["expected_error"])
 
     @unittest_run_loop
     async def test_payload_too_large_413_render(self):
@@ -219,6 +260,7 @@ class TestWebhookValidateContract(AioHTTPTestCase):
     @unittest_run_loop
     async def test_invalid_json_400(self):
         """Should return 400 for malformed JSON."""
+        case = R144_IO_BOUNDARY_MATRIX["webhook_validate"][2]
         with patch("api.webhook_validate.require_auth", return_value=(True, None)):
             with patch("api.webhook_validate.check_rate_limit", return_value=True):
                 resp = await self.client.post(
@@ -230,10 +272,10 @@ class TestWebhookValidateContract(AioHTTPTestCase):
                     },
                 )
 
-                self.assertEqual(resp.status, 400)
+                self.assertEqual(resp.status, case["expected_status"])
                 data = await resp.json()
                 self.assertFalse(data["ok"])
-                self.assertEqual(data["error"], "invalid_json")
+                self.assertEqual(data["error"], case["expected_error"])
 
     @unittest_run_loop
     async def test_validation_error_400(self):
