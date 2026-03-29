@@ -22,4 +22,15 @@ test.describe('OpenClaw Sidebar', () => {
       await expect(active).not.toBeEmpty();
     }
   });
+
+  test('default harness bootstrap provides stable Settings and Model Manager baselines', async ({ page }) => {
+    await clickTab(page, 'Settings');
+    await expect(page.locator('.openclaw-log-viewer')).not.toContainText('Failed to load logs');
+    await expect(page.locator('details')).toContainText('ComfyUI: test');
+
+    await clickTab(page, 'Model Manager');
+    await expect(page.locator('#mm-search-results')).toContainText('No matching models.');
+    await expect(page.locator('#mm-tasks')).toContainText('No download tasks.');
+    await expect(page.locator('#mm-installations')).toContainText('No managed installations.');
+  });
 });

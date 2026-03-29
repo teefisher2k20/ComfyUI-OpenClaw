@@ -19,7 +19,67 @@ function resolveUiTimeoutMs() {
   return 30_000;
 }
 
+function normalizeApiPath(pathname) {
+  if (typeof pathname !== 'string') return '';
+  const stripped = pathname.startsWith('/api/') ? pathname.slice(4) : pathname;
+  return stripped.replace(/\/+$/, '');
+}
+
+function isCompatApiPath(pathname, suffix) {
+  const normalizedSuffix = String(suffix || '').replace(/\/+$/, '');
+  const normalizedPath = normalizeApiPath(pathname);
+  return normalizedPath === `/openclaw${normalizedSuffix}` || normalizedPath === `/moltbot${normalizedSuffix}`;
+}
+
+function isNativeApiPath(pathname, suffix) {
+  const normalizedSuffix = String(suffix || '').replace(/\/+$/, '');
+  return normalizeApiPath(pathname) === normalizedSuffix;
+}
+
+function jsonRoute(body, status = 200) {
+  return {
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  };
+}
+
 export async function mockComfyUiCore(page) {
+  await page.addInitScript(() => {
+    // CRITICAL: the harness must provide the host globals that OpenClaw touches
+    // during startup. Missing host shims can surface as Windows-only false-red
+    // module-load failures when the static harness server is already under load.
+    window.comfyui_version = window.comfyui_version || 'test';
+
+    class OpenClawTestEventSource {
+      constructor(url) {
+        this.url = url;
+        this.readyState = 1;
+        this.onmessage = null;
+        this.onerror = null;
+      }
+
+      addEventListener() { }
+      removeEventListener() { }
+
+      close() {
+        this.readyState = 2;
+      }
+    }
+
+    window.EventSource = OpenClawTestEventSource;
+    window.__openclawMockEventSourceInstalled = true;
+
+    if (typeof window.LGraphCanvas !== 'function') {
+      window.LGraphCanvas = function LGraphCanvas() { };
+    }
+    if (typeof window.LGraphCanvas.prototype.getNodeMenuOptions !== 'function') {
+      window.LGraphCanvas.prototype.getNodeMenuOptions = function getNodeMenuOptions() {
+        return [];
+      };
+    }
+  });
+
   // CRITICAL: only fulfill root /scripts/app.js.
   // Do NOT accept /extensions/<pack>/scripts/app.js, otherwise bad relative imports are masked in E2E.
   await page.route('**/scripts/app.js', async (route) => {
@@ -57,6 +117,220 @@ export async function mockComfyUiCore(page) {
         };
       `,
     });
+  });
+
+  await page.route('**/config**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/config')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        config: {
+          provider: 'openai',
+          model: 'test-model',
+          base_url: '',
+          timeout_sec: 30,
+          max_retries: 1,
+        },
+        sources: {
+          provider: 'default',
+          model: 'default',
+        },
+        providers: [
+          { id: 'openai', label: 'OpenAI' },
+        ],
+        apply: {},
+        schema: {},
+      })
+    );
+  });
+
+  await page.route('**/logs/tail**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/logs/tail')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(jsonRoute({ ok: true, content: [] }));
+  });
+
+  await page.route('**/system_stats**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isNativeApiPath(url.pathname, '/system_stats')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(jsonRoute({ comfyui_version: 'test' }));
+  });
+
+  await page.route('**/system_info**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isNativeApiPath(url.pathname, '/system_info')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(jsonRoute({ name: 'ComfyUI', version: 'test' }));
+  });
+
+  await page.route('**/version**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isNativeApiPath(url.pathname, '/version')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(jsonRoute({ name: 'ComfyUI', version: 'test' }));
+  });
+
+  await page.route('**/models/search**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/models/search')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        items: [],
+        pagination: { limit: 100, offset: 0, total: 0 },
+        filters: {},
+      })
+    );
+  });
+
+  await page.route('**/models/downloads**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/models/downloads')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        tasks: [],
+        pagination: { limit: 100, offset: 0, total: 0 },
+        filters: {},
+        delta: { next_since_seq: 0 },
+      })
+    );
+  });
+
+  await page.route('**/models/installations**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/models/installations')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        installations: [],
+        pagination: { limit: 100, offset: 0, total: 0 },
+        filters: {},
+      })
+    );
+  });
+
+  await page.route('**/assist/planner/profiles**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/assist/planner/profiles')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        profiles: [],
+        default_profile: 'SDXL-v1',
+      })
+    );
+  });
+
+  await page.route('**/presets**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/presets')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(jsonRoute([]));
+  });
+
+  await page.route('**/approvals**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/approvals')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        approvals: [],
+        pagination: { limit: 100, offset: 0, total: 0 },
+      })
+    );
+  });
+
+  await page.route('**/preflight/inventory**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/preflight/inventory')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        nodes: ['CheckpointLoaderSimple'],
+        models: {
+          checkpoints: ['base.ckpt'],
+        },
+        snapshot_ts: 0,
+        scan_state: 'idle',
+        stale: false,
+        last_error: null,
+      })
+    );
+  });
+
+  await page.route('**/packs**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/packs')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        packs: [],
+      })
+    );
   });
 }
 
