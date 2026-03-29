@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { mockComfyUiCore, waitForOpenClawReady, clickTab } from '../utils/helpers.js';
 
+const TEST_OUTPUT_PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NkYGD4DwABBAEAe7YQDgAAAABJRU5ErkJggg==',
+    'base64'
+);
+
 test.describe('R107 Live Backend Parity', () => {
     test.beforeEach(async ({ page }) => {
         await mockComfyUiCore(page);
@@ -79,6 +84,24 @@ test.describe('R107 Live Backend Parity', () => {
                         events: [{ event: "queued", ts: 1700000000 }, { event: "completed", ts: 1700000010 }]
                     }
                 })
+            });
+        });
+        await page.route('**/view**', async route => {
+            const request = route.request();
+            const url = new URL(request.url());
+            if (
+                request.method() !== 'GET'
+                || url.searchParams.get('filename') !== 'test_img.png'
+                || url.searchParams.get('type') !== 'output'
+            ) {
+                await route.fallback();
+                return;
+            }
+
+            await route.fulfill({
+                status: 200,
+                contentType: 'image/png',
+                body: TEST_OUTPUT_PNG,
             });
         });
 
