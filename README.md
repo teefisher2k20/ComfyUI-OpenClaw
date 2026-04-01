@@ -77,6 +77,18 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Desktop host parity lane, refreshed compatibility anchors, and live-backend mock parity completed</strong></summary>
+
+- Added an executable desktop-host regression lane for the OpenClaw sidebar and Remote Admin Console, so desktop-specific runtime drift is now verified separately from standalone frontend assumptions instead of being left to unit-only host detection.
+- Added shared Playwright host/runtime shims and remote-admin baseline mocks so desktop-host metadata, approvals refresh behavior, and host-sensitive UI evidence stay deterministic under the test harness.
+- Refreshed the recorded compatibility anchors against the current reference ComfyUI, ComfyUI Frontend, and Desktop hosts, keeping desktop embedded-frontend lag explicit in the published compatibility matrix and governance checks.
+- Updated the mocked live-backend parity lane so image-output surfaces now return deterministic mocked output artifacts, closing the remaining preview/result gap in the real-backend-style E2E contract.
+- Re-validated the combined batch on WSL with the full SOP gate: detect-secrets, pre-commit, governance verification, backend full suites, strict implementation-record lint, real-backend lanes, adaptive adversarial gate, and Playwright E2E.
+
+</details>
+
+<details>
+
 <summary><strong>Feishu connector chain completed with long-connection transport, tenant-aware bindings, and interactive approval callbacks</strong></summary>
 
 - Added a Feishu/Lark connector baseline that supports both long-connection and webhook ingress modes, keeps transport behavior aligned through the shared connector authorization model, and makes host-domain differences explicit through `feishu` vs `lark` account binding metadata instead of ad hoc runtime branching.

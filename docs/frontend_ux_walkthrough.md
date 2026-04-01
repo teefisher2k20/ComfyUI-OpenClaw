@@ -44,6 +44,7 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 
 - OpenClaw treats standalone `ComfyUI_frontend` and `desktop` as distinct frontend host surfaces.
 - The sidebar stamps its resolved host surface at mount time so desktop bundle drift is explicit in diagnostics and regression tests.
+- The standalone Remote Admin Console now stamps the same host-surface metadata on its document root, so host-sensitive sidebar and admin behavior can be validated against one shared contract.
 - Graph/widget compatibility code should route through shared host helpers to keep nested-subgraph and promoted-widget behavior aligned with current upstream host semantics.
 
 ## Standalone Remote Admin Console
@@ -71,6 +72,7 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 3. Clear token and verify write actions fail with explicit auth/policy errors.
 4. Connect SSE, then trigger a run; verify event stream updates and fallback polling still works.
 5. Confirm there is no blank/overflow breakage on narrow mobile widths.
+6. If you are validating desktop parity, confirm the page root resolves the expected host-surface metadata instead of silently defaulting to standalone assumptions.
 
 ## Quick Manual Checks
 
@@ -90,3 +92,4 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 - Tests live in: `tests/e2e/specs/`
 - Harness: `tests/e2e/test-harness.html` (mocks ComfyUI core + basic OpenClaw API calls)
 - Web helper/self-test harness: `web/tests/e2e-harness.html` (includes frontend helper and wrapper idempotence checks)
+- Desktop host parity lane: `tests/e2e/specs/desktop_host_parity.spec.js` verifies standalone vs desktop host evidence separately and covers both sidebar and Remote Admin host-sensitive behavior under the shared harness shims.
