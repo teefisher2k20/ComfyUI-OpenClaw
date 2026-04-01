@@ -52,9 +52,9 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
     def test_build_host_surface_contract_tracks_desktop_embedded_frontend_lag(self):
         contract = build_host_surface_contract(
             {
-                "comfyui": "v0.18.1",
-                "comfyui_frontend": "1.43.6+bcb39b1bf",
-                "desktop": "0.8.26 (core 0.18.2 / frontend 1.41.21)",
+                "comfyui": "v0.18.1-40-g7d437687",
+                "comfyui_frontend": "1.43.11",
+                "desktop": "0.8.27 (core 0.18.3 / frontend 1.41.21)",
             }
         )
         self.assertTrue(contract["ok"], msg=contract)
@@ -69,7 +69,7 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
     def test_build_host_surface_contract_marks_invalid_desktop_anchor(self):
         contract = build_host_surface_contract(
             {
-                "comfyui_frontend": "1.43.6+bcb39b1bf",
+                "comfyui_frontend": "1.43.11",
                 "desktop": "desktop-head",
             }
         )
