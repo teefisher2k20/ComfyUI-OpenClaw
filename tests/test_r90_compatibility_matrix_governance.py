@@ -175,6 +175,22 @@ class TestR90CompatMatrixGovernance(unittest.TestCase):
             report.environment["compat_desktop_embedded_frontend_status"], "lagging"
         )
 
+    def test_r166_desktop_runtime_lane_matches_recorded_desktop_anchor_contract(self):
+        doc = read_matrix_document(
+            REPO_ROOT / "docs" / "release" / "compatibility_matrix.md"
+        )
+        contract = build_host_surface_contract(doc["metadata"]["anchors"])
+        self.assertTrue(contract["ok"], msg=contract)
+        desktop_surface = contract["surfaces"]["desktop"]
+        self.assertEqual(desktop_surface["frontend_parity"]["status"], "lagging")
+        self.assertEqual(desktop_surface["embedded_frontend_version"], "1.41.21")
+        self.assertTrue(
+            (
+                REPO_ROOT / "tests" / "e2e" / "specs" / "desktop_host_parity.spec.js"
+            ).exists(),
+            msg="R166 executable desktop host parity lane is missing",
+        )
+
     def test_script_smoke_emits_evidence(self):
         with tempfile.TemporaryDirectory() as td:
             matrix = Path(td) / "compatibility_matrix.md"

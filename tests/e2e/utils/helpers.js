@@ -1,5 +1,10 @@
 import { expect } from '@playwright/test';
 
+const HOST_SURFACES = Object.freeze({
+  standaloneFrontend: 'standalone_frontend',
+  desktop: 'desktop',
+});
+
 function resolveUiTimeoutMs() {
   const raw = process.env.OPENCLAW_E2E_READY_TIMEOUT_MS;
   if (raw) {
@@ -44,8 +49,45 @@ function jsonRoute(body, status = 200) {
   };
 }
 
-export async function mockComfyUiCore(page) {
-  await page.addInitScript(() => {
+function normalizeHostSurface(hostSurface) {
+  if (hostSurface === HOST_SURFACES.desktop || hostSurface === 'desktop') {
+    return HOST_SURFACES.desktop;
+  }
+  return HOST_SURFACES.standaloneFrontend;
+}
+
+export async function installHostRuntime(page, { hostSurface = HOST_SURFACES.standaloneFrontend } = {}) {
+  const resolvedHostSurface = normalizeHostSurface(hostSurface);
+
+  await page.addInitScript((options) => {
+    const currentHostSurface = options?.hostSurface === 'desktop'
+      ? 'desktop'
+      : 'standalone_frontend';
+
+    window.__openclawTestHostSurface = currentHostSurface;
+
+    if (currentHostSurface === 'desktop') {
+      window.__DISTRIBUTION__ = 'desktop';
+      window.electronAPI = window.electronAPI || {
+        getPlatform: () => 'win32',
+        platform: 'win32',
+        versions: { electron: 'test' },
+      };
+      try {
+        delete window.__OPENCLAW_HOST_SURFACE__;
+      } catch (error) {
+        window.__OPENCLAW_HOST_SURFACE__ = undefined;
+      }
+    } else {
+      window.__OPENCLAW_HOST_SURFACE__ = 'standalone_frontend';
+      window.__DISTRIBUTION__ = 'standalone_frontend';
+      try {
+        delete window.electronAPI;
+      } catch (error) {
+        window.electronAPI = undefined;
+      }
+    }
+
     // CRITICAL: the harness must provide the host globals that OpenClaw touches
     // during startup. Missing host shims can surface as Windows-only false-red
     // module-load failures when the static harness server is already under load.
@@ -78,7 +120,11 @@ export async function mockComfyUiCore(page) {
         return [];
       };
     }
-  });
+  }, { hostSurface: resolvedHostSurface });
+}
+
+export async function mockComfyUiCore(page, options = {}) {
+  await installHostRuntime(page, options);
 
   // CRITICAL: only fulfill root /scripts/app.js.
   // Do NOT accept /extensions/<pack>/scripts/app.js, otherwise bad relative imports are masked in E2E.
@@ -332,6 +378,194 @@ export async function mockComfyUiCore(page) {
       })
     );
   });
+}
+
+export async function mockCompatApprovalsList(page, approvals = []) {
+  await page.route('**/approvals**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/approvals')) {
+      await route.fallback();
+      return;
+    }
+
+    const statusFilter = String(url.searchParams.get('status') || '').trim().toLowerCase();
+    const filtered = statusFilter
+      ? approvals.filter((item) => String(item.status || '').toLowerCase() === statusFilter)
+      : approvals;
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        approvals: filtered,
+        pagination: { limit: 100, offset: 0, total: filtered.length },
+      })
+    );
+  });
+}
+
+export async function mockRemoteAdminBaseline(
+  page,
+  {
+    hostSurface = HOST_SURFACES.standaloneFrontend,
+    approvals = [],
+  } = {}
+) {
+  await installHostRuntime(page, { hostSurface });
+
+  const sharedConfig = {
+    provider: 'openai',
+    model: 'test-model',
+    base_url: '',
+    timeout_sec: 30,
+    max_retries: 1,
+    llm_key_configured: false,
+  };
+
+  await page.route('**/health**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/health')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        pack: { name: 'ComfyUI-OpenClaw', version: 'test' },
+        config: sharedConfig,
+        stats: {
+          approvals_pending: approvals.filter((item) => String(item.status || '').toLowerCase() === 'pending').length,
+          queue_depth: 0,
+          observability: { total_dropped: 0 },
+        },
+        control_plane: { mode: 'test' },
+        deployment_profile: 'desktop-host-harness',
+        uptime_sec: 42,
+      })
+    );
+  });
+
+  await page.route('**/logs/tail**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/logs/tail')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        tail: '',
+      })
+    );
+  });
+
+  await page.route('**/runs**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/runs')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        runs: [],
+      })
+    );
+  });
+
+  await page.route('**/schedules**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/schedules')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        schedules: [],
+      })
+    );
+  });
+
+  await page.route('**/config**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (!isCompatApiPath(url.pathname, '/config')) {
+      await route.fallback();
+      return;
+    }
+
+    if (request.method() === 'GET') {
+      await route.fulfill(
+        jsonRoute({
+          ok: true,
+          config: sharedConfig,
+        })
+      );
+      return;
+    }
+
+    if (request.method() === 'PUT') {
+      await route.fulfill(
+        jsonRoute({
+          ok: true,
+          config: sharedConfig,
+        })
+      );
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.route('**/security/doctor**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/security/doctor')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        checks: [],
+      })
+    );
+  });
+
+  await page.route('**/preflight/inventory**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== 'GET' || !isCompatApiPath(url.pathname, '/preflight/inventory')) {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill(
+      jsonRoute({
+        ok: true,
+        nodes: ['CheckpointLoaderSimple'],
+        models: {
+          checkpoints: ['base.ckpt'],
+        },
+        snapshot_ts: 0,
+        scan_state: 'idle',
+        stale: false,
+        last_error: null,
+      })
+    );
+  });
+
+  await mockCompatApprovalsList(page, approvals);
 }
 
 export async function waitForOpenClawReady(page) {

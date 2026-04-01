@@ -1,4 +1,5 @@
 import { createRemoteAdminApi, parseSseChunk } from "./admin_console_api.js";
+import { stampHostSurfaceMetadata } from "./openclaw_host_surface.js";
 
 function query(root, id) {
     return root.getElementById(id);
@@ -63,6 +64,12 @@ function createElements(root) {
 
 export function mountAdminConsole(root = document) {
     const view = root.defaultView || window;
+    const metadataTarget = root.body || root.documentElement;
+    if (metadataTarget) {
+        // IMPORTANT: keep admin console host evidence explicit so desktop-host
+        // regressions can be separated from standalone frontend drift in E2E.
+        stampHostSurfaceMetadata(metadataTarget, { win: view });
+    }
     const api = createRemoteAdminApi({
         fetchImpl: view.fetch.bind(view),
         storage: view.localStorage,
