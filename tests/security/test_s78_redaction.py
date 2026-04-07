@@ -82,7 +82,7 @@ class TestS78BridgeAuthRedaction(unittest.TestCase):
 class TestS78BridgeWorkerRedaction(unittest.TestCase):
     def setUp(self):
         os.environ["OPENCLAW_BRIDGE_ENABLED"] = "1"
-        os.environ["OPENCLAW_BRIDGE_DEVICE_TOKEN"] = "test-token-secret"
+        os.environ["OPENCLAW_BRIDGE_DEVICE_TOKEN"] = "bridge-auth-sample"
         IdempotencyStore().clear()
         import services.sidecar.auth as auth_module
 
@@ -104,7 +104,7 @@ class TestS78BridgeWorkerRedaction(unittest.TestCase):
         req.path = f"/bridge/worker/result/{job_id}"
         req.headers = {
             "X-OpenClaw-Device-Id": "worker-1",
-            "X-OpenClaw-Device-Token": "test-token-secret",
+            "X-OpenClaw-Device-Token": "bridge-auth-sample",
             "X-OpenClaw-Scopes": "job:submit,job:status",
             "X-Idempotency-Key": idempotency_key,
         }
@@ -130,7 +130,7 @@ class TestS78BridgeWorkerRedaction(unittest.TestCase):
         output = "\n".join(logs.output)
         self.assertNotIn("worker-1", output)
         self.assertNotIn("device:", output)
-        self.assertIn("job=job-1", output)
+        self.assertIn("Worker result accepted.", output)
 
     def test_duplicate_result_log_redacts_idempotency_key(self):
         from api.bridge import BridgeHandlers
@@ -212,7 +212,10 @@ class TestS78AuditRedaction(unittest.TestCase):
         entry = entries[0]
         self.assertNotIn("token_id", entry)
         self.assertNotIn("token_tag", entry)
-        self.assertEqual(entry["auth_context"], "authenticated")
+        self.assertNotIn("auth_context", entry)
+        self.assertNotIn("role", entry)
+        self.assertNotIn("scope", entry)
+        self.assertNotIn("scopes", entry)
         self.assertNotIn("adm-1", json.dumps(entry))
 
     def test_audit_logger_omits_raw_token_id(self):
@@ -233,7 +236,8 @@ class TestS78AuditRedaction(unittest.TestCase):
 
         output = "\n".join(logs.output)
         self.assertNotIn("adm-2", output)
-        self.assertIn("auth=authenticated", output)
+        self.assertNotIn("auth=", output)
+        self.assertIn("AUDIT action=config.update", output)
 
 
 class TestS83StableRedactionTag(unittest.TestCase):

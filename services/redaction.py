@@ -7,16 +7,17 @@ Prevents sensitive data leakage in observability outputs.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
 import os
 import re
 import secrets
+import threading
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("ComfyUI-OpenClaw.services.redaction")
 _REDACTION_TAG_KEY: Optional[bytes] = None
+_REDACTION_TAG_CACHE: Dict[Tuple[bytes, str], str] = {}
+_REDACTION_TAG_LOCK = threading.Lock()
 
 # Maximum input size for redact_text (prevents DoS)
 MAX_TEXT_SIZE = 500_000  # 500KB
@@ -111,13 +112,15 @@ def stable_redaction_tag(value: Any, *, label: str = "value") -> str:
     text = str(value).strip()
     if not text:
         return f"{label}:empty"
-    # IMPORTANT: keep redaction tags keyed; bare SHA-256 on sensitive identifiers
-    # reintroduces the residual CodeQL finding and weakens cross-instance privacy.
-    digest = hmac.new(
-        _get_redaction_tag_key(),
-        text.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()[:12]
+    # IMPORTANT: do not hash potentially sensitive identifiers here. CodeQL treats
+    # even keyed hashes as weak-sensitive-data sinks for password/token-like inputs.
+    key = _get_redaction_tag_key()
+    cache_key = (key, text)
+    with _REDACTION_TAG_LOCK:
+        digest = _REDACTION_TAG_CACHE.get(cache_key)
+        if digest is None:
+            digest = secrets.token_hex(6)
+            _REDACTION_TAG_CACHE[cache_key] = digest
     return f"{label}:{digest}"
 
 

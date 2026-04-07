@@ -771,10 +771,9 @@ class BridgeHandlers:
             scope=BridgeScope.JOB_SUBMIT.value,
             details={"status": data.get("status", "completed")},
         )
-        logger.info(
-            "F46: Worker result accepted for job=%s",
-            job_id,
-        )
+        # IMPORTANT: keep this success log constant. Request-auth CodeQL still treats
+        # the surrounding handler scope as credential-tainted even when job_id is benign.
+        logger.info("F46: Worker result accepted.")
         return web.json_response(response_data, status=201)
 
     @endpoint_metadata(

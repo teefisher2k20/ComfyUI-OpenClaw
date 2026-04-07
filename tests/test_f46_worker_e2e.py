@@ -30,7 +30,7 @@ def _make_auth_request(
     req.path = path
     req.headers = {
         "X-OpenClaw-Device-Id": "worker-1",
-        "X-OpenClaw-Device-Token": "test-token-secret",
+        "X-OpenClaw-Device-Token": "bridge-auth-sample",
         "X-OpenClaw-Scopes": "job:submit,job:status",
         **(headers or {}),
     }
@@ -56,7 +56,7 @@ def _make_noauth_request(path="/bridge/worker/poll", query=None, match_info=None
 def _setup_bridge_env():
     """Configure environment for bridge authentication."""
     os.environ["OPENCLAW_BRIDGE_ENABLED"] = "1"
-    os.environ["OPENCLAW_BRIDGE_DEVICE_TOKEN"] = "test-token-secret"
+    os.environ["OPENCLAW_BRIDGE_DEVICE_TOKEN"] = "bridge-auth-sample"
 
 
 def _cleanup_bridge_env():

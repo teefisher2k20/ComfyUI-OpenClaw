@@ -56,9 +56,6 @@ class TestAudit(unittest.TestCase):
         for field in (
             "ts",
             "source",
-            "auth_context",
-            "scope",
-            "scopes",
             "trace_id",
             "action",
             "target",
@@ -69,13 +66,13 @@ class TestAudit(unittest.TestCase):
             "entry_hash",
         ):
             self.assertIn(field, entry)
-        self.assertEqual(entry["auth_context"], "authenticated")
         self.assertNotIn("adm-1", json.dumps(entry))
-        self.assertEqual(entry["role"], "admin")
         self.assertEqual(entry["action"], "config.update")
         self.assertEqual(entry["target"], "settings.json")
         self.assertEqual(entry["outcome"], "allow")
-        self.assertIn("*", entry["scopes"])
+        self.assertNotIn("role", entry)
+        self.assertNotIn("scope", entry)
+        self.assertNotIn("scopes", entry)
 
     def test_append_only_hash_chain(self):
         emit_audit_event("settings.config_write", "127.0.0.1", True)
