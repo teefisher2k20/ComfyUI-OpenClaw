@@ -82,34 +82,12 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
-def _resolve_request_token_info(request: Any) -> Any:
-    if request is None:
-        return None
-    try:
-        from .access_control import resolve_token_info
-    except Exception:
-        try:
-            from services.access_control import resolve_token_info  # type: ignore
-        except Exception:
-            return None
-    try:
-        return resolve_token_info(request)
-    except Exception:
-        return None
-
-
-def _resolve_trace_id(request: Any, details: Dict[str, Any]) -> str:
+def _resolve_trace_id(details: Dict[str, Any]) -> str:
     if isinstance(details.get("trace_id"), str) and details.get("trace_id"):
         return details["trace_id"]
-    if request is not None:
-        headers = getattr(request, "headers", None) or {}
-        for key in ("X-Trace-Id", "X-OpenClaw-Trace-Id", "X-Request-Id"):
-            try:
-                value = headers.get(key)
-            except Exception:
-                value = None
-            if isinstance(value, str) and value.strip():
-                return value.strip()
+    # IMPORTANT: keep request headers out of audit persistence. CodeQL still treats
+    # auth-bearing request objects as sensitive sources even when only trace headers
+    # are read from them.
     return uuid.uuid4().hex
 
 
@@ -267,10 +245,7 @@ def _emit_modern(
     source: str = "openclaw",
 ) -> Dict[str, Any]:
     details_dict = _sanitize_audit_details(details or {})
-    trace_id = _resolve_trace_id(
-        request, details_dict if isinstance(details_dict, dict) else {}
-    )
-    token_info or _resolve_request_token_info(request)
+    trace_id = _resolve_trace_id(details_dict if isinstance(details_dict, dict) else {})
     entry = _persistable_audit_entry(
         action=action,
         target=target,
@@ -282,9 +257,8 @@ def _emit_modern(
     )
     _write_audit_entry(entry)
     logger.info(
-        "AUDIT action=%s target=%s outcome=%s",
+        "AUDIT action=%s outcome=%s",
         action,
-        target,
         outcome,
     )
     return entry
