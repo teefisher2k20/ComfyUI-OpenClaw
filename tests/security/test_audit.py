@@ -56,7 +56,7 @@ class TestAudit(unittest.TestCase):
         for field in (
             "ts",
             "source",
-            "token_tag",
+            "auth_context",
             "scope",
             "scopes",
             "trace_id",
@@ -69,8 +69,8 @@ class TestAudit(unittest.TestCase):
             "entry_hash",
         ):
             self.assertIn(field, entry)
-        self.assertTrue(entry["token_tag"].startswith("token:"))
-        self.assertNotIn("adm-1", entry["token_tag"])
+        self.assertEqual(entry["auth_context"], "authenticated")
+        self.assertNotIn("adm-1", json.dumps(entry))
         self.assertEqual(entry["role"], "admin")
         self.assertEqual(entry["action"], "config.update")
         self.assertEqual(entry["target"], "settings.json")

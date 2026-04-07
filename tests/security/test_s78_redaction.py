@@ -129,7 +129,8 @@ class TestS78BridgeWorkerRedaction(unittest.TestCase):
         )
         output = "\n".join(logs.output)
         self.assertNotIn("worker-1", output)
-        self.assertIn("device:", output)
+        self.assertNotIn("device:", output)
+        self.assertIn("job=job-1", output)
 
     def test_duplicate_result_log_redacts_idempotency_key(self):
         from api.bridge import BridgeHandlers
@@ -192,7 +193,7 @@ class TestS78AuditRedaction(unittest.TestCase):
         self.assertIn("***REDACTED***", details["error"])
         self.assertNotIn("1.2.3.4", json.dumps(entries[0]))
 
-    def test_audit_storage_uses_token_tag_not_raw_token_id(self):
+    def test_audit_storage_omits_token_derived_identifiers(self):
         class _Token:
             token_id = "adm-1"
             role = "admin"
@@ -210,9 +211,8 @@ class TestS78AuditRedaction(unittest.TestCase):
         entries = self._read_entries()
         entry = entries[0]
         self.assertNotIn("token_id", entry)
-        self.assertEqual(
-            entry["token_tag"], stable_redaction_tag("adm-1", label="token")
-        )
+        self.assertNotIn("token_tag", entry)
+        self.assertEqual(entry["auth_context"], "authenticated")
         self.assertNotIn("adm-1", json.dumps(entry))
 
     def test_audit_logger_omits_raw_token_id(self):
@@ -233,7 +233,7 @@ class TestS78AuditRedaction(unittest.TestCase):
 
         output = "\n".join(logs.output)
         self.assertNotIn("adm-2", output)
-        self.assertIn("token:", output)
+        self.assertIn("auth=authenticated", output)
 
 
 class TestS83StableRedactionTag(unittest.TestCase):

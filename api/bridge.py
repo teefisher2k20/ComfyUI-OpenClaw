@@ -772,9 +772,8 @@ class BridgeHandlers:
             details={"status": data.get("status", "completed")},
         )
         logger.info(
-            "F46: Worker result accepted for job=%s from=%s",
+            "F46: Worker result accepted for job=%s",
             job_id,
-            _bridge_sensitive_tag(device_id, label="device"),
         )
         return web.json_response(response_data, status=201)
 
