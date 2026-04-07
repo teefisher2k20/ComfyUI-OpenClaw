@@ -265,9 +265,17 @@ def parse_wechat_xml(raw: bytes) -> dict:
             f"Payload size {len(raw)} exceeds limit {XML_MAX_PAYLOAD_BYTES}"
         )
 
+    lowered = raw.lower()
+    if b"<!doctype" in lowered or b"<!entity" in lowered:
+        # IMPORTANT: reject DTD / ENTITY declarations before parser entry to
+        # keep entity-expansion bombs fail-closed.
+        raise XMLBudgetExceeded("DTD/entity declarations are not allowed")
+
     try:
-        root = ET.fromstring(raw)
-    except ET.ParseError as e:
+        parser = ET.XMLParser()
+        parser.feed(raw.decode("utf-8"))
+        root = parser.close()
+    except (ET.ParseError, UnicodeDecodeError) as e:
         raise XMLBudgetExceeded(f"XML parse error: {e}") from e
 
     # Depth check — WeChat envelopes are <xml><Tag>val</Tag></xml>, depth=2

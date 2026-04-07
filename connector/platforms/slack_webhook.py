@@ -97,6 +97,13 @@ def _make_redirect_response(web_mod, url: str):
     return _CompatResponse(status=302, text=url)
 
 
+def _safe_external_error_text(default: str, exc: Exception) -> str:
+    raw = str(exc or "").strip()
+    if raw and len(raw) <= 64 and raw.replace("_", "").replace("-", "").isalnum():
+        return raw
+    return default
+
+
 # -- Slack signature verification -------------------------------------------
 
 # Maximum acceptable clock skew for timestamp validation (5 minutes).
@@ -284,8 +291,13 @@ class SlackWebhookServer:
                 ),
             )
         except Exception as exc:
-            logger.warning("Slack OAuth callback failed: %s", exc)
-            return _make_response(web, status=502, text=str(exc))
+            safe_text = _safe_external_error_text("Slack OAuth processing failed", exc)
+            logger.warning("Slack OAuth callback failed: %s", safe_text)
+            return _make_response(
+                web,
+                status=502,
+                text=safe_text,
+            )
 
     def _get_bot_user_id(self, payload: Dict[str, Any], workspace_id: str) -> str:
         candidate = ""

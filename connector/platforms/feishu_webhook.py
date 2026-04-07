@@ -123,6 +123,13 @@ def _make_json_response(web_mod, data: Dict[str, Any], *, status: int = 200):
     )
 
 
+def _safe_external_error_code(default: str, exc: Exception) -> str:
+    raw = str(exc or "").strip()
+    if raw and len(raw) <= 64 and raw.replace("_", "").replace("-", "").isalnum():
+        return raw
+    return default
+
+
 def _resolve_domain_base(domain: str) -> str:
     normalized = str(domain or "feishu").strip().lower()
     return FEISHU_DOMAIN_BASES.get(normalized, FEISHU_DOMAIN_BASES["feishu"])
@@ -380,8 +387,13 @@ class FeishuWebhookServer:
         try:
             await self.process_event_payload(payload)
         except ValueError as exc:
-            logger.warning("Feishu event rejected: %s", exc)
-            return _make_response(web, status=400, text=str(exc))
+            safe_code = _safe_external_error_code("event_rejected", exc)
+            logger.warning("Feishu event rejected: %s", safe_code)
+            return _make_response(
+                web,
+                status=400,
+                text=safe_code,
+            )
         return _make_response(web, status=200, text="OK")
 
     async def handle_callback(self, request):
@@ -399,10 +411,14 @@ class FeishuWebhookServer:
         try:
             response = await self.process_callback_payload(payload)
         except ValueError as exc:
-            logger.warning("Feishu callback rejected: %s", exc)
+            safe_code = _safe_external_error_code("callback_rejected", exc)
+            logger.warning("Feishu callback rejected: %s", safe_code)
             return _make_json_response(
                 web,
-                {"ok": False, "error": str(exc)},
+                {
+                    "ok": False,
+                    "error": safe_code,
+                },
                 status=403,
             )
         return _make_json_response(web, response)
