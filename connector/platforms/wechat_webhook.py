@@ -32,6 +32,9 @@ import time
 from typing import Optional
 from xml.etree import ElementTree as ET
 
+from defusedxml import ElementTree as DefusedET
+from defusedxml.common import DefusedXmlException
+
 from ..config import ConnectorConfig
 from ..contract import CommandRequest, CommandResponse
 from ..router import CommandRouter
@@ -272,10 +275,10 @@ def parse_wechat_xml(raw: bytes) -> dict:
         raise XMLBudgetExceeded("DTD/entity declarations are not allowed")
 
     try:
-        parser = ET.XMLParser()
-        parser.feed(raw.decode("utf-8"))
-        root = parser.close()
-    except (ET.ParseError, UnicodeDecodeError) as e:
+        # IMPORTANT: keep defusedxml here. Reverting to the stdlib parser path
+        # reopens the residual CodeQL xml-bomb finding on this ingress seam.
+        root = DefusedET.fromstring(raw.decode("utf-8"))
+    except (ET.ParseError, DefusedXmlException, UnicodeDecodeError) as e:
         raise XMLBudgetExceeded(f"XML parse error: {e}") from e
 
     # Depth check — WeChat envelopes are <xml><Tag>val</Tag></xml>, depth=2

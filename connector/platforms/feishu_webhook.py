@@ -123,10 +123,9 @@ def _make_json_response(web_mod, data: Dict[str, Any], *, status: int = 200):
     )
 
 
-def _safe_external_error_code(default: str, exc: Exception) -> str:
-    raw = str(exc or "").strip()
-    if raw and len(raw) <= 64 and raw.replace("_", "").replace("-", "").isalnum():
-        return raw
+def _safe_external_error_code(default: str, _exc: Exception) -> str:
+    # IMPORTANT: keep Feishu external failures constant. Returning exception-
+    # derived codes/text here reopens the residual CodeQL stack-trace finding.
     return default
 
 

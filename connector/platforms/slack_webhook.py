@@ -97,10 +97,9 @@ def _make_redirect_response(web_mod, url: str):
     return _CompatResponse(status=302, text=url)
 
 
-def _safe_external_error_text(default: str, exc: Exception) -> str:
-    raw = str(exc or "").strip()
-    if raw and len(raw) <= 64 and raw.replace("_", "").replace("-", "").isalnum():
-        return raw
+def _safe_external_error_text(default: str, _exc: Exception) -> str:
+    # IMPORTANT: keep Slack external failures constant. Even "short safe-looking"
+    # exception text remains scanner-tainted and can re-expose internal detail.
     return default
 
 

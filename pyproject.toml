@@ -6,8 +6,9 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 
-# S57: cryptography is required for Fernet AEAD secrets-at-rest encryption
-dependencies = ["cryptography>=41.0"]
+# S57: cryptography is required for Fernet AEAD secrets-at-rest encryption.
+# S85: defusedxml is required for scanner-recognized fail-closed WeChat XML parsing.
+dependencies = ["cryptography>=41.0", "defusedxml>=0.7.1"]
 
 [project.optional-dependencies]
 # WeChat AES encrypted ingress mode (R82) — lazy-imported, only needed when encrypt_type=aes
