@@ -231,7 +231,9 @@ class TestModelManagerService(unittest.TestCase):
 
     def test_resolve_install_target_rejects_escape(self):
         with self.assertRaises(PathTraversalError):
-            self.manager._resolve_install_target(str(self.install_root), "../escape.bin")
+            self.manager._resolve_install_target(
+                str(self.install_root), "../escape.bin"
+            )
 
     def test_import_records_resolved_relative_installation_path(self):
         payload = b"model-bytes"

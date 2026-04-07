@@ -37,7 +37,9 @@ class TestS79BridgeTokenHashing(unittest.TestCase):
         store_a = BridgeTokenStore()
         store_b = BridgeTokenStore()
 
-        self.assertNotEqual(store_a._hash_token("secret-token"), store_b._hash_token("secret-token"))
+        self.assertNotEqual(
+            store_a._hash_token("secret-token"), store_b._hash_token("secret-token")
+        )
 
     def test_token_hash_can_be_pinned_via_env_override(self):
         with patch.dict(
@@ -48,4 +50,6 @@ class TestS79BridgeTokenHashing(unittest.TestCase):
             store_a = BridgeTokenStore()
             store_b = BridgeTokenStore()
 
-        self.assertEqual(store_a._hash_token("secret-token"), store_b._hash_token("secret-token"))
+        self.assertEqual(
+            store_a._hash_token("secret-token"), store_b._hash_token("secret-token")
+        )

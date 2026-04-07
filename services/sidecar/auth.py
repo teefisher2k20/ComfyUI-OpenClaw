@@ -293,7 +293,9 @@ def validate_device_token(
     # R104: mTLS Binding Check
     is_mtls_valid, mtls_error = validate_mtls_binding(request, device_id)
     if not is_mtls_valid:
-        logger.warning("mTLS validation failed for %s: %s", _device_tag(device_id), mtls_error)
+        logger.warning(
+            "mTLS validation failed for %s: %s", _device_tag(device_id), mtls_error
+        )
         return False, mtls_error, None
 
     return True, "", device_id

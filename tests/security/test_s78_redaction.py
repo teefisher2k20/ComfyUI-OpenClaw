@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from services.audit import emit_audit_event
 from services.idempotency_store import IdempotencyStore
-from services.request_ip import get_trusted_proxies
 from services.redaction import stable_redaction_tag
+from services.request_ip import get_trusted_proxies
 from services.safe_io import safe_request_json, safe_request_text_stream
 
 
@@ -216,7 +216,9 @@ class TestS78DefensiveLogRedaction(unittest.TestCase):
         mock_opener.open.return_value.__enter__.return_value = mock_response
         mock_build.return_value = mock_opener
 
-        with self.assertLogs("ComfyUI-OpenClaw.services.safe_io", level="DEBUG") as logs:
+        with self.assertLogs(
+            "ComfyUI-OpenClaw.services.safe_io", level="DEBUG"
+        ) as logs:
             out = safe_request_json(
                 method="POST",
                 url="https://example.com/test",
@@ -255,7 +257,9 @@ class TestS78DefensiveLogRedaction(unittest.TestCase):
         mock_opener.open.return_value = _FakeStreamResponse()
         mock_build.return_value = mock_opener
 
-        with self.assertLogs("ComfyUI-OpenClaw.services.safe_io", level="DEBUG") as logs:
+        with self.assertLogs(
+            "ComfyUI-OpenClaw.services.safe_io", level="DEBUG"
+        ) as logs:
             lines = list(
                 safe_request_text_stream(
                     method="POST",
