@@ -77,6 +77,19 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Security hardening wave completed across CI permissions, path boundaries, redaction, connector ingress, and notification rendering</strong></summary>
+
+- Verified the minimal Vite development-tooling hotfix path already merged cleanly, so the repo now resolves the patched `vite` version without broadening the frontend toolchain scope.
+- Added explicit least-privilege GitHub Actions `permissions:` declarations and a repo-local regression seam so workflow token scope drift is now treated as a tracked security regression instead of an implicit repository default.
+- Hardened checkpoint, integrity, and managed model-transfer path handling to fail closed on invalid IDs, traversal markers, and rebased install targets, with focused regression coverage on every flagged filesystem sink.
+- Replaced raw security-sensitive identifiers in bridge, auth, audit, proxy, and safe-IO diagnostics with stable redacted tags, and upgraded sensitive hashing paths to keyed constructions instead of plain or hardcoded hash inputs.
+- Tightened connector ingress failure handling so WeChat rejects unsafe XML declarations before parser entry, while Slack and Feishu return bounded external failure text/codes instead of echoing raw exception detail.
+- Added a targeted Playwright seam proving notification payloads render as escaped text rather than live markup, locking the production notification sink against future HTML-interpolation regressions.
+
+</details>
+
+<details>
+
 <summary><strong>Desktop host parity lane, refreshed compatibility anchors, and live-backend mock parity completed</strong></summary>
 
 - Added an executable desktop-host regression lane for the OpenClaw sidebar and Remote Admin Console, so desktop-specific runtime drift is now verified separately from standalone frontend assumptions instead of being left to unit-only host detection.
@@ -917,6 +930,7 @@ The sidebar includes a persistent `Notification Center` for operator-facing aler
 - entries are deduplicated by source-specific keys and keep an unread count
 - `Acknowledge` clears unread state without hiding the item
 - `Dismiss` removes the item from the active panel while preserving historical storage
+- notification message/source fields are rendered as escaped text, not trusted as HTML, so operator-facing payloads cannot turn stored notification content into live markup
 - action-enabled entries can deep-link back to the affected surface, such as `Model Manager` or `Jobs`
 
 Current examples include queue-monitor incidents and managed-model failures that need operator follow-up.

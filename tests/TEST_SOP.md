@@ -40,6 +40,7 @@ Required guardrails:
   - pre-fix reproduction evidence
   - post-fix targeted regression evidence
   - final full-gate evidence
+- If the defect is primarily static-analysis or CI-policy drift (for example workflow token scope or other repo-configuration security boundaries), acceptance must still add a repo-local regression seam over the changed contract surface; do not rely on an external scanner as the only proof.
 - If a critical seam is usually mocked (`auth`, `webhook verification`, `connector callback`, `runtime/deploy env`, `provider/queue boundary`, or similar), acceptance must include at least one unmocked test or scripted probe through the real seam.
 - For stateful or production-facing transaction flows (`login`, `webhook ingress`, `connector callback`, `approval/admin actions`, `model download/import`, or similar), acceptance must verify the actual transaction outcome, not only page load, redirect presence, or route reachability.
 - If the original failure cannot be replayed locally after the fix is in progress, the record must explain why and preserve the best available pre-fix evidence instead of pretending the bug never had a failing state.

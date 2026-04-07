@@ -84,6 +84,7 @@ interface NotificationEntry {
 - Entries are deduplicated by source-specific keys and persisted in local storage across reloads.
 - `Dismiss` hides an entry from the active list without deleting the historical record from storage.
 - `Acknowledge` clears unread state while keeping the entry visible.
+- Notification `message` / `source` fields are treated as untrusted text at the render sink and must stay escaped before DOM insertion; notification content is not a supported HTML surface.
 - Sources with jump targets should attach a tab/action deep link so operators can navigate directly to the affected surface.
 - Canonical `openclaw-*` DOM/class ownership should be authored once in the shell/templates; any retained `moltbot-*` class compatibility must come from shared runtime alias helpers instead of duplicated markup.
 

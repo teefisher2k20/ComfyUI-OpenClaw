@@ -109,6 +109,7 @@ Examples of acceptable transaction-level evidence:
 - submit a webhook or connector callback payload and verify the resulting accepted/rejected outcome
 - perform an approval or admin action and verify the persisted or rendered result
 - submit a model import/download or other state-changing form/action and verify the resulting lifecycle state
+- for frontend security fixes, assert the real rendered DOM sink (for example notification text staying escaped instead of becoming live markup), not only fixture/local-storage shape
 
 Non-examples:
 - loading the entry page only

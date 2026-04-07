@@ -345,6 +345,7 @@ WeChat Official Account pushes webhook requests to your connector. You must expo
 - The adapter validates WeChat signature on every request and applies replay/timestamp checks.
 - Timestamp skew outside policy window is rejected (`403 Stale Request`).
 - XML payload parsing is bounded (size/depth/field caps) and fails closed on parser budget violations.
+- DTD / ENTITY declarations are rejected before parser entry; the adapter does not attempt to recover from unsafe XML payloads.
 - Runtime XML security gate is fail-closed: unsafe/missing parser baseline blocks ingress startup.
 - Current command surface is text-first. Unsupported message/event types are ignored with success response.
 - Proactive outbound API messaging requires both `OPENCLAW_CONNECTOR_WECHAT_APP_ID` and `OPENCLAW_CONNECTOR_WECHAT_APP_SECRET`.
@@ -450,6 +451,7 @@ Slack uses the Events API webhook mode in OpenClaw. You must expose the endpoint
    - `OPENCLAW_CONNECTOR_ADMIN_TOKEN` must match server `OPENCLAW_ADMIN_TOKEN` if server-side admin token is enabled.
    - Slack ingress is fail-closed: invalid/missing signature, stale timestamp, and replayed events are rejected.
    - OAuth callbacks also fail closed on invalid or replayed `state` values.
+   - External OAuth/install failures intentionally use bounded generic text; inspect connector logs and installation diagnostics for redacted detail instead of expecting raw exception text in the callback response.
 
 4. **Start connector and expose webhook endpoint**
    - Start connector: `python -m connector`
@@ -580,6 +582,7 @@ Notes:
 - `OPENCLAW_CONNECTOR_FEISHU_DOMAIN=lark` switches outbound API host behavior without changing the rest of the connector contract.
 - Untrusted users can still see bounded command responses, but run-affecting interactive actions are downgraded to approval flow instead of auto-executing.
 - Callback signing secrets are resolved from the bound Feishu installation record; diagnostics expose binding state, not raw secret material.
+- Callback/event wrapper failures intentionally return bounded external error codes; inspect logs and installation diagnostics for redacted detail instead of expecting stack traces in callback responses.
 
 ## Commands
 
@@ -663,6 +666,10 @@ Notes:
   - `OPENCLAW_CONNECTOR_SLACK_REQUIRE_MENTION=true` and message does not mention the bot.
   - Fix: mention bot explicitly (`@Bot /status`) or set `OPENCLAW_CONNECTOR_SLACK_REQUIRE_MENTION=false` if policy allows.
 
+- **Slack OAuth callback shows only a generic install failure**:
+  - This is expected on current builds; callback responses intentionally suppress raw exception text.
+  - Fix: inspect connector logs plus `GET /openclaw/connector/installations` / `/resolve` diagnostics to find the redacted root cause.
+
 - **Feishu callback buttons fail with signature or stale-action errors**:
   - Callback route is not using the same bound app secret, request arrived too late, or the button payload was replayed.
   - Fix: verify binding diagnostics, public callback route, connector clock, and that the same action is not being resent by proxy/retry middleware.
@@ -674,3 +681,7 @@ Notes:
 - **Feishu `/run` action becomes approval instead of executing immediately**:
   - Callback actor is untrusted under current allowlist/policy mapping.
   - Fix: add the user/chat to `OPENCLAW_CONNECTOR_FEISHU_ALLOWED_USERS` or `_ALLOWED_CHATS`, or keep the approval downgrade as the intended posture.
+
+- **Feishu callback returns a bounded code such as `callback_rejected` or `event_rejected`**:
+  - This is expected on current builds; callback wrappers intentionally avoid echoing raw exception detail to the caller.
+  - Fix: inspect connector logs and installation/binding diagnostics for the redacted failure context.

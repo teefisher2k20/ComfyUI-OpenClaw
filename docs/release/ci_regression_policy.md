@@ -39,6 +39,9 @@ If a change intentionally modifies contract behavior:
 - Dependency-audit governance is part of CI parity:
   - Node audit should continue to target production dependencies only.
   - Python audit must stay scoped to `requirements.txt`; env-wide bare `pip-audit` is out of contract because it can fail on tool-only transient packages that are not part of the repo dependency surface.
+- GitHub Actions workflow files are part of the security boundary:
+  - workflows using `GITHUB_TOKEN` must declare explicit least-privilege `permissions:` instead of relying on repository defaults
+  - missing or broadened workflow token scope should be treated as CI-policy drift, not an acceptable implementation shortcut
 - `pyproject.toml` must keep:
   - `fail_under >= 35.0`
   - `show_missing = true`
