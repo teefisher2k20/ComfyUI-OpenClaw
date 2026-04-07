@@ -302,13 +302,16 @@ WeChat Official Account pushes webhook requests to your connector. You must expo
 
    ```bash
    OPENCLAW_CONNECTOR_WECHAT_TOKEN=replace-with-your-wechat-token
-   OPENCLAW_CONNECTOR_WECHAT_APP_ID=wx1234567890abcdef
+   OPENCLAW_CONNECTOR_WECHAT_APP_ID=replace-with-your-wechat-app-id
    OPENCLAW_CONNECTOR_WECHAT_APP_SECRET=replace-with-app-secret
    OPENCLAW_CONNECTOR_WECHAT_ALLOWED_USERS=openid_1,openid_2
    OPENCLAW_CONNECTOR_WECHAT_BIND=127.0.0.1
    OPENCLAW_CONNECTOR_WECHAT_PORT=8097
    OPENCLAW_CONNECTOR_WECHAT_PATH=/wechat/webhook
    ```
+
+   Use descriptive placeholders for App IDs in docs and examples. Secret scanners can
+   treat AppID-shaped samples as real credentials even when they are only documentation.
 
 2. Start the connector:
 
