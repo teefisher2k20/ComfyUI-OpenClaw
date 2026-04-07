@@ -270,6 +270,47 @@ class TestModelManagerService(unittest.TestCase):
         )
         self.assertTrue((self.install_root / rec["installation_path"]).exists())
 
+    def test_import_cleanup_remains_bounded_on_copy_failure(self):
+        payload = b"model-bytes"
+        digest = hashlib.sha256(payload).hexdigest()
+        staged_dir = self.manager.staging_dir / "task-bounded-cleanup"
+        staged_dir.mkdir(parents=True, exist_ok=True)
+        staged_file = staged_dir / "model.safetensors"
+        staged_file.write_bytes(payload)
+        task = DownloadTask(
+            task_id="task-bounded-cleanup",
+            model_id="model-bounded-cleanup",
+            name="Model Bounded Cleanup",
+            model_type="checkpoint",
+            source="catalog",
+            source_label="Catalog",
+            download_url="https://example.com/model.safetensors",
+            destination_subdir="checkpoints/nested",
+            filename="model.safetensors",
+            expected_sha256=digest,
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model",
+            },
+            tenant_id="default",
+            state="completed",
+            staged_path=str(staged_file),
+            computed_sha256=digest,
+        )
+        self.manager._tasks[task.task_id] = task
+
+        with patch("services.model_manager_transfer.shutil.copy2", side_effect=OSError("copy failed")):
+            with self.assertRaises(OSError):
+                self.manager.import_downloaded_model(task_id=task.task_id)
+
+        target_dir = self.install_root / "checkpoints" / "nested"
+        if target_dir.exists():
+            leftovers = [path.name for path in target_dir.iterdir()]
+        else:
+            leftovers = []
+        self.assertEqual(leftovers, [])
+
     def test_list_download_tasks_delta_cursor_contract(self):
         first = DownloadTask(
             task_id="task-1",

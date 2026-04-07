@@ -7,7 +7,6 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
-import tempfile
 import time
 import urllib.request
 import uuid
@@ -18,6 +17,7 @@ from .request_contracts import (
     MODEL_MANAGER_IMPORT_CONTRACT,
     MODEL_MANAGER_PROVENANCE_CONTRACT,
 )
+from .safe_io import resolve_under_root
 
 
 def validate_url_policy(*, manager: Any, url: str) -> None:
@@ -440,8 +440,9 @@ def import_downloaded_model(
     fname = manager._sanitize_filename(filename or task.filename)
     rel_target = PurePosixPath(subdir) / fname
     # IMPORTANT: keep root-bounded resolution; plain joins re-enable traversal risks.
-    abs_target = Path(
-        manager._resolve_install_target(str(install_root), rel_target.as_posix())
+    abs_target = _resolve_bounded_install_path(
+        install_root=install_root,
+        relative_target=rel_target,
     )
     try:
         safe_rel_target = abs_target.relative_to(install_root).as_posix()
@@ -449,20 +450,11 @@ def import_downloaded_model(
         raise manager._error(
             "invalid_destination", "resolved import target escapes install root"
         ) from exc
-    abs_target.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(
-        prefix=f".{abs_target.name}.tmp.", dir=str(abs_target.parent), text=False
+    _install_staged_file_bounded(
+        staged_path=staged_path,
+        install_root=install_root,
+        target_path=abs_target,
     )
-    os.close(fd)
-    try:
-        shutil.copy2(staged_path, tmp)
-        os.replace(tmp, abs_target)
-    except Exception:
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
-        raise
     safe_tags: List[str] = []
     max_tags = int(MODEL_MANAGER_IMPORT_CONTRACT["tags"]["max_items"])
     for item in tags or []:
@@ -506,3 +498,44 @@ def import_downloaded_model(
             manager._emit(current)
             manager._persist_tasks_locked(force=True)
     return rec
+
+
+def _resolve_bounded_install_path(
+    *, install_root: Path, relative_target: PurePosixPath
+) -> Path:
+    return Path(
+        resolve_under_root(str(install_root), relative_target.as_posix())
+    ).resolve()
+
+
+def _bounded_temp_sibling(*, install_root: Path, target_path: Path) -> Path:
+    relative_parent = target_path.parent.relative_to(install_root).as_posix()
+    temp_name = f".{target_path.name}.tmp.{uuid.uuid4().hex}"
+    relative_temp = (
+        PurePosixPath(relative_parent) / temp_name if relative_parent else PurePosixPath(temp_name)
+    )
+    return _resolve_bounded_install_path(
+        install_root=install_root,
+        relative_target=relative_temp,
+    )
+
+
+def _install_staged_file_bounded(
+    *, staged_path: Path, install_root: Path, target_path: Path
+) -> None:
+    # IMPORTANT: keep the entire temp-file lifecycle root-bounded here. Reverting
+    # to raw path-string replace/remove calls reopens the residual CodeQL finding.
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = _bounded_temp_sibling(
+        install_root=install_root,
+        target_path=target_path,
+    )
+    try:
+        shutil.copy2(staged_path, temp_path)
+        temp_path.replace(target_path)
+    except Exception:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
