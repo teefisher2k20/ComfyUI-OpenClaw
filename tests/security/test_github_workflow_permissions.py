@@ -3,17 +3,23 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_ROOT = REPO_ROOT / ".github" / "workflows"
-AFFECTED_WORKFLOWS = (
-    "ci.yml",
-    "pre-commit.yml",
-    "secret-scan.yml",
-)
+EXPECTED_PERMISSION_BLOCKS = {
+    "ci.yml": "permissions:\n  contents: read\n",
+    "codeql.yml": (
+        "permissions:\n"
+        "  actions: read\n"
+        "  contents: read\n"
+        "  security-events: write\n"
+    ),
+    "pre-commit.yml": "permissions:\n  contents: read\n",
+    "secret-scan.yml": "permissions:\n  contents: read\n",
+}
 
 
 class TestGitHubWorkflowPermissions(unittest.TestCase):
 
     def test_affected_workflows_declare_top_level_permissions(self):
-        for workflow_name in AFFECTED_WORKFLOWS:
+        for workflow_name, permissions_block in EXPECTED_PERMISSION_BLOCKS.items():
             with self.subTest(workflow=workflow_name):
                 workflow_text = (WORKFLOW_ROOT / workflow_name).read_text(
                     encoding="utf-8"
@@ -25,7 +31,6 @@ class TestGitHubWorkflowPermissions(unittest.TestCase):
                     f"{workflow_name} must contain a jobs section",
                 )
 
-                permissions_block = "permissions:\n  contents: read\n"
                 permissions_index = workflow_text.find(permissions_block)
                 self.assertGreaterEqual(
                     permissions_index,

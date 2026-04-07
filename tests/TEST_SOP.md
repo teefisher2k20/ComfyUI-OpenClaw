@@ -92,10 +92,18 @@ Before running tests or deploying, validation of the build environment is requir
 - **Checks performed**:
   - Python version (>=3.10)
   - Node.js version (>=18.0.0)
-  - Essential Python dependencies (cryptography)
+  - Essential Python dependencies (cryptography, defusedxml)
   - Optional: Use `--strict` to fail on warnings.
 
 Failed preflight checks must be resolved before proceeding with full test suites.
+
+## CodeQL Policy
+
+- Repository-native CodeQL configuration lives in `.github/workflows/codeql.yml`.
+- CodeQL is a GitHub Actions security-validation lane, not a mandatory local pre-push command.
+- When changing CodeQL workflow policy, permissions, or language coverage:
+  - add or update a repo-local regression seam over the workflow contract
+  - verify the workflow after push from GitHub Actions / Security results instead of trying to run full CodeQL locally by default
 
 ## Verification Governance Additions (R110 / R112)
 

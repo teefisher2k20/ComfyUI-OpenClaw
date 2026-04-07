@@ -77,6 +77,17 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Repo-native CodeQL baseline and residual GitHub Security verification chain completed</strong></summary>
+
+- Added a versioned GitHub Actions `CodeQL` workflow that scans Python, JavaScript/TypeScript, and GitHub Actions on push, pull request, manual dispatch, and a weekly schedule, so static security analysis now has an explicit in-repo baseline instead of depending only on opaque UI configuration.
+- Kept the rollout visibility-first: CodeQL is now a GitHub Actions security lane and documented CI boundary, but it is not treated as a new local mandatory full-SOP command while the repository continues burning down security backlog through targeted fixes.
+- Closed the acceptance-gap that surfaced during the residual verification push by propagating `defusedxml` through `requirements.txt`, preflight checks, local acceptance bootstraps, and CI preflight installation, with a repo-local dependency-parity regression seam to prevent future drift.
+- Re-ran the full existing pre-push acceptance gate successfully after the parity fix: detect-secrets, pre-commit, governance verification, backend full suites, real-backend lanes, adaptive adversarial gate, and Playwright E2E.
+
+</details>
+
+<details>
+
 <summary><strong>Security hardening wave completed across CI permissions, path boundaries, redaction, connector ingress, and notification rendering</strong></summary>
 
 - Verified the minimal Vite development-tooling hotfix path already merged cleanly, so the repo now resolves the patched `vite` version without broadening the frontend toolchain scope.
