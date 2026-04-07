@@ -2,7 +2,6 @@ import ast
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = ROOT / "requirements.txt"
 PRE_PUSH = ROOT / "scripts" / "pre_push_checks.sh"
@@ -21,7 +20,9 @@ def _parse_required_python_packages():
         for target in node.targets:
             if isinstance(target, ast.Name) and target.id == "REQUIRED_PYTHON_PACKAGES":
                 return ast.literal_eval(node.value)
-    raise AssertionError("REQUIRED_PYTHON_PACKAGES missing from scripts/preflight_check.py")
+    raise AssertionError(
+        "REQUIRED_PYTHON_PACKAGES missing from scripts/preflight_check.py"
+    )
 
 
 class DependencyParityContractTests(unittest.TestCase):
@@ -31,7 +32,9 @@ class DependencyParityContractTests(unittest.TestCase):
 
         self.assertIn("cryptography>=41.0", requirements)
         self.assertIn("defusedxml>=0.7.1", requirements)
-        self.assertIn('dependencies = ["cryptography>=41.0", "defusedxml>=0.7.1"]', pyproject)
+        self.assertIn(
+            'dependencies = ["cryptography>=41.0", "defusedxml>=0.7.1"]', pyproject
+        )
 
     def test_preflight_declares_all_essential_runtime_packages(self):
         required = _parse_required_python_packages()
@@ -40,7 +43,9 @@ class DependencyParityContractTests(unittest.TestCase):
 
     def test_local_acceptance_bootstraps_install_defusedxml(self):
         self.assertIn("import defusedxml", PRE_PUSH.read_text(encoding="utf-8"))
-        self.assertIn("pip install defusedxml", FULL_TESTS_WINDOWS.read_text(encoding="utf-8"))
+        self.assertIn(
+            "pip install defusedxml", FULL_TESTS_WINDOWS.read_text(encoding="utf-8")
+        )
         self.assertIn("import defusedxml", FULL_TESTS_LINUX.read_text(encoding="utf-8"))
 
     def test_frontend_e2e_preflight_uses_requirements_contract(self):
