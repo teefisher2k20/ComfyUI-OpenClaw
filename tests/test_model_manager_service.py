@@ -6,7 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
 from services.model_manager import (
@@ -14,6 +14,10 @@ from services.model_manager import (
     DownloadTask,
     ModelManager,
     ModelManagerError,
+)
+from services.model_manager_transfer import (
+    _absolute_bounded_install_path,
+    _resolve_bounded_relative_install_path,
 )
 from services.safe_io import PathTraversalError
 
@@ -234,6 +238,22 @@ class TestModelManagerService(unittest.TestCase):
             self.manager._resolve_install_target(
                 str(self.install_root), "../escape.bin"
             )
+
+    def test_bounded_relative_install_path_rebuilds_safe_absolute_target(self):
+        safe_rel = _resolve_bounded_relative_install_path(
+            install_root=self.install_root,
+            relative_target=PurePosixPath("checkpoints/nested/model.safetensors"),
+        )
+
+        self.assertEqual(safe_rel.as_posix(), "checkpoints/nested/model.safetensors")
+        rebuilt = _absolute_bounded_install_path(
+            install_root=self.install_root,
+            safe_relative_target=safe_rel,
+        )
+        self.assertEqual(
+            rebuilt,
+            (self.install_root / "checkpoints" / "nested" / "model.safetensors").resolve(),
+        )
 
     def test_import_records_resolved_relative_installation_path(self):
         payload = b"model-bytes"

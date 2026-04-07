@@ -17,7 +17,7 @@ from .request_contracts import (
     MODEL_MANAGER_IMPORT_CONTRACT,
     MODEL_MANAGER_PROVENANCE_CONTRACT,
 )
-from .safe_io import resolve_under_root
+from .safe_io import PathTraversalError, resolve_under_root
 
 
 def validate_url_policy(*, manager: Any, url: str) -> None:
@@ -439,21 +439,21 @@ def import_downloaded_model(
     subdir = manager._sanitize_subdir(destination_subdir or task.destination_subdir)
     fname = manager._sanitize_filename(filename or task.filename)
     rel_target = PurePosixPath(subdir) / fname
-    # IMPORTANT: keep root-bounded resolution; plain joins re-enable traversal risks.
-    abs_target = _resolve_bounded_install_path(
-        install_root=install_root,
-        relative_target=rel_target,
-    )
     try:
-        safe_rel_target = abs_target.relative_to(install_root).as_posix()
-    except ValueError as exc:
-        raise manager._error(
-            "invalid_destination", "resolved import target escapes install root"
-        ) from exc
+        safe_rel_target = _resolve_bounded_relative_install_path(
+            install_root=install_root,
+            relative_target=rel_target,
+        )
+        abs_target = _absolute_bounded_install_path(
+            install_root=install_root,
+            safe_relative_target=safe_rel_target,
+        )
+    except PathTraversalError as exc:
+        raise manager._error("invalid_destination", str(exc)) from exc
     _install_staged_file_bounded(
         staged_path=staged_path,
         install_root=install_root,
-        target_path=abs_target,
+        safe_relative_target=safe_rel_target,
     )
     safe_tags: List[str] = []
     max_tags = int(MODEL_MANAGER_IMPORT_CONTRACT["tags"]["max_items"])
@@ -478,7 +478,7 @@ def import_downloaded_model(
         "sha256": expected,
         "size_bytes": abs_target.stat().st_size if abs_target.exists() else None,
         "provenance": dict(task.provenance),
-        "installation_path": safe_rel_target,
+        "installation_path": safe_rel_target.as_posix(),
         "tenant_id": task.tenant_id,
         "installed_at": time.time(),
         "tags": safe_tags,
@@ -499,38 +499,60 @@ def import_downloaded_model(
             manager._persist_tasks_locked(force=True)
     return rec
 
-
-def _resolve_bounded_install_path(
+def _resolve_bounded_relative_install_path(
     *, install_root: Path, relative_target: PurePosixPath
-) -> Path:
-    return Path(
+) -> PurePosixPath:
+    # IMPORTANT: keep the scanner-visible contract as "validate relative path first,
+    # then rebuild all filesystem sink paths from that safe relative path".
+    abs_target = Path(
         resolve_under_root(str(install_root), relative_target.as_posix())
     ).resolve()
+    try:
+        return PurePosixPath(abs_target.relative_to(install_root).as_posix())
+    except ValueError as exc:
+        raise PathTraversalError("resolved import target escapes install root") from exc
 
 
-def _bounded_temp_sibling(*, install_root: Path, target_path: Path) -> Path:
-    relative_parent = target_path.parent.relative_to(install_root).as_posix()
-    temp_name = f".{target_path.name}.tmp.{uuid.uuid4().hex}"
+def _absolute_bounded_install_path(
+    *, install_root: Path, safe_relative_target: PurePosixPath
+) -> Path:
+    candidate = (install_root / Path(safe_relative_target.as_posix())).resolve()
+    try:
+        candidate.relative_to(install_root)
+    except ValueError as exc:
+        raise PathTraversalError("bounded install path escapes install root") from exc
+    return candidate
+
+
+def _bounded_temp_sibling(
+    *, install_root: Path, safe_relative_target: PurePosixPath
+) -> Path:
+    relative_parent = safe_relative_target.parent.as_posix()
+    temp_name = f".{safe_relative_target.name}.tmp.{uuid.uuid4().hex}"
     relative_temp = (
-        PurePosixPath(relative_parent) / temp_name
+        safe_relative_target.parent / temp_name
         if relative_parent
         else PurePosixPath(temp_name)
     )
-    return _resolve_bounded_install_path(
+    return _absolute_bounded_install_path(
         install_root=install_root,
-        relative_target=relative_temp,
+        safe_relative_target=relative_temp,
     )
 
 
 def _install_staged_file_bounded(
-    *, staged_path: Path, install_root: Path, target_path: Path
+    *, staged_path: Path, install_root: Path, safe_relative_target: PurePosixPath
 ) -> None:
     # IMPORTANT: keep the entire temp-file lifecycle root-bounded here. Reverting
     # to raw path-string replace/remove calls reopens the residual CodeQL finding.
+    target_path = _absolute_bounded_install_path(
+        install_root=install_root,
+        safe_relative_target=safe_relative_target,
+    )
     target_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = _bounded_temp_sibling(
         install_root=install_root,
-        target_path=target_path,
+        safe_relative_target=safe_relative_target,
     )
     try:
         shutil.copy2(staged_path, temp_path)
