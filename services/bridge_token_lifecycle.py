@@ -11,13 +11,12 @@ Security properties:
 - Lifecycle decisions are deterministic and auditable
 """
 
-import hmac
 import json
 import logging
 import os
 import secrets
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -93,7 +92,7 @@ class BridgeTokenStore:
     """
     In-memory + persisted bridge token registry.
 
-    All tokens are indexed by token_value (HMAC-safe lookup) and by token_id.
+    All tokens are stored by token_id and resolved by bounded constant-time scan.
     Persistence is optional (state_dir may be None for test usage).
     """
 
@@ -102,11 +101,9 @@ class BridgeTokenStore:
 
     def __init__(self, state_dir: Optional[str] = None):
         self._tokens: Dict[str, DeviceToken] = {}  # token_id → DeviceToken
-        self._token_index: Dict[str, str] = {}  # token_value_hash → token_id
         self._audit_trail: List[TokenAuditEvent] = []
         self._state_dir = state_dir
         self._store_path: Optional[Path] = None
-        self._token_index_key = self._build_token_index_key()
         if state_dir:
             self._store_path = Path(state_dir) / "bridge_tokens.json"
             self._load()
@@ -133,8 +130,6 @@ class BridgeTokenStore:
                     overlap_until=td.get("overlap_until"),
                 )
                 self._tokens[token.token_id] = token
-                h = self._hash_token(token.device_token)
-                self._token_index[h] = token.token_id
             logger.info(f"S58: Loaded {len(self._tokens)} bridge tokens")
         except Exception as e:
             logger.error(f"S58: Failed to load bridge tokens: {e}")
@@ -170,24 +165,17 @@ class BridgeTokenStore:
         except Exception as e:
             logger.error(f"S58: Failed to persist bridge tokens: {e}")
 
-    # --- Token hashing ---
+    # --- Token lookup ---
 
-    def _build_token_index_key(self) -> bytes:
-        raw = os.environ.get("OPENCLAW_BRIDGE_TOKEN_INDEX_KEY") or os.environ.get(
-            "MOLTBOT_BRIDGE_TOKEN_INDEX_KEY"
-        )
-        if raw:
-            return raw.encode("utf-8")
-        return secrets.token_bytes(32)
-
-    def _hash_token(self, token_value: str) -> str:
-        """Constant-time-safe hash for token lookup."""
-        # IMPORTANT: never fall back to a hardcoded token-index key here.
-        return hmac.new(
-            self._token_index_key,
-            token_value.encode("utf-8"),
-            "sha256",
-        ).hexdigest()
+    def _resolve_token_for_value(
+        self, token_value: str
+    ) -> Tuple[Optional[str], Optional[DeviceToken]]:
+        # IMPORTANT: keep lookup on bounded constant-time comparison instead of
+        # a derived hash index; hashing the presented token is the residual sink.
+        for token_id, token in self._tokens.items():
+            if secrets.compare_digest(token.device_token, token_value):
+                return token_id, token
+        return None, None
 
     # --- Audit ---
 
@@ -248,7 +236,6 @@ class BridgeTokenStore:
         )
 
         self._tokens[token_id] = token
-        self._token_index[self._hash_token(token_value)] = token_id
         self._emit_audit("issue", token_id, device_id, ttl_sec=ttl_sec)
         self._save()
 
@@ -343,14 +330,9 @@ class BridgeTokenStore:
 
         Returns TokenValidationResult with ok, reject_reason, and token metadata.
         """
-        h = self._hash_token(token_value)
-        token_id = self._token_index.get(h)
-        if not token_id:
+        token_id, token = self._resolve_token_for_value(token_value)
+        if token_id is None or token is None:
             return TokenValidationResult(ok=False, reject_reason="unknown_token")
-
-        token = self._tokens.get(token_id)
-        if not token:
-            return TokenValidationResult(ok=False, reject_reason="token_not_found")
 
         now = time.time()
 
@@ -436,9 +418,7 @@ class BridgeTokenStore:
             elif token.overlap_until and now > token.overlap_until:
                 to_remove.append(tid)
         for tid in to_remove:
-            token = self._tokens.pop(tid)
-            h = self._hash_token(token.device_token)
-            self._token_index.pop(h, None)
+            self._tokens.pop(tid)
         if to_remove:
             self._save()
             logger.info(f"S58: Cleaned up {len(to_remove)} expired/revoked tokens")

@@ -74,9 +74,10 @@ class TestR108SecurityMatrix(unittest.TestCase):
 
         # Helper to inject token state
         def inject_token(tid, status, expires, overlap=None, scopes=None):
+            token_value = f"secret-{tid}"
             t = DeviceToken(
                 device_id="dev-1",
-                device_token="secret",
+                device_token=token_value,
                 scopes=scopes or [BridgeScope.JOB_STATUS],
                 expires_at=expires,
                 token_id=tid,
@@ -84,15 +85,8 @@ class TestR108SecurityMatrix(unittest.TestCase):
                 status=status,
                 overlap_until=overlap,
             )
-            store._active_tokens_mock = {
-                tid: t
-            }  # Bypass hashing for direct injection if possible?
-            # Store uses _tokens by ID and _token_index by hash.
-            # We must use proper injection.
             store._tokens[tid] = t
-            h = store._hash_token("secret")
-            store._token_index[h] = tid
-            return t
+            return t, token_value
 
         cases = [
             # Case Name | Status | Expires Relative | Overlap Relative | Req Scope | Expect OK | Expect Reason
@@ -168,10 +162,12 @@ class TestR108SecurityMatrix(unittest.TestCase):
                 overlap = (now + overlap_rel) if overlap_rel else None
                 scopes = [BridgeScope.JOB_STATUS]
 
-                inject_token(f"t_{case_name}", status, expires, overlap, scopes)
+                _token, token_value = inject_token(
+                    f"t_{case_name}", status, expires, overlap, scopes
+                )
 
                 # Act
-                res = store.validate_token("secret", required_scope=scope)
+                res = store.validate_token(token_value, required_scope=scope)
 
                 # Assert
                 self.assertEqual(res.ok, expect_ok, f"Case {case_name}: OK mismatch")

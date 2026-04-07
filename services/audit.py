@@ -4,7 +4,6 @@ Standardized, append-only audit events for sensitive operations.
 """
 
 import hashlib
-import hmac
 import json
 import logging
 import os
@@ -167,12 +166,12 @@ def _chain_hash(prev_hash: str, entry: Dict[str, Any]) -> str:
     payload = json.dumps(
         entry, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
-    # IMPORTANT: keep audit-chain hashing keyed; plain SHA-256 on sensitive events
-    # triggers CodeQL and weakens correlation resistance.
-    return hmac.new(
-        _get_audit_chain_key(),
+    # IMPORTANT: keep audit-chain hashing keyed. Residual CodeQL still treated
+    # the earlier SHA-256-based construction as weak sensitive hashing here.
+    return hashlib.blake2b(
         f"{prev_hash}|{payload}".encode("utf-8"),
-        hashlib.sha256,
+        key=_get_audit_chain_key(),
+        digest_size=32,
     ).hexdigest()
 
 

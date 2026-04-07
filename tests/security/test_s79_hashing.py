@@ -1,4 +1,3 @@
-import os
 import unittest
 from unittest.mock import patch
 
@@ -29,27 +28,22 @@ class TestS79AuditHashing(unittest.TestCase):
 
 
 class TestS79BridgeTokenHashing(unittest.TestCase):
-    def tearDown(self):
-        os.environ.pop("OPENCLAW_BRIDGE_TOKEN_INDEX_KEY", None)
-        os.environ.pop("MOLTBOT_BRIDGE_TOKEN_INDEX_KEY", None)
+    def test_constant_time_lookup_accepts_issued_token(self):
+        store = BridgeTokenStore()
+        token = store.issue_token("device-1")
 
-    def test_token_hash_differs_across_store_instances_without_override(self):
-        store_a = BridgeTokenStore()
-        store_b = BridgeTokenStore()
+        result = store.validate_token(token.device_token)
 
-        self.assertNotEqual(
-            store_a._hash_token("secret-token"), store_b._hash_token("secret-token")
-        )
+        self.assertTrue(result.ok)
+        self.assertEqual(result.token.token_id, token.token_id)
 
-    def test_token_hash_can_be_pinned_via_env_override(self):
-        with patch.dict(
-            os.environ,
-            {"OPENCLAW_BRIDGE_TOKEN_INDEX_KEY": "fixed-token-index-key"},
-            clear=False,
-        ):
-            store_a = BridgeTokenStore()
-            store_b = BridgeTokenStore()
+    def test_lookup_does_not_rely_on_hash_index_internals(self):
+        store = BridgeTokenStore()
+        token = store.issue_token("device-1")
+        token.status = "active"
+        store._tokens[token.token_id] = token
 
-        self.assertEqual(
-            store_a._hash_token("secret-token"), store_b._hash_token("secret-token")
-        )
+        token_id, resolved = store._resolve_token_for_value(token.device_token)
+
+        self.assertEqual(token_id, token.token_id)
+        self.assertIs(resolved, token)
