@@ -12,6 +12,8 @@ import time
 import uuid
 from typing import Any, Dict, Iterable, Optional, Tuple
 
+from .redaction import redact_json, stable_redaction_tag
+
 logger = logging.getLogger("ComfyUI-OpenClaw.services.audit")
 
 _TRUTHY = {"1", "true", "yes", "on"}
@@ -136,6 +138,18 @@ def _resolve_trace_id(request: Any, details: Dict[str, Any]) -> str:
     return uuid.uuid4().hex
 
 
+def _sanitize_audit_details(details: Optional[Dict[str, Any]]) -> Any:
+    safe_details = _json_safe(details or {})
+    if isinstance(safe_details, dict):
+        sanitized = dict(safe_details)
+        actor_ip = sanitized.pop("actor_ip", None)
+        if actor_ip is not None:
+            # IMPORTANT: keep network provenance correlatable without storing raw client IPs.
+            sanitized["actor_ip_tag"] = stable_redaction_tag(actor_ip, label="ip")
+        return redact_json(sanitized)
+    return redact_json(safe_details)
+
+
 def _chain_hash(prev_hash: str, entry: Dict[str, Any]) -> str:
     payload = json.dumps(
         entry, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -237,7 +251,7 @@ def _emit_modern(
     request: Optional[Any] = None,
     source: str = "openclaw",
 ) -> Dict[str, Any]:
-    details_dict = _json_safe(details or {})
+    details_dict = _sanitize_audit_details(details or {})
     token = token_info or _resolve_request_token_info(request)
     token_id = "anonymous"
     role = "unknown"
@@ -283,7 +297,7 @@ def _emit_legacy(
     error: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    details = {"actor_ip": actor_ip}
+    details = {"actor_ip_tag": stable_redaction_tag(actor_ip, label="ip")}
     if provider:
         details["provider"] = provider
     if error:
@@ -341,7 +355,9 @@ def audit_config_write(actor_ip: str, ok: bool, error: Optional[str] = None) -> 
         outcome="allow" if ok else "error",
         status_code=200 if ok else 400,
         details=(
-            {"actor_ip": actor_ip, "error": error} if error else {"actor_ip": actor_ip}
+            {"actor_ip_tag": stable_redaction_tag(actor_ip, label="ip"), "error": error}
+            if error
+            else {"actor_ip_tag": stable_redaction_tag(actor_ip, label="ip")}
         ),
     )
 
@@ -355,9 +371,16 @@ def audit_secret_write(
         outcome="allow" if ok else "error",
         status_code=200 if ok else 500,
         details=(
-            {"actor_ip": actor_ip, "provider": provider, "error": error}
+            {
+                "actor_ip_tag": stable_redaction_tag(actor_ip, label="ip"),
+                "provider": provider,
+                "error": error,
+            }
             if error
-            else {"actor_ip": actor_ip, "provider": provider}
+            else {
+                "actor_ip_tag": stable_redaction_tag(actor_ip, label="ip"),
+                "provider": provider,
+            }
         ),
     )
 
@@ -371,9 +394,16 @@ def audit_secret_delete(
         outcome="allow" if ok else "error",
         status_code=200 if ok else 404,
         details=(
-            {"actor_ip": actor_ip, "provider": provider, "error": error}
+            {
+                "actor_ip_tag": stable_redaction_tag(actor_ip, label="ip"),
+                "provider": provider,
+                "error": error,
+            }
             if error
-            else {"actor_ip": actor_ip, "provider": provider}
+            else {
+                "actor_ip_tag": stable_redaction_tag(actor_ip, label="ip"),
+                "provider": provider,
+            }
         ),
     )
 
@@ -385,6 +415,8 @@ def audit_llm_test(actor_ip: str, ok: bool, error: Optional[str] = None) -> None
         outcome="allow" if ok else "error",
         status_code=200 if ok else 500,
         details=(
-            {"actor_ip": actor_ip, "error": error} if error else {"actor_ip": actor_ip}
+            {"actor_ip_tag": stable_redaction_tag(actor_ip, label="ip"), "error": error}
+            if error
+            else {"actor_ip_tag": stable_redaction_tag(actor_ip, label="ip")}
         ),
     )

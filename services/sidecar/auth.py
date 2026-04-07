@@ -17,6 +17,11 @@ except ModuleNotFoundError:  # pragma: no cover (optional for unit tests)
 
 from .bridge_contract import BridgeScope
 
+try:
+    from ..redaction import stable_redaction_tag
+except ImportError:  # pragma: no cover
+    from services.redaction import stable_redaction_tag  # type: ignore
+
 logger = logging.getLogger("ComfyUI-OpenClaw.sidecar.auth")
 
 # Environment configuration
@@ -41,6 +46,14 @@ HEADER_SCOPES = "X-OpenClaw-Scopes"
 LEGACY_HEADER_SCOPES = "X-Moltbot-Scopes"
 # R104: mTLS Headers
 HEADER_CLIENT_CERT_HASH = "X-Client-Cert-Hash"  # SHA256 fingerprint from proxy
+
+
+def _device_tag(device_id: Optional[str]) -> str:
+    return stable_redaction_tag(device_id, label="device")
+
+
+def _cert_tag(cert_hash: Optional[str]) -> str:
+    return stable_redaction_tag(cert_hash, label="cert")
 
 
 def _env_get(primary: str, legacy: str, default: str = "") -> str:
@@ -123,12 +136,16 @@ def validate_mtls_binding(request: web.Request, device_id: str) -> Tuple[bool, s
 
     if not expected_hash:
         # Strict mode: mTLS enabled implies explicit device binding
-        return False, f"Device not bound to a certificate (Device ID: {device_id})"
+        return False, "Device not bound to a certificate"
 
     # Constant-time comparison not strictly required for public fingerprints but good practice
     if not hmac.compare_digest(cert_hash, expected_hash):
+        # IMPORTANT: keep bound-device diagnostics redacted; raw fingerprints are sensitive.
         logger.warning(
-            f"mTLS violation: Device {device_id} presented {cert_hash}, expected {expected_hash}"
+            "mTLS violation for %s presented=%s expected=%s",
+            _device_tag(device_id),
+            _cert_tag(cert_hash),
+            _cert_tag(expected_hash),
         )
         return False, "Certificate fingerprint mismatch"
 
@@ -204,8 +221,8 @@ def validate_device_token(
         lifecycle_result = get_token_store().validate_token(
             device_token, required_scope=required_scope_value
         )
-    except Exception as e:
-        logger.warning(f"S58 lifecycle validation unavailable, falling back: {e}")
+    except Exception:
+        logger.warning("S58 lifecycle validation unavailable, falling back.")
         lifecycle_result = None
 
     if lifecycle_result and lifecycle_result.ok and lifecycle_result.token:
@@ -240,7 +257,7 @@ def validate_device_token(
 
         # Constant-time token comparison
         if not hmac.compare_digest(device_token, expected_token):
-            logger.warning(f"Invalid device token from: {device_id[:8]}...")
+            logger.warning("Invalid device token from %s", _device_tag(device_id))
             return False, "Invalid device token", None
 
         # Scope validation (legacy header contract)
@@ -250,7 +267,8 @@ def validate_device_token(
             ) or request.headers.get(LEGACY_HEADER_SCOPES, "")
             if not scopes_header:
                 logger.warning(
-                    f"Device {device_id[:8]} missing required scopes header."
+                    "Bridge device %s missing required scopes header.",
+                    _device_tag(device_id),
                 )
                 return False, "Missing X-OpenClaw-Scopes header", None
 
@@ -259,20 +277,23 @@ def validate_device_token(
             )
             if required_scope not in granted_scopes:
                 logger.warning(
-                    f"Device {device_id[:8]} missing scope {required_scope}. Granted: {granted_scopes}"
+                    "Bridge device %s missing scope %s (granted_count=%d).",
+                    _device_tag(device_id),
+                    required_scope,
+                    len(granted_scopes),
                 )
                 return False, f"Missing required scope: {required_scope}", None
 
     # Check allowlist if configured
     allowed_ids = get_allowed_device_ids()
     if allowed_ids is not None and device_id not in allowed_ids:
-        logger.warning(f"Device ID not in allowlist: {device_id[:8]}...")
+        logger.warning("Device ID not in allowlist: %s", _device_tag(device_id))
         return False, "Device not authorized", None
 
     # R104: mTLS Binding Check
     is_mtls_valid, mtls_error = validate_mtls_binding(request, device_id)
     if not is_mtls_valid:
-        logger.warning(f"mTLS validation failed for {device_id}: {mtls_error}")
+        logger.warning("mTLS validation failed for %s: %s", _device_tag(device_id), mtls_error)
         return False, mtls_error, None
 
     return True, "", device_id

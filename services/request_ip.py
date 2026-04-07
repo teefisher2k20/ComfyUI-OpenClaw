@@ -41,7 +41,8 @@ def get_trusted_proxies() -> List[ipaddress.IPv4Network]:
                 # Try as network CIDR
                 networks.append(ipaddress.ip_network(part, strict=False))
         except ValueError:
-            logger.warning(f"Invalid trusted proxy entry: {part}")
+            # IMPORTANT: never echo malformed proxy config verbatim into logs.
+            logger.warning("Invalid trusted proxy entry ignored.")
 
     return networks
 

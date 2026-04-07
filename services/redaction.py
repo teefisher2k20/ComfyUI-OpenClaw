@@ -7,6 +7,7 @@ Prevents sensitive data leakage in observability outputs.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -92,6 +93,22 @@ SENSITIVE_KEYS: Set[str] = {
     "cookie",
     "cookies",
 }
+
+
+def stable_redaction_tag(value: Any, *, label: str = "value") -> str:
+    """
+    Build a deterministic, non-cleartext correlation tag for sensitive identifiers.
+
+    The output is intentionally one-way and short so operators can correlate repeated
+    values across logs without exposing the original identifier.
+    """
+    if value is None:
+        return f"{label}:none"
+    text = str(value).strip()
+    if not text:
+        return f"{label}:empty"
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return f"{label}:{digest}"
 
 
 def redact_text(

@@ -26,6 +26,7 @@ try:
     from ..services.execution_budgets import BudgetExceededError
     from ..services.idempotency_store import IdempotencyStore
     from ..services.rate_limit import build_rate_limit_response, check_rate_limit
+    from ..services.redaction import stable_redaction_tag
     from ..services.sidecar.auth import is_bridge_enabled, require_bridge_auth
     from ..services.sidecar.bridge_contract import (
         BRIDGE_ENDPOINTS,
@@ -44,6 +45,7 @@ except ImportError:
     from services.execution_budgets import BudgetExceededError
     from services.idempotency_store import IdempotencyStore
     from services.rate_limit import build_rate_limit_response, check_rate_limit
+    from services.redaction import stable_redaction_tag
     from services.sidecar.auth import is_bridge_enabled, require_bridge_auth
     from services.sidecar.bridge_contract import (
         BRIDGE_ENDPOINTS,
@@ -82,6 +84,10 @@ MAX_FILES_COUNT = 10
 _startup_time = time.time()
 
 
+def _bridge_sensitive_tag(value: Optional[str], *, label: str) -> str:
+    return stable_redaction_tag(value, label=label)
+
+
 class BridgeHandlers:
     """Handlers for bridge API endpoints."""
 
@@ -107,7 +113,7 @@ class BridgeHandlers:
     def _bridge_token(self, device_id: Optional[str], scope: Optional[str] = None):
         scopes = {scope} if scope else set()
         return SimpleNamespace(
-            token_id=f"bridge:{device_id or 'unknown'}",
+            token_id=f"bridge:{_bridge_sensitive_tag(device_id, label='device')}",
             role="bridge",
             scopes=scopes,
         )
@@ -716,7 +722,10 @@ class BridgeHandlers:
             store_key = f"wr:{idempotency_key}"
             is_dup, _ = self._idempotency_store.check_and_record(store_key, ttl=86400)
             if is_dup:
-                logger.info(f"Duplicate worker result suppressed: {idempotency_key}")
+                logger.info(
+                    "Duplicate worker result suppressed for %s",
+                    _bridge_sensitive_tag(idempotency_key, label="idem"),
+                )
                 return web.json_response(
                     {
                         "ok": True,
@@ -745,7 +754,8 @@ class BridgeHandlers:
         self._worker_results[job_id] = {
             "status": data.get("status", "completed"),
             "outputs": data.get("outputs", {}),
-            "worker_id": device_id,
+            # IMPORTANT: keep worker identity redacted in cached bridge state.
+            "worker_id": _bridge_sensitive_tag(device_id, label="device"),
             "timestamp": time.time(),
         }
 
@@ -761,7 +771,11 @@ class BridgeHandlers:
             scope=BridgeScope.JOB_SUBMIT.value,
             details={"status": data.get("status", "completed")},
         )
-        logger.info(f"F46: Worker result accepted for job={job_id} from={device_id}")
+        logger.info(
+            "F46: Worker result accepted for job=%s from=%s",
+            job_id,
+            _bridge_sensitive_tag(device_id, label="device"),
+        )
         return web.json_response(response_data, status=201)
 
     @endpoint_metadata(

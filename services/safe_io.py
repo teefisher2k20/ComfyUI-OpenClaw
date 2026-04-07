@@ -679,7 +679,8 @@ def safe_request_json(
                 ):
                     request.add_header(key, value)
                 else:
-                    logger.debug(f"Skipping disallowed header: {key}")
+                    # IMPORTANT: do not log caller-supplied header names verbatim here.
+                    logger.debug("Skipping disallowed outbound header.")
 
         # Build Pinned Opener
         opener = _build_pinned_opener(pinned_ips)
@@ -790,7 +791,7 @@ def safe_request_text_stream(
                 ):
                     request.add_header(key, value)
                 else:
-                    logger.debug(f"Skipping disallowed header: {key}")
+                    logger.debug("Skipping disallowed outbound header.")
 
         opener = _build_pinned_opener(pinned_ips)
 
