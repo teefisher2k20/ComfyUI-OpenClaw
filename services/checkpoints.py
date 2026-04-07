@@ -19,6 +19,7 @@ except ImportError:
     DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
 from .integrity import IntegrityError, load_verified, save_verified
+from .safe_io import PathTraversalError, resolve_under_root
 
 logger = logging.getLogger("ComfyUI-OpenClaw.services.checkpoints")
 
@@ -31,10 +32,21 @@ def _ensure_dir():
     os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
 
 
+def _normalize_checkpoint_id(checkpoint_id: str) -> str:
+    text = str(checkpoint_id or "").strip()
+    try:
+        return str(uuid.UUID(text))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise ValueError("invalid checkpoint id") from exc
+
+
 def _get_paths(checkpoint_id: str) -> Tuple[str, str]:
     """Return (meta_path, payload_path) for a given ID."""
-    base = os.path.join(CHECKPOINTS_DIR, checkpoint_id)
-    return f"{base}.meta.json", f"{base}.workflow.json"
+    cid = _normalize_checkpoint_id(checkpoint_id)
+    return (
+        resolve_under_root(CHECKPOINTS_DIR, f"{cid}.meta.json"),
+        resolve_under_root(CHECKPOINTS_DIR, f"{cid}.workflow.json"),
+    )
 
 
 def list_checkpoints() -> List[Dict[str, Any]]:
@@ -67,7 +79,10 @@ def list_checkpoints() -> List[Dict[str, Any]]:
 
 def get_checkpoint(checkpoint_id: str) -> Optional[Dict[str, Any]]:
     """Get full checkpoint data (meta + workflow)."""
-    meta_path, payload_path = _get_paths(checkpoint_id)
+    try:
+        meta_path, payload_path = _get_paths(checkpoint_id)
+    except (ValueError, PathTraversalError):
+        return None
 
     if not os.path.exists(meta_path) or not os.path.exists(payload_path):
         return None
@@ -172,7 +187,10 @@ def create_checkpoint(
 
 def delete_checkpoint(checkpoint_id: str) -> bool:
     """Delete a checkpoint."""
-    meta_path, payload_path = _get_paths(checkpoint_id)
+    try:
+        meta_path, payload_path = _get_paths(checkpoint_id)
+    except (ValueError, PathTraversalError):
+        return False
 
     deleted = False
     if os.path.exists(meta_path):

@@ -15,6 +15,7 @@ from services.model_manager import (
     ModelManager,
     ModelManagerError,
 )
+from services.safe_io import PathTraversalError
 
 
 class _FakeResponse:
@@ -227,6 +228,45 @@ class TestModelManagerService(unittest.TestCase):
         with self.assertRaises(ModelManagerError) as ctx:
             self.manager.import_downloaded_model(task_id=task.task_id)
         self.assertEqual(ctx.exception.code, "sha256_mismatch")
+
+    def test_resolve_install_target_rejects_escape(self):
+        with self.assertRaises(PathTraversalError):
+            self.manager._resolve_install_target(str(self.install_root), "../escape.bin")
+
+    def test_import_records_resolved_relative_installation_path(self):
+        payload = b"model-bytes"
+        digest = hashlib.sha256(payload).hexdigest()
+        staged_dir = self.manager.staging_dir / "task-safe-path"
+        staged_dir.mkdir(parents=True, exist_ok=True)
+        staged_file = staged_dir / "model.safetensors"
+        staged_file.write_bytes(payload)
+        task = DownloadTask(
+            task_id="task-safe-path",
+            model_id="model-safe-path",
+            name="Model Safe Path",
+            model_type="checkpoint",
+            source="catalog",
+            source_label="Catalog",
+            download_url="https://example.com/model.safetensors",
+            destination_subdir="checkpoints//nested",
+            filename="model.safetensors",
+            expected_sha256=digest,
+            provenance={
+                "publisher": "OpenClaw",
+                "license": "OpenRAIL",
+                "source_url": "https://example.com/model",
+            },
+            tenant_id="default",
+            state="completed",
+            staged_path=str(staged_file),
+            computed_sha256=digest,
+        )
+        self.manager._tasks[task.task_id] = task
+        rec = self.manager.import_downloaded_model(task_id=task.task_id)
+        self.assertEqual(
+            rec["installation_path"], "checkpoints/nested/model.safetensors"
+        )
+        self.assertTrue((self.install_root / rec["installation_path"]).exists())
 
     def test_list_download_tasks_delta_cursor_contract(self):
         first = DownloadTask(

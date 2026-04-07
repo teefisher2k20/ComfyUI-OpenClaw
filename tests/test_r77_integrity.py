@@ -102,6 +102,10 @@ class TestR77Integrity(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             load_verified(path, migrate=False)
 
+    def test_save_verified_rejects_invalid_leaf_target(self):
+        with self.assertRaises(IntegrityError):
+            save_verified("", {"k": "v"})
+
 
 if __name__ == "__main__":
     unittest.main()

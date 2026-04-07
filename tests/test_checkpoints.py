@@ -95,6 +95,12 @@ class TestCheckpointsService(unittest.TestCase):
         with self.assertRaises(ValueError):
             create_checkpoint("Valid Name", {}, long_desc)
 
+    def test_invalid_checkpoint_ids_fail_closed(self):
+        self.assertIsNone(get_checkpoint("../escape"))
+        self.assertIsNone(get_checkpoint("not-a-uuid"))
+        self.assertFalse(delete_checkpoint("../escape"))
+        self.assertFalse(delete_checkpoint("not-a-uuid"))
+
 
 if __name__ == "__main__":
     unittest.main()

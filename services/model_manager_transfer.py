@@ -11,7 +11,7 @@ import tempfile
 import time
 import urllib.request
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
 from .request_contracts import (
@@ -435,13 +435,20 @@ def import_downloaded_model(
     if actual != expected or computed != expected:
         raise manager._error("sha256_mismatch", f"expected {expected}, got {actual}")
     manager._validate_provenance(task.provenance)
+    install_root = Path(manager.install_root).resolve()
     subdir = manager._sanitize_subdir(destination_subdir or task.destination_subdir)
     fname = manager._sanitize_filename(filename or task.filename)
-    rel_target = f"{subdir}/{fname}"
+    rel_target = PurePosixPath(subdir) / fname
     # IMPORTANT: keep root-bounded resolution; plain joins re-enable traversal risks.
     abs_target = Path(
-        manager._resolve_install_target(str(manager.install_root), rel_target)
+        manager._resolve_install_target(str(install_root), rel_target.as_posix())
     )
+    try:
+        safe_rel_target = abs_target.relative_to(install_root).as_posix()
+    except ValueError as exc:
+        raise manager._error(
+            "invalid_destination", "resolved import target escapes install root"
+        ) from exc
     abs_target.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(
         prefix=f".{abs_target.name}.tmp.", dir=str(abs_target.parent), text=False
@@ -479,7 +486,7 @@ def import_downloaded_model(
         "sha256": expected,
         "size_bytes": abs_target.stat().st_size if abs_target.exists() else None,
         "provenance": dict(task.provenance),
-        "installation_path": rel_target.replace("\\", "/"),
+        "installation_path": safe_rel_target,
         "tenant_id": task.tenant_id,
         "installed_at": time.time(),
         "tags": safe_tags,
