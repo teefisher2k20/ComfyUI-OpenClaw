@@ -47,19 +47,26 @@ async function getMatchingNotification(page, options = {}) {
   }) || null;
 }
 
+async function installNotificationStorageSeed(page, entries = null) {
+  await page.addInitScript(([storageKey, seedEntries]) => {
+    try {
+      if (!window.name.includes("__openclaw_notifications_storage_reset__")) {
+        window.localStorage.clear();
+        window.sessionStorage.clear();
+        window.name = `${window.name}__openclaw_notifications_storage_reset__`;
+      }
+      if (Array.isArray(seedEntries)) {
+        window.localStorage.setItem(storageKey, JSON.stringify(seedEntries));
+      }
+    } catch {
+      // ignore storage reset failures in restrictive browser contexts
+    }
+  }, [NOTIFICATION_STORAGE_KEY, entries]);
+}
+
 test.describe("Notification Center", () => {
   test("persists model-manager failures across reload until dismissed", async ({ page }) => {
-    await page.addInitScript(() => {
-      try {
-        if (!window.name.includes("__openclaw_notifications_storage_reset__")) {
-          window.localStorage.clear();
-          window.sessionStorage.clear();
-          window.name = `${window.name}__openclaw_notifications_storage_reset__`;
-        }
-      } catch {
-        // ignore storage reset failures in restrictive browser contexts
-      }
-    });
+    await installNotificationStorageSeed(page);
 
     await mockComfyUiCore(page);
 
@@ -213,5 +220,33 @@ test.describe("Notification Center", () => {
       .toBe("dismissed");
 
     expect(unexpectedSearchResponses).toEqual([]);
+  });
+
+  test("renders notification payloads as escaped text instead of markup", async ({ page }) => {
+    const maliciousMessage = '<img src=x onerror="boom">';
+    await installNotificationStorageSeed(page, [
+      {
+        id: "ntf-escape",
+        source: "<source>",
+        severity: "warning",
+        message: maliciousMessage,
+        updated_at: "2026-03-20T00:00:00Z",
+        count: 1,
+        acknowledged_at: null,
+        dismissed_at: null,
+        action: null,
+      },
+    ]);
+
+    await mockComfyUiCore(page);
+    await page.goto("test-harness.html");
+    await waitForOpenClawReady(page);
+    await page.locator("#openclaw-notification-toggle").click();
+
+    // CRITICAL: assert against the rendered DOM so test-only fixtures do not
+    // regress back into HTML interpolation at the production notification sink.
+    const messageNode = page.locator(".openclaw-notification-message").first();
+    await expect(messageNode).toContainText(maliciousMessage);
+    expect(await messageNode.innerHTML()).not.toContain("<img");
   });
 });
