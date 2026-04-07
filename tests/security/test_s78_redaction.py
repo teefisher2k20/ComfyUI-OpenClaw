@@ -5,6 +5,7 @@ import os
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import services.redaction as redaction_module
 from services.audit import emit_audit_event
 from services.idempotency_store import IdempotencyStore
 from services.redaction import stable_redaction_tag
@@ -153,14 +154,19 @@ class TestS78AuditRedaction(unittest.TestCase):
         self.test_log = "test_s78_audit.log"
         self.path_patcher = patch("services.audit.AUDIT_LOG_PATH", self.test_log)
         self.hash_patcher = patch("services.audit._LAST_HASH", None)
+        self.tag_key_patcher = patch.object(
+            redaction_module, "_REDACTION_TAG_KEY", b"s78-test-redaction-key"
+        )
         self.path_patcher.start()
         self.hash_patcher.start()
+        self.tag_key_patcher.start()
         if os.path.exists(self.test_log):
             os.remove(self.test_log)
 
     def tearDown(self):
         self.path_patcher.stop()
         self.hash_patcher.stop()
+        self.tag_key_patcher.stop()
         if os.path.exists(self.test_log):
             os.remove(self.test_log)
 
@@ -180,9 +186,71 @@ class TestS78AuditRedaction(unittest.TestCase):
         entries = self._read_entries()
         details = entries[0]["details"]
         self.assertNotIn("actor_ip", details)
-        self.assertEqual(details["actor_ip_tag"], "ip:6694f83c9f47")
+        self.assertEqual(
+            details["actor_ip_tag"], stable_redaction_tag("1.2.3.4", label="ip")
+        )
         self.assertIn("***REDACTED***", details["error"])
         self.assertNotIn("1.2.3.4", json.dumps(entries[0]))
+
+    def test_audit_storage_uses_token_tag_not_raw_token_id(self):
+        class _Token:
+            token_id = "adm-1"
+            role = "admin"
+            scopes = {"*"}
+
+        emit_audit_event(
+            action="config.update",
+            target="config.json",
+            outcome="allow",
+            token_info=_Token(),
+            status_code=200,
+            details={"actor_ip": "1.2.3.4"},
+        )
+
+        entries = self._read_entries()
+        entry = entries[0]
+        self.assertNotIn("token_id", entry)
+        self.assertEqual(entry["token_tag"], stable_redaction_tag("adm-1", label="token"))
+        self.assertNotIn("adm-1", json.dumps(entry))
+
+    def test_audit_logger_omits_raw_token_id(self):
+        class _Token:
+            token_id = "adm-2"
+            role = "admin"
+            scopes = {"*"}
+
+        with self.assertLogs("ComfyUI-OpenClaw.services.audit", level="INFO") as logs:
+            emit_audit_event(
+                action="config.update",
+                target="config.json",
+                outcome="allow",
+                token_info=_Token(),
+                status_code=200,
+                details={"actor_ip": "1.2.3.4"},
+            )
+
+        output = "\n".join(logs.output)
+        self.assertNotIn("adm-2", output)
+        self.assertIn("token:", output)
+
+
+class TestS83StableRedactionTag(unittest.TestCase):
+    def test_tag_is_keyed_and_stable_for_same_process_key(self):
+        with patch.object(redaction_module, "_REDACTION_TAG_KEY", b"fixed-redaction-key"):
+            first = stable_redaction_tag("worker-1", label="device")
+            second = stable_redaction_tag("worker-1", label="device")
+
+        self.assertEqual(first, second)
+        self.assertTrue(first.startswith("device:"))
+        self.assertNotIn("worker-1", first)
+
+    def test_tag_changes_when_key_changes(self):
+        with patch.object(redaction_module, "_REDACTION_TAG_KEY", b"key-a"):
+            first = stable_redaction_tag("worker-1", label="device")
+        with patch.object(redaction_module, "_REDACTION_TAG_KEY", b"key-b"):
+            second = stable_redaction_tag("worker-1", label="device")
+
+        self.assertNotEqual(first, second)
 
 
 class TestS78DefensiveLogRedaction(unittest.TestCase):

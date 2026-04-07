@@ -8,11 +8,15 @@ Prevents sensitive data leakage in observability outputs.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
+import os
 import re
+import secrets
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("ComfyUI-OpenClaw.services.redaction")
+_REDACTION_TAG_KEY: Optional[bytes] = None
 
 # Maximum input size for redact_text (prevents DoS)
 MAX_TEXT_SIZE = 500_000  # 500KB
@@ -107,8 +111,24 @@ def stable_redaction_tag(value: Any, *, label: str = "value") -> str:
     text = str(value).strip()
     if not text:
         return f"{label}:empty"
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    # IMPORTANT: keep redaction tags keyed; bare SHA-256 on sensitive identifiers
+    # reintroduces the residual CodeQL finding and weakens cross-instance privacy.
+    digest = hmac.new(
+        _get_redaction_tag_key(),
+        text.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:12]
     return f"{label}:{digest}"
+
+
+def _get_redaction_tag_key() -> bytes:
+    global _REDACTION_TAG_KEY
+    if _REDACTION_TAG_KEY is None:
+        raw = os.environ.get("OPENCLAW_REDACTION_TAG_KEY") or os.environ.get(
+            "MOLTBOT_REDACTION_TAG_KEY"
+        )
+        _REDACTION_TAG_KEY = raw.encode("utf-8") if raw else secrets.token_bytes(32)
+    return _REDACTION_TAG_KEY
 
 
 def redact_text(

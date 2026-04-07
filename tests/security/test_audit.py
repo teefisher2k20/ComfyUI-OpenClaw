@@ -3,6 +3,7 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
+import services.redaction as redaction_module
 from services.access_control import AuthTier, TokenInfo
 from services.audit import (
     audit_config_write,
@@ -20,12 +21,17 @@ class TestAudit(unittest.TestCase):
         self.path_patcher.start()
         self.hash_patcher = patch("services.audit._LAST_HASH", None)
         self.hash_patcher.start()
+        self.tag_key_patcher = patch.object(
+            redaction_module, "_REDACTION_TAG_KEY", b"audit-test-redaction-key"
+        )
+        self.tag_key_patcher.start()
         if os.path.exists(self.test_log):
             os.remove(self.test_log)
 
     def tearDown(self):
         self.path_patcher.stop()
         self.hash_patcher.stop()
+        self.tag_key_patcher.stop()
         if os.path.exists(self.test_log):
             os.remove(self.test_log)
 
@@ -50,7 +56,7 @@ class TestAudit(unittest.TestCase):
         for field in (
             "ts",
             "source",
-            "token_id",
+            "token_tag",
             "scope",
             "scopes",
             "trace_id",
@@ -63,7 +69,8 @@ class TestAudit(unittest.TestCase):
             "entry_hash",
         ):
             self.assertIn(field, entry)
-        self.assertEqual(entry["token_id"], "adm-1")
+        self.assertTrue(entry["token_tag"].startswith("token:"))
+        self.assertNotIn("adm-1", entry["token_tag"])
         self.assertEqual(entry["role"], "admin")
         self.assertEqual(entry["action"], "config.update")
         self.assertEqual(entry["target"], "settings.json")

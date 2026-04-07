@@ -272,11 +272,16 @@ def _emit_modern(
 ) -> Dict[str, Any]:
     details_dict = _sanitize_audit_details(details or {})
     token = token_info or _resolve_request_token_info(request)
-    token_id = "anonymous"
+    token_tag = "token:none"
     role = "unknown"
     scopes: list[str] = []
     if token is not None:
-        token_id = str(getattr(token, "token_id", "anonymous"))
+        # IMPORTANT: audit persistence must store only a deterministic tag here,
+        # never the raw token_id, or the residual CodeQL alert reopens.
+        token_tag = stable_redaction_tag(
+            getattr(token, "token_id", "anonymous"),
+            label="token",
+        )
         role = _normalize_role(getattr(token, "role", "unknown"))
         scopes = _normalize_scopes(getattr(token, "scopes", []))
     scope = scopes[0] if scopes else ""
@@ -286,7 +291,7 @@ def _emit_modern(
     entry = {
         "ts": time.time(),
         "source": source,
-        "token_id": token_id,
+        "token_tag": token_tag,
         "role": role,
         "scope": scope,
         "scopes": scopes,
@@ -299,11 +304,11 @@ def _emit_modern(
     }
     _write_audit_entry(entry)
     logger.info(
-        "AUDIT action=%s target=%s outcome=%s token_id=%s",
+        "AUDIT action=%s target=%s outcome=%s token=%s",
         action,
         target,
         outcome,
-        token_id,
+        token_tag,
     )
     return entry
 
