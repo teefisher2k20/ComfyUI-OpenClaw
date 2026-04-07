@@ -123,6 +123,11 @@ if ! "$VENV_PY" -c "import cryptography" >/dev/null 2>&1; then
   echo "[tests] Installing cryptography into project venv ($VENV_DIR) ..."
   pip_install_or_fail "required for S57 secrets-at-rest encryption tests" cryptography
 fi
+if ! "$VENV_PY" -c "import defusedxml" >/dev/null 2>&1; then
+  # IMPORTANT: keep local full-test bootstrap aligned with requirements.txt.
+  echo "[tests] Installing defusedxml into project venv ($VENV_DIR) ..."
+  pip_install_or_fail "required for S85 fail-closed XML parsing tests" defusedxml
+fi
 
 NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
 if [ "$NODE_MAJOR" -lt 18 ]; then

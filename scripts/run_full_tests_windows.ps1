@@ -169,6 +169,17 @@ if (-not $hasCryptography) {
   Invoke-Checked "pip install cryptography" { & $venvPython -m pip install cryptography }
 }
 
+$hasDefusedXml = $true
+& $venvPython -c "import defusedxml" | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  $hasDefusedXml = $false
+}
+if (-not $hasDefusedXml) {
+  # IMPORTANT: keep Windows full-test bootstrap aligned with requirements.txt.
+  Write-Host "[tests] Installing defusedxml into project venv (S85 fail-closed XML parsing) ..."
+  Invoke-Checked "pip install defusedxml" { & $venvPython -m pip install defusedxml }
+}
+
 # Ensure Node >= 18
 $nodeMajor = [int]((& node -p "process.versions.node.split('.')[0]").Trim())
 if ($nodeMajor -lt 18) {

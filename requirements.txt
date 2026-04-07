@@ -3,3 +3,4 @@
 # Keep this file aligned with `pyproject.toml` project.dependencies.
 #
 cryptography>=41.0
+defusedxml>=0.7.1

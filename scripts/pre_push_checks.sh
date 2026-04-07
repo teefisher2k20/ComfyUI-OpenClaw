@@ -213,6 +213,11 @@ if ! "$VENV_PY" -c "import cryptography" >/dev/null 2>&1; then
   echo "[pre-push] INFO: installing cryptography into project venv ($VENV_DIR) ..." >&2
   pip_install_or_fail "required for S57 secrets-at-rest encryption paths/tests" cryptography
 fi
+if ! "$VENV_PY" -c "import defusedxml" >/dev/null 2>&1; then
+  # IMPORTANT: keep local/CI parity with requirements.txt and WeChat ingress tests.
+  echo "[pre-push] INFO: installing defusedxml into project venv ($VENV_DIR) ..." >&2
+  pip_install_or_fail "required for S85 fail-closed XML parsing paths/tests" defusedxml
+fi
 
 require_cmd npm
 

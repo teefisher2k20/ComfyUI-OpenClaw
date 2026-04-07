@@ -6,7 +6,7 @@ Validates the build environment before deployment or test execution.
 Checks:
 1. Python version (>=3.10)
 2. Node.js version (>=18.0.0, per package.json + TEST_SOP)
-3. Essential Python dependencies (cryptography)
+3. Essential Python dependencies (cryptography, defusedxml)
 
 Usage:
     python scripts/preflight_check.py [--strict]
@@ -23,6 +23,7 @@ MIN_NODE_VERSION = (18, 0, 0)
 
 REQUIRED_PYTHON_PACKAGES = [
     ("cryptography", "41.0"),
+    ("defusedxml", "0.7.1"),
 ]
 
 # Colors for output
