@@ -499,6 +499,7 @@ def import_downloaded_model(
             manager._persist_tasks_locked(force=True)
     return rec
 
+
 def _resolve_bounded_relative_install_path(
     *, install_root: Path, relative_target: PurePosixPath
 ) -> PurePosixPath:

@@ -252,7 +252,9 @@ class TestModelManagerService(unittest.TestCase):
         )
         self.assertEqual(
             rebuilt,
-            (self.install_root / "checkpoints" / "nested" / "model.safetensors").resolve(),
+            (
+                self.install_root / "checkpoints" / "nested" / "model.safetensors"
+            ).resolve(),
         )
 
     def test_import_records_resolved_relative_installation_path(self):
