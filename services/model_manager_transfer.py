@@ -512,7 +512,9 @@ def _bounded_temp_sibling(*, install_root: Path, target_path: Path) -> Path:
     relative_parent = target_path.parent.relative_to(install_root).as_posix()
     temp_name = f".{target_path.name}.tmp.{uuid.uuid4().hex}"
     relative_temp = (
-        PurePosixPath(relative_parent) / temp_name if relative_parent else PurePosixPath(temp_name)
+        PurePosixPath(relative_parent) / temp_name
+        if relative_parent
+        else PurePosixPath(temp_name)
     )
     return _resolve_bounded_install_path(
         install_root=install_root,

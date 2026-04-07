@@ -210,7 +210,9 @@ class TestS78AuditRedaction(unittest.TestCase):
         entries = self._read_entries()
         entry = entries[0]
         self.assertNotIn("token_id", entry)
-        self.assertEqual(entry["token_tag"], stable_redaction_tag("adm-1", label="token"))
+        self.assertEqual(
+            entry["token_tag"], stable_redaction_tag("adm-1", label="token")
+        )
         self.assertNotIn("adm-1", json.dumps(entry))
 
     def test_audit_logger_omits_raw_token_id(self):
@@ -236,7 +238,9 @@ class TestS78AuditRedaction(unittest.TestCase):
 
 class TestS83StableRedactionTag(unittest.TestCase):
     def test_tag_is_keyed_and_stable_for_same_process_key(self):
-        with patch.object(redaction_module, "_REDACTION_TAG_KEY", b"fixed-redaction-key"):
+        with patch.object(
+            redaction_module, "_REDACTION_TAG_KEY", b"fixed-redaction-key"
+        ):
             first = stable_redaction_tag("worker-1", label="device")
             second = stable_redaction_tag("worker-1", label="device")
 

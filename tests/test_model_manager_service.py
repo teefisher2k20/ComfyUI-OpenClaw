@@ -300,7 +300,10 @@ class TestModelManagerService(unittest.TestCase):
         )
         self.manager._tasks[task.task_id] = task
 
-        with patch("services.model_manager_transfer.shutil.copy2", side_effect=OSError("copy failed")):
+        with patch(
+            "services.model_manager_transfer.shutil.copy2",
+            side_effect=OSError("copy failed"),
+        ):
             with self.assertRaises(OSError):
                 self.manager.import_downloaded_model(task_id=task.task_id)
 
