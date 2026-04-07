@@ -106,6 +106,7 @@ class BridgeTokenStore:
         self._audit_trail: List[TokenAuditEvent] = []
         self._state_dir = state_dir
         self._store_path: Optional[Path] = None
+        self._token_index_key = self._build_token_index_key()
         if state_dir:
             self._store_path = Path(state_dir) / "bridge_tokens.json"
             self._load()
@@ -171,11 +172,19 @@ class BridgeTokenStore:
 
     # --- Token hashing ---
 
-    @staticmethod
-    def _hash_token(token_value: str) -> str:
+    def _build_token_index_key(self) -> bytes:
+        raw = os.environ.get("OPENCLAW_BRIDGE_TOKEN_INDEX_KEY") or os.environ.get(
+            "MOLTBOT_BRIDGE_TOKEN_INDEX_KEY"
+        )
+        if raw:
+            return raw.encode("utf-8")
+        return secrets.token_bytes(32)
+
+    def _hash_token(self, token_value: str) -> str:
         """Constant-time-safe hash for token lookup."""
+        # IMPORTANT: never fall back to a hardcoded token-index key here.
         return hmac.new(
-            b"openclaw-bridge-token-index",
+            self._token_index_key,
             token_value.encode("utf-8"),
             "sha256",
         ).hexdigest()

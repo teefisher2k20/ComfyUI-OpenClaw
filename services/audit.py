@@ -4,9 +4,11 @@ Standardized, append-only audit events for sensitive operations.
 """
 
 import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
 import threading
 import time
 import uuid
@@ -19,6 +21,7 @@ logger = logging.getLogger("ComfyUI-OpenClaw.services.audit")
 _TRUTHY = {"1", "true", "yes", "on"}
 _AUDIT_MAX_BYTES_DEFAULT = 5 * 1024 * 1024
 _AUDIT_BACKUPS_DEFAULT = 3
+_AUDIT_CHAIN_KEY: Optional[bytes] = None
 
 
 def _default_audit_log_path() -> str:
@@ -150,11 +153,27 @@ def _sanitize_audit_details(details: Optional[Dict[str, Any]]) -> Any:
     return redact_json(safe_details)
 
 
+def _get_audit_chain_key() -> bytes:
+    global _AUDIT_CHAIN_KEY
+    if _AUDIT_CHAIN_KEY is None:
+        raw = os.environ.get("OPENCLAW_AUDIT_CHAIN_KEY") or os.environ.get(
+            "MOLTBOT_AUDIT_CHAIN_KEY"
+        )
+        _AUDIT_CHAIN_KEY = raw.encode("utf-8") if raw else secrets.token_bytes(32)
+    return _AUDIT_CHAIN_KEY
+
+
 def _chain_hash(prev_hash: str, entry: Dict[str, Any]) -> str:
     payload = json.dumps(
         entry, sort_keys=True, separators=(",", ":"), ensure_ascii=True
     )
-    return hashlib.sha256(f"{prev_hash}|{payload}".encode("utf-8")).hexdigest()
+    # IMPORTANT: keep audit-chain hashing keyed; plain SHA-256 on sensitive events
+    # triggers CodeQL and weakens correlation resistance.
+    return hmac.new(
+        _get_audit_chain_key(),
+        f"{prev_hash}|{payload}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _rotate_if_needed(path: str) -> None:
