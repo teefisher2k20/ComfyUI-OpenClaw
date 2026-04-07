@@ -18,10 +18,10 @@ It is intended as a repo-visible planning reference in `docs/` and should stay a
 
 ## 3. Current State
 
-- `S88` is the umbrella verification item and remains open until GitHub rescans, final dismissals, and the secret-scanning closure workflow are complete.
-- `S89` is the active repair lane for the remaining audit-related scanner findings.
-- `S90` covers the remaining `services/model_manager_transfer.py` `py/path-injection` findings after the earlier bounded-path hardening.
-- `S91` is the final GitHub-side execution wave that requires authenticated repository administration and alert-write capability.
+- `S88` remains the umbrella verification item until GitHub rescans, final dismissals, and the secret-scanning closure workflow are complete.
+- `S89` is completed. The audit and bridge identifier cleanup reduced the residual alert set but left two GitHub-managed follow-up alerts in `services/audit.py`.
+- `S90` is completed. The model-manager path-boundary proof was strengthened, but the remaining `services/model_manager_transfer.py` findings did not retire after rescan and therefore move to authenticated dismissal review.
+- `S91` is now the only active execution lane. It is a GitHub-side closure wave that requires repository administration access for the CodeQL mode switch and alert-write capability for final dismissals and secret-alert closure.
 
 ## 4. Execution Rules
 
@@ -36,9 +36,10 @@ It is intended as a repo-visible planning reference in `docs/` and should stay a
 
 After the latest rescans, the remaining residual families are:
 
-- audit-related CodeQL alerts still attached to `services/audit.py`
-- model-manager `py/path-injection` alerts in `services/model_manager_transfer.py`
-- one historical secret-scanning alert tied to a WeChat App ID-shaped documentation example
+- `2` audit-related CodeQL alerts still attached to `services/audit.py`
+- `8` model-manager `py/path-injection` alerts in `services/model_manager_transfer.py`
+- `1` historical secret-scanning alert tied to a WeChat App ID-shaped documentation example
+- GitHub `default setup` is still enabled, so the committed in-repo `codeql.yml` workflow is not yet the authoritative scanner baseline
 
 ## 6. Expected End State
 
@@ -47,3 +48,4 @@ This chain is complete only when:
 - the remaining code-scanning alerts are either fixed in code or dismissed with explicit false-positive rationale
 - the secret-scanning alert is manually closed with recorded provenance evidence
 - the repository uses the committed advanced CodeQL workflow as its authoritative scanner baseline
+- the final GitHub-side actions are performed with the required repository-administration and alert-write permissions
