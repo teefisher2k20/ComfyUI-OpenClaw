@@ -19,9 +19,17 @@ function isApiCandidatePath(pathname, suffix) {
   return isPath(normalized, suffix);
 }
 
+function escapeRegExpFragment(value) {
+  // IMPORTANT: keep full regex escaping here. Escaping only slashes leaves
+  // the CodeQL-flagged sanitization gap in this test-side route matcher.
+  return String(value || "").replace(/[|\\{}()[\]^$+*?./]/g, "\\$&");
+}
+
 function modelManagerRoutePattern(suffix) {
   const normalizedSuffix = String(suffix || "").replace(/\/+$/, "");
-  return new RegExp(`/(?:api/)?(?:openclaw|moltbot)${normalizedSuffix.replace(/\//g, "\\/")}(?:\\?.*)?$`);
+  return new RegExp(
+    `/(?:api/)?(?:openclaw|moltbot)${escapeRegExpFragment(normalizedSuffix)}(?:\\?.*)?$`,
+  );
 }
 
 async function readNotificationEntries(page) {
