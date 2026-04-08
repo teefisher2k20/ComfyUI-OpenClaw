@@ -128,11 +128,23 @@ test.describe('PNG Info Tab', () => {
         body: JSON.stringify({
           ok: true,
           source: 'comfyui',
-          info: 'ComfyUI metadata detected.',
-          parameters: {},
+          info: 'ComfyUI metadata detected. Extracted prompt and sampler fields from saved graph.',
+          parameters: {
+            positive_prompt: 'Global: cinematic portrait\nLocal: sharp details',
+            negative_prompt: 'blurry',
+            Steps: 30,
+            Sampler: 'dpmpp_2m',
+            Scheduler: 'karras',
+            Model: 'sdxl-base.safetensors',
+          },
           items: {
+            prompt: {
+              10: {
+                class_type: 'KSamplerAdvanced',
+              },
+            },
             workflow: {
-              nodes: [{ id: 1, type: 'SaveImage' }],
+              nodes: [{ id: 10, type: 'KSamplerAdvanced' }],
             },
           },
         }),
@@ -173,6 +185,51 @@ test.describe('PNG Info Tab', () => {
 
     await expect(page.locator('#pnginfo-status')).toHaveText('Metadata ready');
     await expect(page.locator('#pnginfo-summary-card')).toContainText('COMFYUI');
+    await expect(page.locator('#pnginfo-summary-card')).toContainText('sdxl-base.safetensors');
+    await expect(page.locator('#pnginfo-summary-card')).toContainText('dpmpp_2m');
+    await expect(page.locator('#pnginfo-positive')).toContainText('cinematic portrait');
+    await expect(page.locator('#pnginfo-negative')).toContainText('blurry');
+    await expect(page.locator('#pnginfo-raw')).toContainText('"class_type": "KSamplerAdvanced"');
     expect(pngInfoRequests).toBe(1);
+  });
+
+  test('surfaces a friendly oversized-image error message', async ({ page }) => {
+    await mockComfyUiCore(page);
+
+    await page.route('**/pnginfo', async (route) => {
+      const req = route.request();
+      const url = new URL(req.url());
+      if (req.method() !== 'POST' || !isPngInfoPath(url.pathname)) {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: false,
+          error: 'image_b64_too_large',
+          detail: 'image_b64 exceeds the PNG Info limit (64 MiB). PNG Info must inspect the original metadata-bearing file without browser recompression.',
+        }),
+      });
+    });
+
+    await page.goto('test-harness.html');
+    await waitForOpenClawReady(page);
+    await clickTab(page, 'PNG Info');
+
+    await page.evaluate((pngBytes) => {
+      const bytes = Uint8Array.from(pngBytes);
+      const file = new File([bytes], 'huge.png', { type: 'image/png' });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      const event = new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer });
+      document.querySelector('#pnginfo-dropzone').dispatchEvent(event);
+    }, [...PNG_BUFFER]);
+
+    await expect(page.locator('#pnginfo-status')).toHaveText('Load failed');
+    await expect(page.locator('.openclaw-error-box')).toContainText('PNG Info limit (64 MiB)');
+    await expect(page.locator('.openclaw-error-box')).toContainText('metadata-bearing file without browser recompression');
   });
 });

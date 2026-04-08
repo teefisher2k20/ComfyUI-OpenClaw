@@ -126,4 +126,86 @@ describe("png_info_tab", () => {
         expect(container.querySelector("#pnginfo-summary-card").textContent).toContain("UNKNOWN");
         expect(container.querySelector("#pnginfo-raw").textContent).toContain("No raw metadata blocks found.");
     });
+
+    it("renders ComfyUI semantic extraction fields without hiding raw metadata", async () => {
+        apiMock.parsePngInfo.mockResolvedValue({
+            ok: true,
+            data: {
+                source: "comfyui",
+                info: "ComfyUI metadata detected. Extracted prompt and sampler fields from saved graph.",
+                parameters: {
+                    positive_prompt: "Global: cinematic portrait\nLocal: sharp details",
+                    negative_prompt: "blurry",
+                    Steps: 30,
+                    Sampler: "dpmpp_2m",
+                    Scheduler: "karras",
+                    Model: "sdxl-base.safetensors",
+                },
+                items: {
+                    prompt: {
+                        10: {
+                            class_type: "KSamplerAdvanced",
+                        },
+                    },
+                    workflow: {
+                        nodes: [{ id: 10, type: "KSamplerAdvanced" }],
+                    },
+                },
+            },
+        });
+
+        const container = document.createElement("div");
+        PngInfoTab.render(container);
+
+        const fileInput = container.querySelector("#pnginfo-file-input");
+        const file = new File(["x"], "comfy.png", { type: "image/png" });
+        Object.defineProperty(fileInput, "files", {
+            configurable: true,
+            value: [file],
+        });
+
+        fileInput.dispatchEvent(new Event("change"));
+
+        await vi.waitFor(() => {
+            expect(container.querySelector("#pnginfo-status").textContent).toBe("Metadata ready");
+        });
+
+        expect(container.querySelector("#pnginfo-summary-card").textContent).toContain("COMFYUI");
+        expect(container.querySelector("#pnginfo-summary-card").textContent).toContain("sdxl-base.safetensors");
+        expect(container.querySelector("#pnginfo-summary-card").textContent).toContain("dpmpp_2m");
+        expect(container.querySelector("#pnginfo-positive").textContent).toContain("cinematic portrait");
+        expect(container.querySelector("#pnginfo-negative").textContent).toContain("blurry");
+        expect(container.querySelector("#pnginfo-raw").textContent).toContain('"class_type": "KSamplerAdvanced"');
+    });
+
+    it("shows a friendly oversize message instead of the raw backend code", async () => {
+        apiMock.parsePngInfo.mockResolvedValue({
+            ok: false,
+            error: "image_b64_too_large",
+            data: {
+                detail: "image_b64 exceeds the PNG Info limit (64 MiB). PNG Info must inspect the original metadata-bearing file without browser recompression.",
+            },
+        });
+
+        const container = document.createElement("div");
+        PngInfoTab.render(container);
+
+        const fileInput = container.querySelector("#pnginfo-file-input");
+        const file = new File(["x"], "huge.png", { type: "image/png" });
+        Object.defineProperty(fileInput, "files", {
+            configurable: true,
+            value: [file],
+        });
+
+        fileInput.dispatchEvent(new Event("change"));
+
+        await vi.waitFor(() => {
+            expect(container.querySelector("#pnginfo-status").textContent).toBe("Load failed");
+        });
+
+        expect(utilsMock.showError).toHaveBeenCalledWith(
+            container,
+            "image_b64 exceeds the PNG Info limit (64 MiB). PNG Info must inspect the original metadata-bearing file without browser recompression."
+        );
+    });
 });

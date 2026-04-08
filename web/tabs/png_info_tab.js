@@ -104,6 +104,24 @@ function buildSummaryRows(result) {
     return rows;
 }
 
+function formatPngInfoError(errorLike) {
+    const code = errorLike?.error || errorLike?.data?.error || "";
+    const detail = errorLike?.data?.detail || errorLike?.detail || "";
+    if (code === "image_b64_too_large") {
+        return detail || "The selected image exceeds the PNG Info upload limit. PNG Info must inspect the original metadata-bearing file without browser recompression.";
+    }
+    if (detail) {
+        return detail;
+    }
+    if (code) {
+        return code;
+    }
+    if (errorLike?.message) {
+        return errorLike.message;
+    }
+    return String(errorLike || "pnginfo_request_failed");
+}
+
 function renderPromptBlock(title, value, actionId) {
     const body = escapeHtml(value || "");
     const copyButton = value
@@ -303,7 +321,7 @@ export const PngInfoTab = {
                 setStatus("Inspecting metadata...", "");
                 const res = await openclawApi.parsePngInfo(imageB64);
                 if (!res?.ok) {
-                    throw new Error(res?.error || "pnginfo_request_failed");
+                    throw new Error(formatPngInfoError(res));
                 }
                 renderResult(res.data || {});
                 if (res?.data?.source === "unknown" && !Object.keys(res?.data?.items || {}).length) {
@@ -314,7 +332,7 @@ export const PngInfoTab = {
             } catch (error) {
                 resetResults();
                 setStatus("Load failed", "error");
-                showError(container, `PNG Info failed: ${error?.message || String(error)}`);
+                showError(container, formatPngInfoError(error));
             }
         };
 
