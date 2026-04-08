@@ -20,3 +20,12 @@ class TestFullTestScriptPlaywrightBootstrap(unittest.TestCase):
         self.assertIn("npm install", content)
         self.assertIn('$env:OPENCLAW_PLAYWRIGHT_INSTALL = "1"', content)
         self.assertIn('$env:OPENCLAW_PLAYWRIGHT_BROWSERS = "chromium"', content)
+
+    def test_windows_precommit_snapshot_check_accepts_clean_diff_state(self):
+        content = WINDOWS_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('[AllowEmptyString()][string]$BeforeWorktree = ""', content)
+        self.assertIn('[AllowEmptyString()][string]$BeforeIndex = ""', content)
+        self.assertNotIn(
+            "[Parameter(Mandatory = $true)][string]$BeforeIndex",
+            content,
+        )

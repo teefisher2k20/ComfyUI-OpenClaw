@@ -10,6 +10,17 @@ if __package__ and "." in __package__:
 else:  # pragma: no cover (test-only import mode)
     from config import PACK_NAME, PACK_VERSION
 
+try:
+    if __package__ and "." in __package__:
+        from ..services.pnginfo import pnginfo_available
+    else:  # pragma: no cover (test-only import mode)
+        from services.pnginfo import pnginfo_available  # type: ignore
+except Exception:  # pragma: no cover
+
+    def pnginfo_available() -> bool:
+        return False
+
+
 from .runtime_profile import get_runtime_profile
 
 API_VERSION = 1
@@ -86,6 +97,7 @@ def get_capabilities() -> dict:
             "webhook_mapping": True,
             "job_events": True,
             "operator_doctor": True,
+            "png_info": pnginfo_available(),
         },
     }
 

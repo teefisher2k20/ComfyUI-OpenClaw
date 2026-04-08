@@ -45,6 +45,7 @@ class TestR151RouteRegistrars(unittest.TestCase):
             "templates_list_handler": sentinel.templates_list_handler,
             "preflight_handler": sentinel.preflight_handler,
             "inventory_handler": sentinel.inventory_handler,
+            "pnginfo_handler": sentinel.pnginfo_handler,
             "list_checkpoints_handler": sentinel.list_checkpoints_handler,
             "create_checkpoint_handler": sentinel.create_checkpoint_handler,
             "get_checkpoint_handler": sentinel.get_checkpoint_handler,
@@ -85,8 +86,9 @@ class TestR151RouteRegistrars(unittest.TestCase):
         self.assertIn(("GET", "/openclaw/health"), keys)
         self.assertIn(("POST", "/openclaw/webhook"), keys)
         self.assertIn(("GET", "/openclaw/llm/models"), keys)
+        self.assertIn(("POST", "/openclaw/pnginfo"), keys)
         self.assertIn(("POST", "/openclaw/lab/experiments/{exp_id}/winner"), keys)
-        self.assertEqual(49, len(specs))
+        self.assertEqual(50, len(specs))
 
     def test_build_assist_route_specs_preserves_expected_paths(self):
         specs = build_assist_route_specs("/moltbot", _AssistStub())

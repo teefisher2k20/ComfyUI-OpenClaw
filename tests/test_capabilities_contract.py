@@ -20,6 +20,7 @@ class TestCapabilitiesContract(unittest.TestCase):
         self.assertIn("api_version", caps)
         self.assertIn("pack", caps)
         self.assertIn("features", caps)
+        self.assertIn("png_info", caps["features"])
 
     def test_runtime_profile_exposure(self):
         """Verify runtime_profile reflects the actual resolved profile."""

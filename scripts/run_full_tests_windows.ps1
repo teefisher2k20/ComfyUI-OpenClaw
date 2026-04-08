@@ -40,8 +40,11 @@ function Get-GitDiffSnapshot {
 
 function Assert-PreCommitDidNotMutateRepo {
   param(
-    [Parameter(Mandatory = $true)][string]$BeforeWorktree,
-    [Parameter(Mandatory = $true)][string]$BeforeIndex
+    # IMPORTANT: git diff snapshots can be empty strings on a clean repo/index.
+    # Do not mark these as mandatory non-empty inputs or the Windows full gate
+    # fails before it can compare pre-commit mutation state.
+    [AllowEmptyString()][string]$BeforeWorktree = "",
+    [AllowEmptyString()][string]$BeforeIndex = ""
   )
 
   $afterWorktree = Get-GitDiffSnapshot

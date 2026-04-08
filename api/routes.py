@@ -61,6 +61,7 @@ PACK_NAME = PACK_VERSION = PACK_START_TIME = LOG_FILE = get_api_key = None  # ty
 metrics = tail_log = require_observability_access = check_rate_limit = trace_store = None  # type: ignore
 get_executor_diagnostics = None  # type: ignore
 webhook_handler = webhook_submit_handler = webhook_validate_handler = capabilities_handler = preflight_handler = None  # type: ignore
+pnginfo_handler = None  # type: ignore  # R168
 config_get_handler = config_put_handler = llm_test_handler = llm_models_handler = llm_chat_handler = None  # type: ignore
 remote_admin_page_handler = None  # type: ignore  # F61
 security_doctor_handler = None  # type: ignore  # S30
@@ -157,6 +158,12 @@ if web is not None:
         "..api.preflight_handler",
         "api.preflight_handler",
         ("inventory_handler", "preflight_handler"),
+    )
+    (pnginfo_handler,) = import_attrs_dual(
+        __package__,
+        "..api.pnginfo",
+        "api.pnginfo",
+        ("pnginfo_handler",),
     )
     (secrets_delete_handler, secrets_put_handler, secrets_status_handler) = (
         import_attrs_dual(
@@ -855,6 +862,7 @@ def register_routes(server) -> None:
         "templates_list_handler": templates_list_handler,
         "preflight_handler": preflight_handler,
         "inventory_handler": inventory_handler,
+        "pnginfo_handler": pnginfo_handler,
         "list_checkpoints_handler": list_checkpoints_handler,
         "create_checkpoint_handler": create_checkpoint_handler,
         "get_checkpoint_handler": get_checkpoint_handler,

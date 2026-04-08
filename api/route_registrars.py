@@ -58,6 +58,7 @@ def build_core_route_specs(
             f"{prefix}/preflight/inventory",
             handlers["inventory_handler"],
         ),
+        RouteSpec("POST", f"{prefix}/pnginfo", handlers["pnginfo_handler"]),
         RouteSpec("GET", f"{prefix}/checkpoints", handlers["list_checkpoints_handler"]),
         RouteSpec(
             "POST",
