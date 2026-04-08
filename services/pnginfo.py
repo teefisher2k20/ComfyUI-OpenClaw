@@ -411,15 +411,9 @@ def _extract_generic_clip_text(inputs: dict[str, Any]) -> str:
         ("CLIP-L", inputs.get("clip_l")),
         ("T5XXL", inputs.get("t5xxl")),
     )
-    text = _join_labeled_prompt_fields(*preferred_fields)
-    if text:
-        return text
-
-    discovered: list[tuple[str, Any]] = []
-    for key, value in inputs.items():
-        if isinstance(value, str) and value.strip():
-            discovered.append((str(key).replace("_", " ").title(), value))
-    return _join_labeled_prompt_fields(*discovered)
+    # IMPORTANT: custom CLIPTextEncode-family nodes often carry parser/config strings next to
+    # prompt text. Only consume explicit prompt-bearing keys so UI extraction stays low-noise.
+    return _join_labeled_prompt_fields(*preferred_fields)
 
 
 def _join_labeled_prompt_fields(*fields: tuple[str, Any]) -> str:

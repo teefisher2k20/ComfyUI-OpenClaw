@@ -223,6 +223,58 @@ class TestPngInfoService(unittest.TestCase):
             result["parameters"]["negative_prompt"], "low quality, anatomy errors"
         )
 
+    def test_parse_comfyui_custom_clip_text_node_ignores_non_prompt_strings(self):
+        prompt = {
+            "20": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "cfg": 7,
+                    "positive": ["21", 0],
+                    "sampler_name": "euler",
+                    "scheduler": "normal",
+                    "seed": 77,
+                    "steps": 24,
+                },
+            },
+            "21": {
+                "class_type": "CLIPTextEncodeA1111",
+                "inputs": {
+                    "text": "masterpiece, best quality, cinematic portrait",
+                    "parser": "A1111",
+                    "mean_normalization": True,
+                    "use_old_emphasis_implementation": False,
+                },
+            },
+        }
+        result = parse_image_metadata(self._make_comfy_png(prompt))
+        self.assertEqual(
+            result["parameters"]["positive_prompt"],
+            "masterpiece, best quality, cinematic portrait",
+        )
+
+    def test_parse_comfyui_custom_clip_text_node_without_prompt_keys_stays_empty(self):
+        prompt = {
+            "20": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "cfg": 7,
+                    "positive": ["21", 0],
+                    "sampler_name": "euler",
+                    "seed": 77,
+                    "steps": 24,
+                },
+            },
+            "21": {
+                "class_type": "CLIPTextEncodeCustom",
+                "inputs": {
+                    "parser": "A1111",
+                    "mode": "prompt",
+                },
+            },
+        }
+        result = parse_image_metadata(self._make_comfy_png(prompt))
+        self.assertNotIn("positive_prompt", result["parameters"])
+
     def test_parse_comfyui_graph_loop_degrades_to_partial_extraction(self):
         prompt = {
             "30": {
