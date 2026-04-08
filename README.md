@@ -77,6 +77,18 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>PNG Info sidebar workflow added with ComfyUI metadata extraction, better large-image handling, and lower-noise operator alerts</strong></summary>
+
+- Added a new `PNG Info` sidebar tab with drag-and-drop, file picker, scoped paste, preview rendering, prompt copy actions, structured summary cards, and raw metadata inspection for saved generation images.
+- Added backend metadata parsing for A1111 infotext and ComfyUI `prompt` / `workflow` metadata, including prompt/sampler/model/size extraction from standard ComfyUI graphs and a larger dedicated payload ceiling for original metadata-bearing images.
+- Improved operator-facing UX by making large-image failures explain the metadata-preservation constraint more clearly, letting the PNG Info input area scroll with the rest of the content, and moving prompt copy surfaces to the top of the information area.
+- Reduced noise in ComfyUI prompt extraction so generic custom `CLIPTextEncode*` nodes now prefer explicit prompt-bearing keys instead of surfacing parser/config strings as if they were prompt text.
+- Tightened queue-monitor alert sensitivity so sidebar startup races no longer generate persistent disconnect noise unless the backend stays unavailable long enough to look like a real incident.
+
+</details>
+
+<details>
+
 <summary><strong>Repo-native CodeQL baseline and residual GitHub Security verification chain completed</strong></summary>
 
 - Added a versioned GitHub Actions `CodeQL` workflow that scans Python, JavaScript/TypeScript, and GitHub Actions on push, pull request, manual dispatch, and a weekly schedule, so static security analysis now has an explicit in-repo baseline instead of depending only on opaque UI configuration.
@@ -708,7 +720,6 @@ Deployment profiles and hardening references:
 - [Nodes](#nodes)
 - [Extension UI](#extension-ui)
   - [Sidebar Modules](#sidebar-modules)
-  - [Model Manager tab (F64)](#model-manager-tab-f64)
 - [Operator UX Features](#operator-ux-features)
   - [Notification Center](#notification-center)
 - [API Overview](#api-overview)
@@ -918,19 +929,9 @@ The OpenClaw sidebar includes these built-in tabs. Some tabs are capability-gate
 | `Approvals` | Lists approval gates and supports approve/reject operations, including the same approval objects now surfaced through Slack and Feishu interactive connector actions. | [Triggers + approvals](#triggers--approvals-admin), [Remote Control (Connector)](#remote-control-connector) |
 | `Explorer` | Inventory/preflight diagnostics and snapshot/checkpoint troubleshooting workflows, including snapshot-first inventory refresh state (`snapshot_ts`, `scan_state`, `stale`, `last_error`). | [Operator UX Features](#operator-ux-features), [Troubleshooting](#troubleshooting) |
 | `Packs` | Dedicated pack lifecycle tab for import/export/delete under admin boundary. | [Packs](#packs-admin) |
-| `Model Manager` | Searches model catalog/install records, queues managed downloads, and imports completed tasks into the managed install root. | [Model manager](#model-manager-admin-f54), [Model Manager tab (F64)](#model-manager-tab-f64) |
+| `PNG Info` | Inspects saved generation images through drag-and-drop, file picker, or scoped paste, parses A1111 infotext plus ComfyUI `prompt` / `workflow` metadata, shows extracted prompt and generation fields when recoverable, and keeps raw metadata visible for operator inspection. | [API Overview](#api-overview), [Troubleshooting](#troubleshooting) |
+| `Model Manager` | Searches model catalog/install records, queues managed downloads, monitors task lifecycle, and imports completed tasks into the managed install root with the same trusted download/import contract used by the backend model manager APIs. | [Model manager](#model-manager-admin-f54), [API Overview](#api-overview) |
 | `Parameter Lab` | Runs bounded sweep/compare experiments, stores history, and replays parameters back into the graph. | [Operator UX Features](#operator-ux-features) |
-
-### Model Manager tab (F64)
-
-The `Model Manager` tab is the frontend surface for the F54 managed model pipeline:
-
-- Search models by query/source/type/installed state.
-- Queue download tasks from rows that provide the full trusted contract (`download_url`, `sha256`, `provenance`).
-- Monitor task lifecycle (`queued`, `running`, `completed`, `failed`, `cancelled`) with cancel support.
-- Import completed tasks into managed install paths, with optional destination/filename/tags overrides.
-
-This tab stays admin-bound through existing backend policy checks; it does not bypass F54 safety gates.
 
 ## Operator UX Features
 
