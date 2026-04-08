@@ -164,42 +164,41 @@ export const PngInfoTab = {
     render(container) {
         container.innerHTML = `
             <div class="openclaw-panel">
-                <div class="openclaw-card" style="border-radius:0;border:none;border-bottom:1px solid var(--openclaw-color-border);">
-                    <div class="openclaw-section-header">PNG Info</div>
-                    <div class="openclaw-error-box" style="display:none"></div>
-                    <div class="openclaw-pnginfo-top">
-                        <div id="pnginfo-dropzone" class="openclaw-pnginfo-dropzone" tabindex="0" role="button" aria-label="PNG Info dropzone">
-                            <input id="pnginfo-file-input" type="file" accept="image/*" hidden />
-                            <div class="openclaw-pnginfo-dropzone-title">Drop an image here</div>
-                            <div class="openclaw-pnginfo-dropzone-copy">Click to browse, or focus this panel and paste an image.</div>
-                            <div class="openclaw-pnginfo-dropzone-actions">
-                                <button type="button" id="pnginfo-select-btn" class="openclaw-btn openclaw-btn-sm openclaw-btn-primary">Choose Image</button>
-                            </div>
-                        </div>
-                        <div class="openclaw-card openclaw-pnginfo-preview-card">
-                            <div class="openclaw-pnginfo-card-header">
-                                <div class="openclaw-section-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">Preview</div>
-                                <div id="pnginfo-status" class="openclaw-status">Idle</div>
-                            </div>
-                            <div id="pnginfo-preview-empty" class="openclaw-empty-state">No image loaded yet.</div>
-                            <img id="pnginfo-preview-image" class="openclaw-pnginfo-preview-image" alt="PNG Info preview" style="display:none" />
-                        </div>
-                    </div>
-                    <div class="openclaw-note">
-                        Read-only metadata inspection only. This tab does not send prompt data into other tabs or workflows.
-                    </div>
-                </div>
-
                 <div class="openclaw-scroll-area">
+                    <div class="openclaw-card">
+                        <div class="openclaw-section-header">PNG Info</div>
+                        <div class="openclaw-error-box" style="display:none"></div>
+                        <div class="openclaw-pnginfo-top">
+                            <div id="pnginfo-dropzone" class="openclaw-pnginfo-dropzone" tabindex="0" role="button" aria-label="PNG Info dropzone">
+                                <input id="pnginfo-file-input" type="file" accept="image/*" hidden />
+                                <div class="openclaw-pnginfo-dropzone-title">Drop an image here</div>
+                                <div class="openclaw-pnginfo-dropzone-copy">Click to browse, or focus this panel and paste an image.</div>
+                                <div class="openclaw-pnginfo-dropzone-actions">
+                                    <button type="button" id="pnginfo-select-btn" class="openclaw-btn openclaw-btn-sm openclaw-btn-primary">Choose Image</button>
+                                </div>
+                            </div>
+                            <div class="openclaw-card openclaw-pnginfo-preview-card">
+                                <div class="openclaw-pnginfo-card-header">
+                                    <div class="openclaw-section-header" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">Preview</div>
+                                    <div id="pnginfo-status" class="openclaw-status">Idle</div>
+                                </div>
+                                <div id="pnginfo-preview-empty" class="openclaw-empty-state">No image loaded yet.</div>
+                                <img id="pnginfo-preview-image" class="openclaw-pnginfo-preview-image" alt="PNG Info preview" style="display:none" />
+                            </div>
+                        </div>
+                        <div class="openclaw-note">
+                            Read-only metadata inspection only. This tab does not send prompt data into other tabs or workflows.
+                        </div>
+                    </div>
                     <div id="pnginfo-empty-state" class="openclaw-empty-state">
                         Load an image to inspect embedded A1111 or ComfyUI metadata.
                     </div>
                     <div id="pnginfo-results" style="display:none;" class="openclaw-split-v">
-                        <div id="pnginfo-summary-card" class="openclaw-card"></div>
                         <div class="openclaw-grid-2 openclaw-pnginfo-prompts">
                             <div id="pnginfo-positive"></div>
                             <div id="pnginfo-negative"></div>
                         </div>
+                        <div id="pnginfo-summary-card" class="openclaw-card"></div>
                         <div>
                             <div class="openclaw-section-header">Raw Metadata</div>
                             <div id="pnginfo-raw" class="openclaw-split-v"></div>

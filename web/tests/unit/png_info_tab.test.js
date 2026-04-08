@@ -70,6 +70,14 @@ describe("png_info_tab", () => {
             expect(apiMock.parsePngInfo).toHaveBeenCalledTimes(1);
         });
 
+        const scrollArea = container.querySelector(".openclaw-scroll-area");
+        const firstCard = scrollArea.firstElementChild;
+        expect(firstCard.querySelector("#pnginfo-dropzone")).toBeTruthy();
+        expect(firstCard.querySelector("#pnginfo-preview-image")).toBeTruthy();
+
+        const results = container.querySelector("#pnginfo-results");
+        expect(results.firstElementChild.className).toContain("openclaw-pnginfo-prompts");
+
         expect(container.querySelector("#pnginfo-summary-card").textContent).toContain("demoModel");
         expect(container.querySelector("#pnginfo-positive").textContent).toContain("portrait lighting");
         expect(container.querySelector("#pnginfo-negative").textContent).toContain("lowres");
