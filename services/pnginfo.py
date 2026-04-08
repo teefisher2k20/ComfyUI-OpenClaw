@@ -1,5 +1,5 @@
 """
-PNG Info metadata parsing service (R168).
+PNG Info metadata parsing service (R168, R169).
 """
 
 from __future__ import annotations
@@ -18,10 +18,11 @@ except ModuleNotFoundError:  # pragma: no cover
     ExifTags = None  # type: ignore
     Image = None  # type: ignore
 
-MAX_IMAGE_B64_LEN = 20 * 1024 * 1024  # 20MB base64 payload ceiling
+MAX_PNGINFO_IMAGE_B64_LEN = 64 * 1024 * 1024  # 64 MiB base64 payload ceiling
 _RE_PARAM = re.compile(r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)')
 _RE_IMAGE_SIZE = re.compile(r"^(\d+)x(\d+)$")
 _COMFYUI_KEYS = ("prompt", "workflow")
+_COMFYUI_SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced"}
 _A1111_INFO_KEYS = (
     "parameters",
     "comment",
@@ -76,8 +77,11 @@ def parse_image_metadata(image_b64: str) -> dict[str, Any]:
         parameters = _parse_generation_parameters(infotext)
     elif comfy_items:
         source = "comfyui"
-        info = "ComfyUI metadata detected."
-        parameters = {}
+        parameters = _extract_comfyui_parameters(comfy_items)
+        if parameters:
+            info = "ComfyUI metadata detected. Extracted prompt and sampler fields from saved graph."
+        else:
+            info = "ComfyUI metadata detected. Structured prompt fields were not recoverable from the saved graph."
     else:
         source = "unknown"
         info = ""
@@ -102,16 +106,18 @@ def _decode_image_b64(image_b64: str) -> bytes:
     if not isinstance(image_b64, str) or not image_b64.strip():
         raise PngInfoError("image_b64_required", "image_b64 required")
 
-    if len(image_b64) > MAX_IMAGE_B64_LEN:
+    value = _sanitize_b64_payload(image_b64)
+    if not value:
+        raise PngInfoError("image_b64_required", "image_b64 required")
+
+    if len(value) > MAX_PNGINFO_IMAGE_B64_LEN:
         raise PngInfoError(
             "image_b64_too_large",
-            f"image_b64 exceeds {MAX_IMAGE_B64_LEN // 1024 // 1024}MB",
+            "image_b64 exceeds the PNG Info limit "
+            f"({_format_bytes(MAX_PNGINFO_IMAGE_B64_LEN)}). "
+            "PNG Info must inspect the original metadata-bearing file without browser recompression.",
         )
 
-    value = image_b64.strip()
-    if value.startswith("data:"):
-        _, _, value = value.partition(",")
-    value = re.sub(r"\s+", "", value)
     padding = len(value) % 4
     if padding:
         value += "=" * (4 - padding)
@@ -157,6 +163,13 @@ def _collect_exif_items(image) -> dict[str, Any]:
         if normalized not in (None, ""):
             result[key] = normalized
     return result
+
+
+def _sanitize_b64_payload(image_b64: str) -> str:
+    value = image_b64.strip()
+    if value.startswith("data:"):
+        _, _, value = value.partition(",")
+    return re.sub(r"\s+", "", value)
 
 
 def _normalize_exif_value(key: str, value: Any) -> Any:
@@ -252,6 +265,271 @@ def _parse_generation_parameters(info_text: str) -> dict[str, Any]:
     if not parsed["positive_prompt"]:
         parsed.pop("positive_prompt", None)
     return parsed
+
+
+def _extract_comfyui_parameters(text_items: dict[str, Any]) -> dict[str, Any]:
+    prompt_graph = text_items.get("prompt")
+    if not isinstance(prompt_graph, dict):
+        return {}
+
+    primary_sampler = _select_primary_sampler(prompt_graph)
+    if not primary_sampler:
+        return {}
+
+    _, sampler_node = primary_sampler
+    inputs = _node_inputs(sampler_node)
+    parameters: dict[str, Any] = {}
+
+    _maybe_set(
+        parameters,
+        "positive_prompt",
+        _extract_prompt_text(prompt_graph, inputs.get("positive")),
+    )
+    _maybe_set(
+        parameters,
+        "negative_prompt",
+        _extract_prompt_text(prompt_graph, inputs.get("negative")),
+    )
+    _maybe_set(parameters, "Steps", inputs.get("steps"))
+    _maybe_set(parameters, "CFG scale", inputs.get("cfg"))
+    _maybe_set(parameters, "Seed", inputs.get("noise_seed", inputs.get("seed")))
+    _maybe_set(parameters, "Sampler", inputs.get("sampler_name"))
+    _maybe_set(parameters, "Scheduler", inputs.get("scheduler"))
+    _maybe_set(parameters, "Denoise", inputs.get("denoise"))
+
+    image_size = _resolve_image_size(prompt_graph, inputs.get("latent_image"))
+    if image_size:
+        width, height = image_size
+        parameters["Size"] = f"{width}x{height}"
+        parameters["Size-1"] = width
+        parameters["Size-2"] = height
+
+    _maybe_set(
+        parameters, "Model", _resolve_model_name(prompt_graph, inputs.get("model"))
+    )
+    return parameters
+
+
+def _select_primary_sampler(
+    prompt_graph: dict[str, Any]
+) -> tuple[str, dict[str, Any]] | None:
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    for node_id, node in prompt_graph.items():
+        if not isinstance(node, dict):
+            continue
+        if str(node.get("class_type", "")) in _COMFYUI_SAMPLER_TYPES:
+            candidates.append((str(node_id), node))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: _node_sort_key(item[0]))
+    return candidates[-1]
+
+
+def _node_sort_key(node_id: str) -> tuple[int, int, str]:
+    text = str(node_id)
+    if text.isdigit():
+        return (1, int(text), text)
+    return (0, 0, text)
+
+
+def _node_inputs(node: dict[str, Any]) -> dict[str, Any]:
+    inputs = node.get("inputs")
+    if isinstance(inputs, dict):
+        return inputs
+    return {}
+
+
+def _get_prompt_node(
+    prompt_graph: dict[str, Any], node_id: Any
+) -> dict[str, Any] | None:
+    key = str(node_id)
+    node = prompt_graph.get(key)
+    if isinstance(node, dict):
+        return node
+    return None
+
+
+def _resolve_node_ref(ref: Any) -> str | None:
+    if isinstance(ref, (list, tuple)) and ref:
+        return str(ref[0])
+    return None
+
+
+def _extract_prompt_text(
+    prompt_graph: dict[str, Any], ref: Any, visited: set[str] | None = None
+) -> str:
+    node_id = _resolve_node_ref(ref)
+    if not node_id:
+        return ""
+
+    seen = visited or set()
+    if node_id in seen:
+        return ""
+    seen = set(seen)
+    seen.add(node_id)
+
+    node = _get_prompt_node(prompt_graph, node_id)
+    if not node:
+        return ""
+
+    class_type = str(node.get("class_type", ""))
+    inputs = _node_inputs(node)
+    if class_type == "CLIPTextEncode":
+        return _normalize_prompt_text(inputs.get("text"))
+    if class_type == "CLIPTextEncodeSDXL":
+        return _join_labeled_prompt_fields(
+            ("Global", inputs.get("text_g")),
+            ("Local", inputs.get("text_l")),
+        )
+    if class_type == "CLIPTextEncodeSDXLRefiner":
+        return _normalize_prompt_text(inputs.get("text"))
+    if class_type == "CLIPTextEncodeFlux":
+        return _join_labeled_prompt_fields(
+            ("CLIP-L", inputs.get("clip_l")),
+            ("T5XXL", inputs.get("t5xxl")),
+        )
+    if class_type.startswith("CLIPTextEncode"):
+        return _extract_generic_clip_text(inputs)
+
+    for key, value in inputs.items():
+        normalized_key = str(key).lower()
+        if (
+            normalized_key in {"positive", "negative", "base"}
+            or "conditioning" in normalized_key
+        ):
+            text = _extract_prompt_text(prompt_graph, value, seen)
+            if text:
+                return text
+    return ""
+
+
+def _extract_generic_clip_text(inputs: dict[str, Any]) -> str:
+    preferred_fields = (
+        ("Text", inputs.get("text")),
+        ("Global", inputs.get("text_g")),
+        ("Local", inputs.get("text_l")),
+        ("CLIP-L", inputs.get("clip_l")),
+        ("T5XXL", inputs.get("t5xxl")),
+    )
+    text = _join_labeled_prompt_fields(*preferred_fields)
+    if text:
+        return text
+
+    discovered: list[tuple[str, Any]] = []
+    for key, value in inputs.items():
+        if isinstance(value, str) and value.strip():
+            discovered.append((str(key).replace("_", " ").title(), value))
+    return _join_labeled_prompt_fields(*discovered)
+
+
+def _join_labeled_prompt_fields(*fields: tuple[str, Any]) -> str:
+    normalized_fields: list[tuple[str, str]] = []
+    for label, value in fields:
+        text = _normalize_prompt_text(value)
+        if text:
+            normalized_fields.append((label, text))
+    if not normalized_fields:
+        return ""
+    unique_values = {value for _, value in normalized_fields}
+    if len(unique_values) == 1:
+        return normalized_fields[0][1]
+    return "\n".join(f"{label}: {value}" for label, value in normalized_fields)
+
+
+def _normalize_prompt_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _resolve_image_size(
+    prompt_graph: dict[str, Any], ref: Any, visited: set[str] | None = None
+) -> tuple[int, int] | None:
+    node_id = _resolve_node_ref(ref)
+    if not node_id:
+        return None
+
+    seen = visited or set()
+    if node_id in seen:
+        return None
+    seen = set(seen)
+    seen.add(node_id)
+
+    node = _get_prompt_node(prompt_graph, node_id)
+    if not node:
+        return None
+
+    inputs = _node_inputs(node)
+    width = _coerce_int(inputs.get("width"))
+    height = _coerce_int(inputs.get("height"))
+    if width and height:
+        return (width, height)
+
+    for key, value in inputs.items():
+        normalized_key = str(key).lower()
+        if (
+            normalized_key in {"samples", "latent_image", "image", "pixels"}
+            or "latent" in normalized_key
+        ):
+            resolved = _resolve_image_size(prompt_graph, value, seen)
+            if resolved:
+                return resolved
+    return None
+
+
+def _resolve_model_name(
+    prompt_graph: dict[str, Any], ref: Any, visited: set[str] | None = None
+) -> str:
+    node_id = _resolve_node_ref(ref)
+    if not node_id:
+        return ""
+
+    seen = visited or set()
+    if node_id in seen:
+        return ""
+    seen = set(seen)
+    seen.add(node_id)
+
+    node = _get_prompt_node(prompt_graph, node_id)
+    if not node:
+        return ""
+
+    inputs = _node_inputs(node)
+    for key in ("ckpt_name", "model_name", "unet_name"):
+        value = _normalize_prompt_text(inputs.get(key))
+        if value:
+            return value
+
+    for key, value in inputs.items():
+        normalized_key = str(key).lower()
+        if normalized_key in {"model", "clip", "base_model"}:
+            resolved = _resolve_model_name(prompt_graph, value, seen)
+            if resolved:
+                return resolved
+    return ""
+
+
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def _maybe_set(target: dict[str, Any], key: str, value: Any) -> None:
+    if value not in (None, ""):
+        target[key] = value
+
+
+def _format_bytes(value: int) -> str:
+    if value < 1024:
+        return f"{value} B"
+    if value < 1024 * 1024:
+        return f"{value / 1024:.1f} KiB"
+    return f"{value / 1024 / 1024:.0f} MiB"
 
 
 def _unquote(value: str) -> str:

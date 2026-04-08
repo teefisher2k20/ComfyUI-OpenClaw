@@ -1,6 +1,8 @@
 import base64
 import io
+import json
 import unittest
+from unittest.mock import patch
 
 try:
     from PIL import Image, PngImagePlugin
@@ -34,6 +36,12 @@ class TestPngInfoService(unittest.TestCase):
         buffer = io.BytesIO()
         image.save(buffer, format="JPEG", exif=exif)
         return _to_b64(buffer.getvalue())
+
+    def _make_comfy_png(self, prompt_graph: dict, workflow: dict | None = None) -> str:
+        metadata = {"prompt": json.dumps(prompt_graph)}
+        if workflow is not None:
+            metadata["workflow"] = json.dumps(workflow)
+        return self._make_png(metadata)
 
     def test_parse_a1111_parameters_chunk(self):
         infotext = (
@@ -72,18 +80,172 @@ class TestPngInfoService(unittest.TestCase):
         self.assertEqual(result["parameters"]["Size"], "640x640")
 
     def test_parse_comfyui_prompt_and_workflow_metadata(self):
-        prompt = (
-            '{"1":{"class_type":"KSampler","inputs":{"steps":20,"cfg":7,"seed":123}}}'
-        )
-        workflow = '{"nodes":[{"id":1,"type":"KSampler"}]}'
-        result = parse_image_metadata(
-            self._make_png({"prompt": prompt, "workflow": workflow})
-        )
+        prompt = {
+            "3": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "cfg": 8,
+                    "denoise": 1,
+                    "latent_image": ["5", 0],
+                    "model": ["4", 0],
+                    "negative": ["7", 0],
+                    "positive": ["6", 0],
+                    "sampler_name": "euler",
+                    "scheduler": "normal",
+                    "seed": 8566257,
+                    "steps": 20,
+                },
+            },
+            "4": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "v1-5-pruned-emaonly.safetensors"},
+            },
+            "5": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"height": 512, "width": 512},
+            },
+            "6": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["4", 1], "text": "masterpiece best quality girl"},
+            },
+            "7": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"clip": ["4", 1], "text": "bad hands"},
+            },
+        }
+        workflow = {"nodes": [{"id": 3, "type": "KSampler"}]}
+        result = parse_image_metadata(self._make_comfy_png(prompt, workflow))
         self.assertEqual(result["source"], "comfyui")
-        self.assertEqual(result["info"], "ComfyUI metadata detected.")
-        self.assertEqual(result["parameters"], {})
+        self.assertIn("ComfyUI metadata detected.", result["info"])
+        self.assertEqual(
+            result["parameters"]["positive_prompt"], "masterpiece best quality girl"
+        )
+        self.assertEqual(result["parameters"]["negative_prompt"], "bad hands")
+        self.assertEqual(result["parameters"]["Steps"], 20)
+        self.assertEqual(result["parameters"]["CFG scale"], 8)
+        self.assertEqual(result["parameters"]["Seed"], 8566257)
+        self.assertEqual(result["parameters"]["Sampler"], "euler")
+        self.assertEqual(result["parameters"]["Scheduler"], "normal")
+        self.assertEqual(result["parameters"]["Size"], "512x512")
+        self.assertEqual(result["parameters"]["Size-1"], 512)
+        self.assertEqual(result["parameters"]["Size-2"], 512)
+        self.assertEqual(
+            result["parameters"]["Model"], "v1-5-pruned-emaonly.safetensors"
+        )
         self.assertIsInstance(result["items"]["prompt"], dict)
         self.assertEqual(result["items"]["workflow"]["nodes"][0]["type"], "KSampler")
+
+    def test_parse_comfyui_ksampler_advanced_and_sdxl_prompts(self):
+        prompt = {
+            "10": {
+                "class_type": "KSamplerAdvanced",
+                "inputs": {
+                    "cfg": 6.5,
+                    "latent_image": ["12", 0],
+                    "model": ["11", 0],
+                    "negative": ["14", 0],
+                    "positive": ["13", 0],
+                    "sampler_name": "dpmpp_2m",
+                    "scheduler": "karras",
+                    "noise_seed": 998877,
+                    "steps": 30,
+                    "denoise": 0.42,
+                },
+            },
+            "11": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {"ckpt_name": "sdxl-base.safetensors"},
+            },
+            "12": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {"height": 1024, "width": 1024},
+            },
+            "13": {
+                "class_type": "CLIPTextEncodeSDXL",
+                "inputs": {
+                    "text_g": "cinematic portrait",
+                    "text_l": "sharp details",
+                },
+            },
+            "14": {
+                "class_type": "CLIPTextEncodeSDXL",
+                "inputs": {
+                    "text_g": "blurry",
+                    "text_l": "blurry",
+                },
+            },
+        }
+        result = parse_image_metadata(self._make_comfy_png(prompt))
+        self.assertEqual(result["parameters"]["Seed"], 998877)
+        self.assertEqual(result["parameters"]["Steps"], 30)
+        self.assertEqual(result["parameters"]["CFG scale"], 6.5)
+        self.assertEqual(result["parameters"]["Denoise"], 0.42)
+        self.assertEqual(result["parameters"]["Sampler"], "dpmpp_2m")
+        self.assertEqual(result["parameters"]["Scheduler"], "karras")
+        self.assertEqual(
+            result["parameters"]["positive_prompt"],
+            "Global: cinematic portrait\nLocal: sharp details",
+        )
+        self.assertEqual(result["parameters"]["negative_prompt"], "blurry")
+
+    def test_parse_comfyui_flux_prompt_nodes(self):
+        prompt = {
+            "20": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "cfg": 3.5,
+                    "positive": ["21", 0],
+                    "negative": ["22", 0],
+                    "sampler_name": "euler",
+                    "scheduler": "normal",
+                    "seed": 55,
+                    "steps": 12,
+                },
+            },
+            "21": {
+                "class_type": "CLIPTextEncodeFlux",
+                "inputs": {
+                    "clip_l": "subject on white backdrop",
+                    "t5xxl": "high detail fashion portrait",
+                },
+            },
+            "22": {
+                "class_type": "CLIPTextEncodeSDXLRefiner",
+                "inputs": {"text": "low quality, anatomy errors"},
+            },
+        }
+        result = parse_image_metadata(self._make_comfy_png(prompt))
+        self.assertEqual(
+            result["parameters"]["positive_prompt"],
+            "CLIP-L: subject on white backdrop\nT5XXL: high detail fashion portrait",
+        )
+        self.assertEqual(
+            result["parameters"]["negative_prompt"], "low quality, anatomy errors"
+        )
+
+    def test_parse_comfyui_graph_loop_degrades_to_partial_extraction(self):
+        prompt = {
+            "30": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "cfg": 7,
+                    "positive": ["31", 0],
+                    "sampler_name": "euler",
+                    "seed": 11,
+                    "steps": 20,
+                },
+            },
+            "31": {
+                "class_type": "ConditioningSetArea",
+                "inputs": {
+                    "conditioning": ["31", 0],
+                },
+            },
+        }
+        result = parse_image_metadata(self._make_comfy_png(prompt))
+        self.assertEqual(result["source"], "comfyui")
+        self.assertEqual(result["parameters"]["Steps"], 20)
+        self.assertNotIn("positive_prompt", result["parameters"])
 
     def test_parse_unknown_image_without_metadata(self):
         result = parse_image_metadata(self._make_png({}))
@@ -96,6 +258,15 @@ class TestPngInfoService(unittest.TestCase):
         with self.assertRaises(PngInfoError) as ctx:
             parse_image_metadata("%%%not-base64%%%")
         self.assertEqual(ctx.exception.code, "invalid_image_b64")
+
+    def test_pnginfo_payload_limit_raises_explicit_error(self):
+        with (
+            patch("services.pnginfo.MAX_PNGINFO_IMAGE_B64_LEN", 32),
+            self.assertRaises(PngInfoError) as ctx,
+        ):
+            parse_image_metadata(self._make_png({}))
+        self.assertEqual(ctx.exception.code, "image_b64_too_large")
+        self.assertIn("32 B", ctx.exception.detail)
 
 
 if __name__ == "__main__":
