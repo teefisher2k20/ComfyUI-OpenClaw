@@ -80,7 +80,7 @@ Deployment profiles and hardening references:
 <summary><strong>Repo-native CodeQL baseline and residual GitHub Security verification chain completed</strong></summary>
 
 - Added a versioned GitHub Actions `CodeQL` workflow that scans Python, JavaScript/TypeScript, and GitHub Actions on push, pull request, manual dispatch, and a weekly schedule, so static security analysis now has an explicit in-repo baseline instead of depending only on opaque UI configuration.
-- Kept the rollout visibility-first: CodeQL is now a GitHub Actions security lane and documented CI boundary, but it is not treated as a new local mandatory full-SOP command while the repository continues burning down security backlog through targeted fixes.
+- Kept the rollout visibility-first: CodeQL is now a GitHub Actions security lane and documented CI boundary, but it is not treated as a new local mandatory full-SOP command; local acceptance stays seam-first while GitHub-hosted scanning owns the repository-wide static-analysis baseline.
 - Closed the acceptance-gap that surfaced during the residual verification push by propagating `defusedxml` through `requirements.txt`, preflight checks, local acceptance bootstraps, and CI preflight installation, with a repo-local dependency-parity regression seam to prevent future drift.
 - Re-ran the full existing pre-push acceptance gate successfully after the parity fix: detect-secrets, pre-commit, governance verification, backend full suites, real-backend lanes, adaptive adversarial gate, and Playwright E2E.
 
