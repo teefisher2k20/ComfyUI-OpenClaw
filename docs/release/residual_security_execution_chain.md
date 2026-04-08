@@ -16,12 +16,12 @@ It is intended as a repo-visible planning reference in `docs/` and should stay a
 3. `S90`: Residual model-manager path-boundary false-positive retirement wave
 4. `S91`: GitHub code-scanning mode switch and final residual alert closure wave
 
-## 3. Current State
+## 3. Final State
 
-- `S88` remains the umbrella verification item until GitHub rescans, final dismissals, and the secret-scanning closure workflow are complete.
-- `S89` is completed. The audit and bridge identifier cleanup reduced the residual alert set but left two GitHub-managed follow-up alerts in `services/audit.py`.
-- `S90` is completed. The model-manager path-boundary proof was strengthened, but the remaining `services/model_manager_transfer.py` findings did not retire after rescan and therefore move to authenticated dismissal review.
-- `S91` is now the only active execution lane. It is a GitHub-side closure wave that requires repository administration access for the CodeQL mode switch and alert-write capability for final dismissals and secret-alert closure.
+- `S88` is completed. Authenticated GitHub verification confirmed the repaired findings retired or were closed with explicit rationale after the advanced CodeQL switch.
+- `S89` is completed. The audit and bridge identifier cleanup removed the true residual sinks and reduced the remaining audit findings to GitHub-managed false positives.
+- `S90` is completed. The model-manager path-boundary proof stayed fail-closed, and the remaining `py/path-injection` alerts were retired through authenticated false-positive dismissal after the advanced rescan.
+- `S91` is completed. GitHub code scanning default setup was switched off, the committed `.github/workflows/codeql.yml` run on `main` succeeded, the final residual CodeQL alerts were dismissed with recorded rationale, and the historical secret-scanning docs example was resolved.
 
 ## 4. Execution Rules
 
@@ -32,20 +32,20 @@ It is intended as a repo-visible planning reference in `docs/` and should stay a
 - Do not dismiss unresolved true positives.
 - Do not close the historical secret-scanning alert until provenance and placeholder status are fully confirmed.
 
-## 5. Current Remaining Risk Shape
+## 5. Closure Evidence
 
-After the latest rescans, the remaining residual families are:
+Authenticated GitHub evidence on 2026-04-08:
 
-- `2` audit-related CodeQL alerts still attached to `services/audit.py`
-- `8` model-manager `py/path-injection` alerts in `services/model_manager_transfer.py`
-- `1` historical secret-scanning alert tied to a WeChat App ID-shaped documentation example
-- GitHub `default setup` is still enabled, so the committed in-repo `codeql.yml` workflow is not yet the authoritative scanner baseline
+- `GET /code-scanning/default-setup` now returns `state=not-configured`
+- the in-repo `CodeQL` workflow completed successfully on `main` head `0abdafab73e42ea4503992e7bc8cf76ef05fae03`
+- `GET /code-scanning/alerts?state=open` now returns `0`
+- secret-scanning alert `#1` is now `resolved` with `resolution=false_positive`
 
 ## 6. Expected End State
 
-This chain is complete only when:
+This chain is now complete:
 
-- the remaining code-scanning alerts are either fixed in code or dismissed with explicit false-positive rationale
-- the secret-scanning alert is manually closed with recorded provenance evidence
-- the repository uses the committed advanced CodeQL workflow as its authoritative scanner baseline
-- the final GitHub-side actions are performed with the required repository-administration and alert-write permissions
+- the remaining code-scanning alerts were either fixed in code or dismissed with explicit false-positive rationale
+- the historical secret-scanning alert was closed with recorded provenance evidence
+- the repository now relies on the committed advanced CodeQL workflow rather than GitHub default setup
+- the final GitHub-side actions were performed with the required repository-administration and alert-write permissions
