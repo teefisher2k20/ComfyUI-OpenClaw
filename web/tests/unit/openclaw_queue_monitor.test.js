@@ -58,6 +58,84 @@ describe("QueueMonitor", () => {
         );
     });
 
+    it("does not alert immediately for the first startup disconnect", () => {
+        const ui = { showBanner: vi.fn() };
+        const monitor = new QueueMonitor(ui, {
+            api: {
+                subscribeEvents: vi.fn(() => ({ readyState: 1, close: vi.fn() })),
+            },
+            now: () => 1000,
+            setIntervalRef: vi.fn(),
+            startupGraceMs: 30000,
+            disconnectAlertThreshold: 3,
+        });
+
+        monitor.start();
+        monitor.handleConnectionError(new Error("offline"));
+
+        expect(ui.showBanner).not.toHaveBeenCalled();
+        expect(monitor.isConnected).toBe(false);
+    });
+
+    it("alerts after sustained startup disconnect failures cross the grace threshold", () => {
+        const ui = { showBanner: vi.fn() };
+        let nowValue = 0;
+        const monitor = new QueueMonitor(ui, {
+            api: {
+                subscribeEvents: vi.fn(() => ({ readyState: 1, close: vi.fn() })),
+            },
+            now: () => nowValue,
+            setIntervalRef: vi.fn(),
+            startupGraceMs: 1000,
+            disconnectAlertThreshold: 3,
+        });
+
+        monitor.start();
+        monitor.handleConnectionError(new Error("offline"));
+        nowValue = 500;
+        monitor.handleConnectionError(new Error("offline"));
+        nowValue = 1500;
+        monitor.handleConnectionError(new Error("offline"));
+
+        expect(ui.showBanner).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: "connection_lost",
+                severity: "error",
+                persist: true,
+            })
+        );
+    });
+
+    it("alerts immediately once a previously healthy backend disconnects", async () => {
+        const ui = { showBanner: vi.fn() };
+        const monitor = new QueueMonitor(ui, {
+            api: {
+                getHealth: vi.fn().mockResolvedValue({
+                    ok: true,
+                    data: { stats: { observability: { total_dropped: 0 } } },
+                }),
+                subscribeEvents: vi.fn(),
+            },
+            now: () => 1000,
+            setIntervalRef: vi.fn(),
+            startupGraceMs: 30000,
+            disconnectAlertThreshold: 3,
+        });
+
+        await monitor.checkHealth();
+        ui.showBanner.mockClear();
+
+        monitor.handleConnectionError(new Error("offline"));
+
+        expect(ui.showBanner).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: "connection_lost",
+                severity: "error",
+                persist: true,
+            })
+        );
+    });
+
     it("emits persistent failed-job notifications with a job-monitor jump action", () => {
         const ui = { showBanner: vi.fn() };
         const monitor = new QueueMonitor(ui, {

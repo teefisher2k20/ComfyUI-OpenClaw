@@ -14,11 +14,18 @@ export class QueueMonitor {
         this.lastBannerTime = 0;
         this.lastStatusId = null;
         this.bannerTTL = 5000;
+        this.startupGraceMs = Number.isFinite(deps.startupGraceMs) ? deps.startupGraceMs : 30000;
+        this.disconnectAlertThreshold = Number.isFinite(deps.disconnectAlertThreshold) ? deps.disconnectAlertThreshold : 3;
         this.es = null;
         this.isConnected = true;
+        this.startedAt = this.now();
+        this.disconnectFailures = 0;
+        this.hasObservedHealthyBackend = false;
+        this.disconnectAlertActive = false;
     }
 
     start() {
+        this.startedAt = this.now();
         this.connectSSE();
         this.setIntervalRef(() => this.checkHealth(), 10000);
     }
@@ -35,6 +42,7 @@ export class QueueMonitor {
     }
 
     handleEvent(data) {
+        this._markHealthy();
         if (!this.isConnected) {
             this.isConnected = true;
             this.showBanner({
@@ -89,16 +97,7 @@ export class QueueMonitor {
     }
 
     handleConnectionError(err) {
-        if (this.isConnected) {
-            this.isConnected = false;
-            this.showBanner({
-                severity: "error",
-                message: "\u26A0\uFE0F Backend Disconnected. Retrying...",
-                id: "connection_lost",
-                source: "queue-monitor",
-                persist: true,
-            });
-        }
+        this._registerDisconnect("connection_lost", "\u26A0\uFE0F Backend Disconnected. Retrying...");
         return err;
     }
 
@@ -106,6 +105,7 @@ export class QueueMonitor {
         try {
             const res = await this.api.getHealth();
             if (res.ok && res.data) {
+                this._markHealthy();
                 if (!this.isConnected) {
                     this.isConnected = true;
                     this.showBanner({
@@ -136,27 +136,50 @@ export class QueueMonitor {
                         },
                     });
                 }
-            } else if (this.isConnected) {
-                this.isConnected = false;
-                this.showBanner({
-                    severity: "error",
-                    message: "\u26A0\uFE0F Backend Unreachable",
-                    id: "health_check_failed",
-                    source: "queue-monitor",
-                    persist: true,
-                });
+            } else {
+                this._registerDisconnect("health_check_failed", "\u26A0\uFE0F Backend Unreachable");
             }
         } catch (_err) {
-            if (this.isConnected) {
-                this.isConnected = false;
-                this.showBanner({
-                    severity: "error",
-                    message: "\u26A0\uFE0F Connection Error",
-                    id: "health_check_exception",
-                    source: "queue-monitor",
-                    persist: true,
-                });
-            }
+            this._registerDisconnect("health_check_exception", "\u26A0\uFE0F Connection Error");
+        }
+    }
+
+    _markHealthy() {
+        this.hasObservedHealthyBackend = true;
+        this.disconnectFailures = 0;
+        this.disconnectAlertActive = false;
+    }
+
+    _shouldAlertDisconnect() {
+        if (this.hasObservedHealthyBackend) {
+            return true;
+        }
+
+        const elapsed = Math.max(0, this.now() - this.startedAt);
+        // IMPORTANT: sidebar bootstrap can legitimately race backend startup; do not persist disconnect
+        // alerts until the backend was healthy once or the initial misses are sustained beyond the grace window.
+        return (
+            elapsed >= this.startupGraceMs &&
+            this.disconnectFailures >= this.disconnectAlertThreshold
+        );
+    }
+
+    _registerDisconnect(id, message) {
+        this.disconnectFailures += 1;
+        this.isConnected = false;
+        if (!this._shouldAlertDisconnect()) {
+            return;
+        }
+
+        if (!this.disconnectAlertActive) {
+            this.disconnectAlertActive = true;
+            this.showBanner({
+                severity: "error",
+                message,
+                id,
+                source: "queue-monitor",
+                persist: true,
+            });
         }
     }
 
