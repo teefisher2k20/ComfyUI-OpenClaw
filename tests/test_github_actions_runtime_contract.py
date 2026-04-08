@@ -51,7 +51,6 @@ class GitHubActionsRuntimeContractTests(unittest.TestCase):
             },
             "publish.yml": {
                 "actions/checkout@v5",
-                "actions/setup-python@v6",
             },
         }
 
@@ -64,11 +63,14 @@ class GitHubActionsRuntimeContractTests(unittest.TestCase):
                     f"{workflow_name} must pin {action_label}",
                 )
 
-    def test_publish_workflow_uses_direct_cli_publish_flow(self):
+    def test_publish_workflow_uses_official_publish_action(self):
         text = (WORKFLOW_DIR / "publish.yml").read_text(encoding="utf-8")
-        self.assertIn("pip install comfy-cli", text)
         self.assertIn(
-            'comfy --skip-prompt --no-enable-telemetry env comfy node publish --token "${REGISTRY_ACCESS_TOKEN}"',
+            "uses: Comfy-Org/publish-node-action@main",
+            text,
+        )
+        self.assertIn(
+            "personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}",
             text,
         )
 
