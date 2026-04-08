@@ -5,9 +5,14 @@ Scope: Residual GitHub Security findings that remained open after the first `S73
 
 ## 1. Purpose
 
-This reference captures the follow-up repair strategy for the residual GitHub Security findings that still point at the current `main` branch after the initial CodeQL / Dependabot cleanup wave.
+This reference captures the follow-up repair strategy that was used for the residual GitHub Security findings that still pointed at `main` after the initial CodeQL / Dependabot cleanup wave.
 
 This document is planning-only guidance. It is not itself an implementation record.
+
+Closure note:
+
+- this intake reference is now historical context only
+- the residual wave was closed during `S91`, with GitHub `Code scanning` and `Secret scanning` reduced to `0` open findings on 2026-04-08
 
 ## 2. Current Residual Findings Baseline
 

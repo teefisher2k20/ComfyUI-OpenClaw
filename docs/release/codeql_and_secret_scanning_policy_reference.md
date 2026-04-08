@@ -3,6 +3,11 @@
 Date: 2026-04-08
 Scope: Repository planning guidance for GitHub-native security scanning policy during and after the residual alert wave.
 
+Current status:
+
+- the repository now uses the committed advanced CodeQL workflow as its authoritative scanner baseline
+- GitHub `Code scanning` and `Secret scanning` were both brought back to `0` open findings during the `S91` closeout
+
 ## 1. Why CodeQL Belongs in GitHub Actions
 
 This repository has a large security surface:
@@ -31,6 +36,7 @@ GitHub-hosted validation should own:
 - code-scanning alert lifecycle
 - long-running static dataflow analysis
 - alert triage over the default branch
+- secret-scanning closure workflow when a finding is confirmed to be historical or non-live
 
 ## 3. Recommended CodeQL Rollout Model
 
