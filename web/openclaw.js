@@ -26,6 +26,7 @@ import { ExplorerTab } from "./tabs/explorer_tab.js";
 import { PacksTab } from "./tabs/packs_tab.js";
 import { ParameterLabTab } from "./tabs/parameter_lab_tab.js"; // F52
 import { ModelManagerTab } from "./tabs/model_manager_tab.js"; // F64
+import { PngInfoTab } from "./tabs/png_info_tab.js"; // F70
 
 
 
@@ -117,6 +118,7 @@ async function registerSupportedTabs() {
     }
     if (fallbackShowAll || features.packs) tabManager.registerTab(PacksTab);
     if (fallbackShowAll || features.model_manager) tabManager.registerTab(ModelManagerTab);
+    if (fallbackShowAll || features.png_info) tabManager.registerTab(PngInfoTab);
 
     // F52: Parameter Lab
     // Always enabled for now, or check capability

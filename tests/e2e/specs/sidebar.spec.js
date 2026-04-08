@@ -15,7 +15,7 @@ test.describe('OpenClaw Sidebar', () => {
 
   test('switching tabs does not lose content', async ({ page }) => {
     // Click a few tabs and verify active pane is non-empty
-    for (const t of ['Settings', 'Jobs', 'Planner', 'Variants', 'Refiner', 'Library', 'Approvals', 'Explorer', 'Packs', 'Model Manager']) {
+    for (const t of ['Settings', 'Jobs', 'Planner', 'Variants', 'Refiner', 'Library', 'Approvals', 'Explorer', 'Packs', 'Model Manager', 'PNG Info']) {
       await clickTab(page, t);
       const active = page.locator('.openclaw-tab-pane.active');
       await expect(active).toBeVisible();
@@ -32,5 +32,9 @@ test.describe('OpenClaw Sidebar', () => {
     await expect(page.locator('#mm-search-results')).toContainText('No matching models.');
     await expect(page.locator('#mm-tasks')).toContainText('No download tasks.');
     await expect(page.locator('#mm-installations')).toContainText('No managed installations.');
+
+    await clickTab(page, 'PNG Info');
+    await expect(page.locator('#pnginfo-dropzone')).toContainText('Drop an image here');
+    await expect(page.locator('#pnginfo-empty-state')).toContainText('Load an image to inspect');
   });
 });

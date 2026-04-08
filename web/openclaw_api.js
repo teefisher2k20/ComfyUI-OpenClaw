@@ -855,6 +855,20 @@ export class OpenClawAPI {
         });
     }
 
+    async parsePngInfo(imageB64) {
+        return this.fetch(this._path("/pnginfo"), {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...this._adminTokenHeaders()
+            },
+            body: JSON.stringify({
+                image_b64: String(imageB64 || "")
+            }),
+            timeout: 30000,
+        });
+    }
+
     // --- R71: Job Events ---
 
     /**
