@@ -88,7 +88,7 @@ Deployment profiles and hardening references:
 
 <details>
 
-<summary><strong>Security hardening wave completed across CI permissions, path boundaries, redaction, connector ingress, and notification rendering</strong></summary>
+<summary><strong>Security hardening wave completed across CI permissions, path boundaries, redaction, connector ingress, notification rendering, and GitHub security closure</strong></summary>
 
 - Verified the minimal Vite development-tooling hotfix path already merged cleanly, so the repo now resolves the patched `vite` version without broadening the frontend toolchain scope.
 - Added explicit least-privilege GitHub Actions `permissions:` declarations and a repo-local regression seam so workflow token scope drift is now treated as a tracked security regression instead of an implicit repository default.
@@ -96,6 +96,7 @@ Deployment profiles and hardening references:
 - Replaced raw security-sensitive identifiers in bridge, auth, audit, proxy, and safe-IO diagnostics with stable redacted tags, and upgraded sensitive hashing paths to keyed constructions instead of plain or hardcoded hash inputs.
 - Tightened connector ingress failure handling so WeChat rejects unsafe XML declarations before parser entry, while Slack and Feishu return bounded external failure text/codes instead of echoing raw exception detail.
 - Added a targeted Playwright seam proving notification payloads render as escaped text rather than live markup, locking the production notification sink against future HTML-interpolation regressions.
+- Completed the GitHub-side closeout for the same wave by switching the repository from GitHub code-scanning default setup to the versioned advanced CodeQL workflow, dismissing the final residual CodeQL false positives with recorded rationale, resolving the historical docs-only secret-scanning false positive, and bringing GitHub `Code scanning` / `Secret scanning` back to `0` open findings as of `2026-04-08`.
 
 </details>
 
