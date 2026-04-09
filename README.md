@@ -77,6 +77,16 @@ Deployment profiles and hardening references:
 
 <details>
 
+<summary><strong>Provider URL parity and CI harness resilience tightened for local LLM defaults and Playwright bootstrap stability</strong></summary>
+
+- Fixed the built-in `Ollama (Local)` provider default so OpenClaw's OpenAI-compatible requests now target the correct `/v1` surface by default, and existing loopback-root overrides are normalized onto the same bounded path instead of failing on `/models` or `/chat/completions` at the daemon root.
+- Added a provider URL contract matrix that pins built-in provider defaults, adapter endpoint assembly, and bounded Ollama normalization in one regression lane so future `LM Studio`, `Ollama`, and custom OpenAI-compatible drift is caught before release.
+- Hardened the shared Playwright harness bootstrap so a single transient `openclaw.js` module-fetch failure in CI is retried once instead of failing the whole UI load, while still surfacing real import/runtime errors as hard test failures.
+
+</details>
+
+<details>
+
 <summary><strong>PNG Info sidebar workflow added with ComfyUI metadata extraction, better large-image handling, and lower-noise operator alerts</strong></summary>
 
 - Added a new `PNG Info` sidebar tab with drag-and-drop, file picker, scoped paste, preview rendering, prompt copy actions, structured summary cards, and raw metadata inspection for saved generation images.
@@ -768,6 +778,9 @@ Notes:
 - Optional: for single-user localhost setups, you can store a provider API key from the Settings tab (UI Key Store (Advanced)).
   - This writes to the server-side secret store (`{STATE_DIR}/secrets.json`).
   - Environment variables always take priority over stored keys.
+- Built-in local-provider defaults use loopback-only OpenAI-compatible URLs:
+  - `Ollama (Local)` -> `http://127.0.0.1:11434/v1`
+  - `LM Studio (Local)` -> `http://localhost:1234/v1`
 
 ### 2 Configure webhook auth (required for `/webhook*`)
 

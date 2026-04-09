@@ -35,7 +35,7 @@ No special configuration is required.
 - **Admin Token**: Not required for loopback-only operations (unless `OPENCLAW_ADMIN_TOKEN` is explicitly set).
 - **Webhooks**: Disabled by default.
 - **Local LLM (optional)**:
-  - Ollama: `http://127.0.0.1:11434`
+  - Ollama: `http://127.0.0.1:11434/v1`
   - LM Studio: `http://localhost:1234/v1`
   - Keep SSRF relax flags disabled:
     - `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0`
@@ -58,6 +58,6 @@ No special configuration is required.
 1. Open `http://127.0.0.1:8188` in your browser.
 2. Open the OpenClaw tab in the sidebar.
 3. Go to **Settings** -> **Health**.
-4. If using Ollama, verify `http://127.0.0.1:11434/api/tags` responds.
-5. In **Settings -> LLM**, set provider to `Ollama (Local)` and click **Load Models**.
+4. If using Ollama, verify the daemon is reachable first via the native Ollama health/list surface `http://127.0.0.1:11434/api/tags`.
+5. In **Settings -> LLM**, set provider to `Ollama (Local)`, leave **Base URL** empty to use the built-in `http://127.0.0.1:11434/v1` default (or set that exact loopback URL explicitly), and click **Load Models**.
 6. All checks should be green.

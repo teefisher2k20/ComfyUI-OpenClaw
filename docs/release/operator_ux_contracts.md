@@ -50,7 +50,8 @@ interface BannerStatus {
 - **Monitoring**: Polls `/health` every 10s.
 - **Triggers**: Checks `stats.observability.total_dropped > 0`.
 - **Display**: Simple DOM injection of canonical `.openclaw-banner` markup; legacy `.moltbot-banner` compatibility selectors remain available through centralized runtime aliasing.
-- **Limitations**: No connectivity state handling, no 'info'/'success' states, simplistic dedupe.
+- **Connectivity posture**: Queue-monitor disconnect warnings should tolerate initial sidebar/bootstrap races and only escalate after bounded repeated failure or post-healthy disconnect evidence, so transient startup misses do not become durable incident noise.
+- **Limitations**: No 'info'/'success' states, simplistic dedupe.
 
 ## 1.1 Notification Center (F66)
 

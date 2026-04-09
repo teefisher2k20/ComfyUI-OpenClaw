@@ -91,5 +91,7 @@ If `assist_streaming` is unavailable or the stream transport degrades, Planner/R
 - Run: `npm test`
 - Tests live in: `tests/e2e/specs/`
 - Harness: `tests/e2e/test-harness.html` (mocks ComfyUI core + basic OpenClaw API calls)
+- Harness bootstrap now retries one transient `openclaw.js` module-fetch failure before surfacing a hard load error, so CI-only first-request flakiness does not get misreported as a permanent sidebar failure.
 - Web helper/self-test harness: `web/tests/e2e-harness.html` (includes frontend helper and wrapper idempotence checks)
 - Desktop host parity lane: `tests/e2e/specs/desktop_host_parity.spec.js` verifies standalone vs desktop host evidence separately and covers both sidebar and Remote Admin host-sensitive behavior under the shared harness shims.
+- When investigating suspected harness flakes locally, prefer `npm run test:stress -- <spec>` so the same shared bootstrap path is exercised repeatedly without changing the default `npm test` contract.

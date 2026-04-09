@@ -61,6 +61,10 @@ Checklist:
 3. In OpenClaw Settings:
    - Provider: `Ollama (Local)` or `LM Studio (Local)`
    - Base URL: leave empty to use the provider default, or set a loopback URL explicitly
+   - Provider defaults:
+     - `Ollama (Local)` -> `http://127.0.0.1:11434/v1`
+     - `LM Studio (Local)` -> `http://localhost:1234/v1`
+   - If an older saved Ollama URL is still set to `http://127.0.0.1:11434`, update it to `/v1` or clear the field so the built-in default can be applied
 4. Keep these flags disabled:
    - `OPENCLAW_ALLOW_ANY_PUBLIC_LLM_HOST=0`
    - `OPENCLAW_ALLOW_INSECURE_BASE_URL=0`
