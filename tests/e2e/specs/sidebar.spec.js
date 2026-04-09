@@ -64,4 +64,31 @@ test.describe('OpenClaw Sidebar', () => {
       .poll(() => page.evaluate(() => window.__openclawTestLoadAttempts))
       .toBe(2);
   });
+
+  test('harness recovers from two transient openclaw entry fetch failures', async ({ page }) => {
+    let remainingFailures = 2;
+
+    await page.route('**/web/openclaw.js?openclaw_harness_attempt=*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname !== '/web/openclaw.js') {
+        await route.fallback();
+        return;
+      }
+
+      if (remainingFailures > 0) {
+        remainingFailures -= 1;
+        await route.abort('failed');
+        return;
+      }
+
+      await route.fallback();
+    });
+
+    await page.reload();
+    await waitForOpenClawReady(page);
+    await expect(page.locator('.openclaw-title')).toHaveText('OpenClaw');
+    await expect
+      .poll(() => page.evaluate(() => window.__openclawTestLoadAttempts))
+      .toBe(3);
+  });
 });

@@ -76,7 +76,7 @@
     }
 
     async function loadOpenClawWithRetry() {
-      const maxAttempts = 2;
+      const maxAttempts = 3;
       let lastError = null;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -93,10 +93,11 @@
             throw error;
           }
 
-          // IMPORTANT: retry exactly once for transient module-fetch failures.
-          // Windows CI can occasionally drop the first module-graph fetch under
-          // parallel Playwright load; do not broaden this to mask real import bugs.
-          await new Promise(r => setTimeout(r, 250));
+          // IMPORTANT: keep this retry window small and transient-fetch-specific.
+          // Windows CI can occasionally drop more than one early module-graph
+          // fetch under parallel Playwright load, but broad retries here would
+          // risk masking real import/runtime regressions.
+          await new Promise(r => setTimeout(r, 250 * attempt));
         }
       }
 
