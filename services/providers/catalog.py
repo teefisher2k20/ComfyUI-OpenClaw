@@ -7,7 +7,7 @@ R73: Provider drift governance — alias/deprecation metadata and resolution tra
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 
 class ProviderType(Enum):
@@ -81,7 +81,7 @@ PROVIDER_CATALOG: Dict[str, ProviderInfo] = {
     ),
     "ollama": ProviderInfo(
         name="Ollama (Local)",
-        base_url="http://127.0.0.1:11434",
+        base_url="http://127.0.0.1:11434/v1",
         api_type=ProviderType.OPENAI_COMPAT,
         supports_vision=True,
         env_key_name=None,  # Local, no key needed
@@ -300,6 +300,33 @@ def normalize_provider_id(provider: str) -> str:
     if dep:
         p = dep.canonical
     return PROVIDER_ALIASES.get(p, p)
+
+
+def normalize_provider_base_url(provider: str, base_url: str) -> str:
+    """
+    Normalize provider-specific base URL compatibility seams.
+
+    Currently used to keep Ollama's OpenAI-compatible endpoint path aligned to
+    `/v1` even when older persisted configs still store the historical root URL.
+    """
+    value = str(base_url or "").strip()
+    if not value:
+        return ""
+
+    if normalize_provider_id(str(provider or "")) != "ollama":
+        return value
+
+    try:
+        parsed = urlparse(value)
+    except Exception:
+        return value
+
+    # IMPORTANT: old Ollama configs may still store the root OpenAI-compat host.
+    # Normalize only the empty-path form to `/v1`; do not rewrite custom subpaths.
+    if parsed.path not in ("", "/"):
+        return value
+
+    return urlunparse(parsed._replace(path="/v1"))
 
 
 def normalize_model_id(model: str) -> str:

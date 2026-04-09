@@ -13,6 +13,7 @@ from .providers.catalog import (
     DEFAULT_MODEL_BY_PROVIDER,
     DEFAULT_PROVIDER,
     get_provider_info,
+    normalize_provider_base_url,
 )
 from .providers.keys import get_api_key_for_provider
 from .runtime_config import get_effective_config
@@ -41,11 +42,13 @@ def get_effective_llm_base_url(provider: str) -> str:
     current_provider = str(effective.get("provider") or "").lower()
     configured_base_url = str(effective.get("base_url") or "").strip()
     if configured_base_url and str(provider).lower() == current_provider:
-        return configured_base_url
+        # IMPORTANT: persisted Ollama configs may still store the historical root URL
+        # without `/v1`; normalize at the shared facade so all consumers stay aligned.
+        return normalize_provider_base_url(provider, configured_base_url)
 
     info = get_provider_info(provider)
     if info:
-        return info.base_url
+        return normalize_provider_base_url(provider, info.base_url)
 
     raise ValueError(f"Unknown provider: {provider}")
 

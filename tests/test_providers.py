@@ -21,6 +21,7 @@ from services.providers.catalog import (
     is_local_provider,
     is_loopback_host,
     list_providers,
+    normalize_provider_base_url,
 )
 from services.providers.keys import (
     get_all_configured_keys,
@@ -94,6 +95,22 @@ class TestProviderCatalog(unittest.TestCase):
         self.assertTrue(is_local_provider("ollama"))
         self.assertTrue(is_local_provider("lmstudio"))
         self.assertFalse(is_local_provider("openai"))
+
+    def test_ollama_default_base_url_uses_v1_openai_compat_prefix(self):
+        self.assertEqual(
+            PROVIDER_CATALOG["ollama"].base_url,
+            "http://127.0.0.1:11434/v1",
+        )
+
+    def test_ollama_root_base_url_normalizes_to_v1(self):
+        self.assertEqual(
+            normalize_provider_base_url("ollama", "http://127.0.0.1:11434"),
+            "http://127.0.0.1:11434/v1",
+        )
+        self.assertEqual(
+            normalize_provider_base_url("ollama", "http://127.0.0.1:11434/v1"),
+            "http://127.0.0.1:11434/v1",
+        )
 
     def test_loopback_helpers(self):
         self.assertTrue(is_loopback_host("localhost"))

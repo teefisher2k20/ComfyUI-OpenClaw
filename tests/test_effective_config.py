@@ -48,6 +48,24 @@ class EffectiveConfigFacadeTests(unittest.TestCase):
             "https://custom-openai.example/v1",
         )
 
+    @patch("services.effective_config.get_effective_config")
+    def test_ollama_root_base_url_is_normalized_from_effective_config(
+        self, mock_get_effective
+    ):
+        mock_get_effective.return_value = (
+            {
+                "provider": "ollama",
+                "model": "llama3.2",
+                "base_url": "http://127.0.0.1:11434",
+            },
+            {},
+        )
+
+        self.assertEqual(
+            effective_config.get_effective_llm_base_url("ollama"),
+            "http://127.0.0.1:11434/v1",
+        )
+
     @patch("config.get_effective_llm_api_key", return_value="sk-effective")
     def test_config_get_api_key_uses_effective_facade(self, mock_get_key):
         self.assertEqual(config_module.get_api_key(), "sk-effective")

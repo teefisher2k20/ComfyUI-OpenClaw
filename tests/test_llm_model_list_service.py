@@ -25,6 +25,24 @@ class LlmModelListServiceTests(unittest.TestCase):
             ("tenant-a", "custom", "https://custom.example/v1"),
         )
 
+    @patch("services.providers.keys.requires_api_key", return_value=False)
+    @patch("services.providers.keys.get_api_key_for_provider", return_value=None)
+    def test_resolve_target_normalizes_legacy_ollama_root_url(
+        self, _mock_key, _mock_requires_key
+    ):
+        target = resolve_model_list_target(
+            provider_override="ollama",
+            effective={"provider": "ollama", "base_url": "http://127.0.0.1:11434"},
+            tenant_id="default",
+        )
+
+        self.assertEqual(target.provider, "ollama")
+        self.assertEqual(target.base_url, "http://127.0.0.1:11434/v1")
+        self.assertEqual(
+            target.cache_key,
+            ("ollama", "http://127.0.0.1:11434/v1"),
+        )
+
     @patch("services.safe_io.safe_request_json")
     def test_fetch_remote_model_list_builds_auth_header(self, mock_safe_request):
         mock_safe_request.return_value = {"data": [{"id": "gpt-4o-mini"}]}

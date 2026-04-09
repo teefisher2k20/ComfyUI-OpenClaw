@@ -159,7 +159,11 @@ def resolve_model_list_target(
     if info.api_type != catalog.ProviderType.OPENAI_COMPAT:
         raise TypeError("Model list is only supported for OpenAI-compatible providers.")
 
-    base_url = runtime_base_url if runtime_base_url else info.base_url
+    raw_base_url = runtime_base_url if runtime_base_url else info.base_url
+    # IMPORTANT: model discovery is one of the primary Ollama debug hotspots.
+    # Keep provider-aware base URL normalization here so legacy root URLs still
+    # resolve to the OpenAI-compatible `/v1/models` endpoint instead of 404.
+    base_url = catalog.normalize_provider_base_url(provider, raw_base_url)
     if not base_url:
         raise ValueError(f"No base URL configured for provider '{provider}'.")
 

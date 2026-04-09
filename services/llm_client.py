@@ -35,6 +35,7 @@ from .providers.catalog import (
     DEFAULT_PROVIDER,
     ProviderType,
     get_provider_info,
+    normalize_provider_base_url,
 )
 from .providers.keys import get_api_key_for_provider, mask_api_key, requires_api_key
 from .structured_logging import (
@@ -121,6 +122,12 @@ class LLMClient:
             info = get_provider_info(self.provider)
             if info:
                 self.base_url = info.base_url
+        # IMPORTANT: test-connection and normal OpenAI-compatible completions must
+        # share the same Ollama `/v1` normalization path as model discovery. Do not
+        # bypass this with provider-specific ad hoc request URL assembly.
+        self.base_url = normalize_provider_base_url(
+            self.provider, str(self.base_url or "")
+        )
 
         # R57: Strict Precedence (Arg > Config > Default)
         # CRITICAL: Only inherit config['model'] if the effective provider matches config['provider'].

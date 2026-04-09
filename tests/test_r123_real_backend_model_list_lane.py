@@ -56,7 +56,7 @@ class TestR123RealBackendModelListLane(AioHTTPTestCase):
 
         class ModelsHandler(BaseHTTPRequestHandler):
             def do_GET(self):
-                if self.path in ("/models", "/v1/models"):
+                if self.path == "/v1/models":
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", str(len(payload_bytes)))

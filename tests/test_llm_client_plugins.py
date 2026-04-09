@@ -157,6 +157,42 @@ class TestLLMClientPluginIntegration(unittest.TestCase):
         # Should succeed without plugins
         self.assertEqual(result["text"], "test")
 
+    @patch("services.llm_client.PLUGINS_AVAILABLE", False)
+    @patch("services.runtime_config.get_effective_config")
+    @patch("services.effective_config.get_effective_config")
+    @patch("services.llm_client.requires_api_key", return_value=False)
+    @patch("services.llm_client.get_api_key_for_provider", return_value=None)
+    @patch("services.llm_client.openai_compat.make_request")
+    def test_ollama_root_base_url_is_normalized_before_openai_compat_request(
+        self,
+        mock_request,
+        _mock_key,
+        _mock_requires_key,
+        mock_effective_config_facade,
+        mock_runtime_config,
+    ):
+        config_payload = (
+            {
+                "provider": "ollama",
+                "model": "llama3.2",
+                "base_url": "http://127.0.0.1:11434",
+                "timeout_sec": 120,
+                "max_retries": 3,
+            },
+            None,
+        )
+        mock_runtime_config.return_value = config_payload
+        mock_effective_config_facade.return_value = config_payload
+        mock_request.return_value = {"text": "test", "raw": {}}
+
+        client = LLMClient()
+        client.complete(system="test", user_message="test")
+
+        self.assertEqual(
+            mock_request.call_args.kwargs["base_url"],
+            "http://127.0.0.1:11434/v1",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
