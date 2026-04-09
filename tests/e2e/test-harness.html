@@ -22,6 +22,7 @@
 
     window.__openclawTestReady = false;
     window.__openclawTestError = null;
+    window.__openclawTestLoadAttempts = 0;
 
     // Mock ComfyUI app BEFORE importing extension
     window.app = createMockComfyUIApp();
@@ -69,11 +70,41 @@
       return realFetch(input, init);
     };
 
-    try {
-      await import('../../web/openclaw.js');
+    function isTransientModuleFetchError(error) {
+      const message = String(error?.message || error || '');
+      return message.includes('Failed to fetch dynamically imported module');
+    }
 
-      // Allow async setup to mount
-      await new Promise(r => setTimeout(r, 500));
+    async function loadOpenClawWithRetry() {
+      const maxAttempts = 2;
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          window.__openclawTestLoadAttempts = attempt;
+          await import(`../../web/openclaw.js?openclaw_harness_attempt=${attempt}`);
+
+          // Allow async setup to mount
+          await new Promise(r => setTimeout(r, 500));
+          return;
+        } catch (error) {
+          lastError = error;
+          if (!isTransientModuleFetchError(error) || attempt >= maxAttempts) {
+            throw error;
+          }
+
+          // IMPORTANT: retry exactly once for transient module-fetch failures.
+          // Windows CI can occasionally drop the first module-graph fetch under
+          // parallel Playwright load; do not broaden this to mask real import bugs.
+          await new Promise(r => setTimeout(r, 250));
+        }
+      }
+
+      throw lastError;
+    }
+
+    try {
+      await loadOpenClawWithRetry();
 
       window.__openclawTestReady = true;
       document.getElementById('test-status').textContent = '✓ Ready for Testing';

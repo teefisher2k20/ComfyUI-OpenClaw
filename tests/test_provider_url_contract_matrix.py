@@ -10,7 +10,6 @@ from services.llm_model_list import (
 from services.providers import anthropic, openai_compat
 from services.providers.catalog import PROVIDER_CATALOG
 
-
 # IMPORTANT: keep built-in provider URL shapes centralized here. The BF08 Ollama
 # bug survived because endpoint expectations were fragmented and one low-mock
 # lane accepted both valid and invalid paths. This matrix is the single seam

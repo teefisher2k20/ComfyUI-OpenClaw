@@ -37,4 +37,31 @@ test.describe('OpenClaw Sidebar', () => {
     await expect(page.locator('#pnginfo-dropzone')).toContainText('Drop an image here');
     await expect(page.locator('#pnginfo-empty-state')).toContainText('Load an image to inspect');
   });
+
+  test('harness recovers from one transient openclaw entry fetch failure', async ({ page }) => {
+    let failedOnce = false;
+
+    await page.route('**/web/openclaw.js?openclaw_harness_attempt=*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname !== '/web/openclaw.js') {
+        await route.fallback();
+        return;
+      }
+
+      if (!failedOnce) {
+        failedOnce = true;
+        await route.abort('failed');
+        return;
+      }
+
+      await route.fallback();
+    });
+
+    await page.reload();
+    await waitForOpenClawReady(page);
+    await expect(page.locator('.openclaw-title')).toHaveText('OpenClaw');
+    await expect
+      .poll(() => page.evaluate(() => window.__openclawTestLoadAttempts))
+      .toBe(2);
+  });
 });
