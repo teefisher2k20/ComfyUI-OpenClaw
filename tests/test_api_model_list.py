@@ -104,6 +104,11 @@ class TestModelListAPI(unittest.IsolatedAsyncioTestCase):
         data = json.loads(resp.body)
         self.assertTrue(data["ok"])
         self.assertIn("gemma3:4b", data["models"])
+        self.assertIn(("ollama", "http://127.0.0.1:11434/v1"), _MODEL_LIST_CACHE)
+        self.assertEqual(
+            mock_safe_request.call_args.kwargs["url"],
+            "http://127.0.0.1:11434/v1/models",
+        )
 
     @patch("api.config.get_effective_config")
     @patch("services.providers.keys.get_api_key_for_provider")
